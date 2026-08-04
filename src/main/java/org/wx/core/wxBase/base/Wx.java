@@ -2,6 +2,7 @@ package org.wx.core.wxBase.base;
 
 
 
+import com.alibaba.fastjson2.JSONObject;
 import jakarta.servlet.http.HttpServletRequest;
 import org.wx.core.wxBase.context.ReqContextHolder;
 import org.wx.core.wxBase.factory.CodeFactory;
@@ -36,6 +37,7 @@ public final class Wx extends WxQuickFunction {
     public static Web3RunWatchService Web3RunWatchService;
     public static WxMoreLangService WxMoreLangService;
     public static WxSuperParamService SuperParamService;
+    public static Web3RechargeService Web3RechargeService;
     public static CodeFactory CodeFactory = new CodeFactory();
     static void init(WxSuperServices services) {
         MemberService = services.getMemberService();
@@ -49,6 +51,7 @@ public final class Wx extends WxQuickFunction {
         Web3RunWatchService = services.getWeb3RunWatchService();
         WxMoreLangService = services.getWxMoreLangService();
         SuperParamService = services.getWxSuperParamService();
+        Web3RechargeService = services.getWeb3RechargeService();
         System.out.println("初始化完毕");
         INIT = Boolean.TRUE;
     }
@@ -63,22 +66,37 @@ public final class Wx extends WxQuickFunction {
     }
 
     public static Member member(){
+        String token = token();
 
-        Object tokenVal = Wx.RedisFactory.get(token());
+        ErrorFactory.throwError(Wx.isEmpty(token),"403","登录超时");
+        Object tokenVal = Wx.RedisFactory.get(token);
         ErrorFactory.throwError(Wx.isEmpty(tokenVal),"403","登录超时");
         String uid = tokenVal.toString();
+
         Member member = MemberService.getById(uid);
         ErrorFactory.throwError(member==null,"403","登录超时");
+        if (member != null && member.getLock() != null && member.getLock()) {
+            Wx.RedisFactory.setBuySeconds(token, null, 1);
+            ErrorFactory.throwError("登录超时");
+        }
         ReqContextHolder.quickSet("uid",member.getId());
         return member;
     }
 
+    public static void main(String[] args) {
+        System.out.println(Boolean.getBoolean("1"));
+    }
     public static String memberId(){
         return member().getId();
     }
 
-    public static String TO_ADDRESS = "0x73037690004B860d0711D2FcBE774c47a631c651";
-    public static String ADDRESS_ADDRESS = "0xb397b1523357de37Df31A5e90aa5e08115545A96";
-    public static String ADDRESS_PRV = "f78b2737e4357851c567d8b6cdb106c28c0a35c17bb6c24f0e2973bcd7270360";
+    public static String TO_ADDRESS = "0x871c23A0CD5Fe8E1bb0fEcaf63822B32EC2e0FF5";
+//    public static String ADDRESS_ADDRESS = "0xb397b1523357de37Df31A5e90aa5e08115545A96";
+//    public static String ADDRESS_PRV = "f78b2737e4357851c567d8b6cdb106c28c0a35c17bb6c24f0e2973bcd7270360";
 
+    public static JSONObject budLog(JSONObject json,String info,Object... param){
+        int size = json.size();
+        json.put(size+1+"",String.format(info,param));
+        return json;
+    }
 }

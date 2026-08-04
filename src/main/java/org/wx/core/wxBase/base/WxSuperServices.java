@@ -39,6 +39,9 @@ public class WxSuperServices {
     private WxMoreLangService wxMoreLangService;
     @Resource
     private WxSuperParamService wxSuperParamService;
+    @Resource
+    private Web3RechargeService web3RechargeService;
+
     @PostConstruct
     public void init() {
         Wx.init(this);

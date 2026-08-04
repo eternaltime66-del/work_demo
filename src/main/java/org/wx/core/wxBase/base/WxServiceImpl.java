@@ -72,6 +72,7 @@ public abstract class WxServiceImpl<M extends BaseMapper<T>, T extends WxBaseEnt
             throw new IllegalArgumentException("查询实体不能为空！");
         }
         entity.clearEmptyString();
+
         Page<T> page = PageFactory.defaultPage();
 
         // 3. 构建查询条件
