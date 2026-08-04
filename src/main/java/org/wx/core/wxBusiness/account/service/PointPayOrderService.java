@@ -1,12 +1,9 @@
 package org.wx.core.wxBusiness.account.service;
 
 import org.springframework.transaction.annotation.Transactional;
-import org.wx.core.wxBase.base.Wx;
 import org.wx.core.wxBase.base.WxServiceImpl;
 import org.wx.core.wxBase.unit.WordUnit;
 import org.wx.core.wxBusiness.account.entity.PointPayOrder;
-import org.wx.core.wxBusiness.account.entity.enums.MoneyDirectionType;
-import org.wx.core.wxBusiness.account.entity.enums.MoneyRecordType;
 import org.wx.core.wxBusiness.account.entity.enums.PointOrderState;
 import org.wx.core.wxBusiness.account.entity.enums.PointOrderType;
 import org.wx.core.wxBusiness.account.mapper.PointPayOrderMapper;

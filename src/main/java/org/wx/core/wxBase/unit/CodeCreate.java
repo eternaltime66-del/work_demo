@@ -23,7 +23,7 @@ public class CodeCreate {
     private String database = "mnls";
     private String username = "root";
     private String password = "123456";
-    private String tableName = "app_level_config";
+    private String tableName = "app_member";
     private String packName = ".wxBusiness.account";
     private String tablePrefix = "app_";
     private String createUserName = "无心";

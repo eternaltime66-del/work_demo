@@ -3,18 +3,10 @@ package org.wx.core.wxBusiness.account.entity;
 import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
-import org.springframework.transaction.annotation.Transactional;
-import org.wx.core.wxBase.base.Wx;
 import org.wx.core.wxBase.base.WxBaseEntity;
 import org.wx.core.wxBase.factory.ErrorFactory;
-import org.wx.core.wxBase.unit.AesUtil;
 import org.wx.core.wxBase.unit.WordUnit;
-import org.wx.core.wxBusiness.account.entity.enums.MemberKycState;
 import org.wx.core.wxBusiness.account.entity.enums.MemberRole;
-
-import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
 
 /**
  * Member 实体类
@@ -68,45 +60,11 @@ public class Member extends WxBaseEntity<Member> {
      */
     private String remark;
 
-    /**
-     * 地址
-     */
-    private String mnemonic;
-
-    /**
-     * 地址
-     */
-    private String address;
-
-    /**
-     * 充值地址
-     */
-    private String toAddress;
-
-
-    public void setMnemonicEncrypted(String mnemonicPlain) {
-        if (mnemonicPlain == null) {
-            this.mnemonic = null;
-            return;
-        }
-        this.mnemonic = encodeMnemonic(mnemonicPlain);
-    }
-
-    /**
-     * 对助记词进行加密（用于导入钱包时校验）
-     * 必须与 setMnemonicEncrypted 保持一致
-     */
-    public static String encodeMnemonic(String mnemonicPlain) {
-        return AesUtil.encrypt(mnemonicPlain, "WXMAX");
-    }
-
     public static Member commonMember() {
         Member member = new Member();
         member.id = WordUnit.randomKey(10, 1);
         member.memberRole = MemberRole.USER;
         member.salt = WordUnit.randomKey(12, 2);
-        member.upSort = 0;
-        member.inviteCode = WordUnit.randomKey(8, 2).toUpperCase();
         return member;
     }
 
@@ -134,72 +92,15 @@ public class Member extends WxBaseEntity<Member> {
     public void info() {
         this.salt = null;
         this.password = null;
-        this.mnemonic = null;
     }
 
     @Data
     public static class UserMore {
     }
 
-    /**
-     * 地址
-     */
     @TableField(exist = false)
     private UserMore more = new UserMore();
 
     @TableField(exist = false)
     private Boolean myFollowUser;
-
-    /**
-     * 上级id1
-     */
-    private String sourceInviteIdL1;
-
-    /**
-     * 上级id2
-     */
-    private String sourceInviteIdL2;
-
-    /**
-     * 上级id3
-     */
-    private String sourceInviteIdL3;
-
-    /**
-     * 上级ids
-     */
-    private String sourceInviteIds;
-
-    /**
-     * 层级排序
-     */
-    private Integer upSort;
-
-    /**
-     * 邀请码
-     */
-    private String inviteCode;
-
-    /**
-     * 是否为节点用户
-     */
-    private Boolean agent;
-
-    /**
-     * 邀请码
-     */
-    private BigDecimal ztRatio;
-
-    /**
-     * 是否为节点用户
-     */
-    private String agentTime;
-
-    /**
-     * 层级排序
-     */
-    private Integer level;
-
-    @TableField(value = "`lock`")
-    private Boolean lock;
 }
