@@ -1,10 +1,14 @@
 package org.wx.core.wxBusiness.account.entity;
 
-import com.baomidou.mybatisplus.annotation.*;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
+import org.wx.core.wxBase.annotation.BizIdPrefix;
 import org.wx.core.wxBase.base.WxBaseEntity;
 import org.wx.core.wxBase.factory.ErrorFactory;
+import org.wx.core.wxBase.unit.BizIdUtil;
 import org.wx.core.wxBase.unit.WordUnit;
 import org.wx.core.wxBusiness.account.entity.enums.MemberRole;
 
@@ -17,12 +21,13 @@ import org.wx.core.wxBusiness.account.entity.enums.MemberRole;
 @Data
 @EqualsAndHashCode(callSuper = true)
 @TableName("app_member")
+@BizIdPrefix("MBR")
 public class Member extends WxBaseEntity<Member> {
 
     /**
      * ID
      */
-    @TableId(type = IdType.AUTO)
+    @TableId(type = IdType.INPUT)
     private String id;
 
     /**
@@ -62,7 +67,7 @@ public class Member extends WxBaseEntity<Member> {
 
     public static Member commonMember() {
         Member member = new Member();
-        member.id = WordUnit.randomKey(10, 1);
+        member.id = BizIdUtil.next(Member.class);
         member.memberRole = MemberRole.USER;
         member.salt = WordUnit.randomKey(12, 2);
         return member;
@@ -94,13 +99,4 @@ public class Member extends WxBaseEntity<Member> {
         this.password = null;
     }
 
-    @Data
-    public static class UserMore {
-    }
-
-    @TableField(exist = false)
-    private UserMore more = new UserMore();
-
-    @TableField(exist = false)
-    private Boolean myFollowUser;
 }

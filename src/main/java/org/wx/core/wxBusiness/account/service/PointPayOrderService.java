@@ -23,8 +23,7 @@ public class PointPayOrderService extends WxServiceImpl<PointPayOrderMapper, Poi
 
     public PointPayOrder createOrder(String uid, BigDecimal amount, PointOrderType type) {
         PointPayOrder order = new PointPayOrder();
-        order.setOrderNo(type+WordUnit.nowId(8,2));
-        order.setId(order.getOrderNo());
+        order.setOrderNo(type + WordUnit.nowId(8, 2));
         order.setState(PointOrderState.Running);
         order.setUid(uid);
         order.setType(type);

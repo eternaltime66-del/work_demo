@@ -3,13 +3,12 @@ package org.wx.core.wxBusiness.account.entity;
 import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
+import org.wx.core.wxBase.annotation.BizIdPrefix;
 import org.wx.core.wxBase.base.WxBaseEntity;
 import org.wx.core.wxBusiness.account.entity.enums.PointOrderState;
 import org.wx.core.wxBusiness.account.entity.enums.PointOrderType;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
 
 /**
  * PointPayOrder 实体类
@@ -19,6 +18,7 @@ import java.time.LocalDateTime;
 @Data
 @EqualsAndHashCode(callSuper = true)
 @TableName("app_point_pay_order")
+@BizIdPrefix("PPO")
 public class PointPayOrder extends WxBaseEntity<PointPayOrder> {
 
     @TableId(type = IdType.INPUT)

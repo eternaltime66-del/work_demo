@@ -3,12 +3,11 @@ package org.wx.core.wxBusiness.account.entity;
 import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
+import org.wx.core.wxBase.annotation.BizIdPrefix;
 import org.wx.core.wxBase.base.WxBaseEntity;
 import org.wx.core.wxBusiness.account.entity.enums.PointCoin;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
 
 /**
  * PointWallet 实体类
@@ -18,12 +17,13 @@ import java.time.LocalDateTime;
 @Data
 @EqualsAndHashCode(callSuper = true)
 @TableName("app_point_wallet")
+@BizIdPrefix("PW")
 public class PointWallet extends WxBaseEntity<PointWallet> {
 
     /**
      * id
      */
-    @TableId(type = IdType.AUTO)
+    @TableId(type = IdType.INPUT)
     private String id;
 
 

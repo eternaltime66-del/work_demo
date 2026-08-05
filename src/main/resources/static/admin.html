@@ -1,0 +1,4035 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <title>后台管理</title>
+  <link rel="stylesheet" href="/css/auth.css?v=20260805b">
+  <link rel="stylesheet" href="/css/admin.css?v=20260805e">
+  <script src="/js/dev-live.js"></script>
+  <script src="/js/vue.global.prod.js"></script>
+</head>
+<body class="admin-body">
+<div id="app" class="page admin-page">
+
+  <!-- 登录 / 注册 -->
+  <div v-if="!loggedIn" class="admin-login-wrap">
+    <div class="login-panel">
+      <div class="brand">
+        <div class="brand-badge">A</div>
+        <h1>后台管理</h1>
+        <p>{{ authMode === 'login' ? '管理员登录' : '管理员注册' }}</p>
+      </div>
+      <div class="card">
+        <div class="tabs">
+          <button type="button" class="tab" :class="{ active: authMode === 'login' }" @click="authMode = 'login'">登录</button>
+          <button type="button" class="tab" :class="{ active: authMode === 'register' }" @click="authMode = 'register'">注册</button>
+        </div>
+        <div class="field">
+          <label>邮箱</label>
+          <div class="input-wrap"><input v-model.trim="authForm.email" type="email" placeholder="管理员邮箱" autocomplete="email"></div>
+        </div>
+        <div class="field" v-if="authMode === 'register'">
+          <label>验证码</label>
+          <div class="input-wrap">
+            <input v-model.trim="authForm.emsCode" maxlength="6" placeholder="验证码" inputmode="numeric">
+            <button type="button" class="code-btn" :disabled="countdown > 0 || sendingCode" @click="sendCode">
+              {{ countdown > 0 ? countdown + 's' : '获取验证码' }}
+            </button>
+          </div>
+        </div>
+        <div class="field">
+          <label>密码</label>
+          <div class="input-wrap"><input v-model="authForm.password" type="password" placeholder="密码" autocomplete="current-password"></div>
+        </div>
+        <div class="field" v-if="authMode === 'register'">
+          <label>确认密码</label>
+          <div class="input-wrap"><input v-model="authForm.psdAgain" type="password" placeholder="确认密码" autocomplete="new-password"></div>
+        </div>
+        <button type="button" class="btn-primary" :disabled="loading" @click="submitAuth">
+          {{ loading ? '处理中...' : (authMode === 'login' ? '登录' : '注册') }}
+        </button>
+        <div class="tip" v-if="authMode === 'register'">开发验证码默认 <strong>123456</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 已登录壳层 -->
+  <div v-else class="admin-shell">
+    <aside class="admin-sidebar">
+      <div class="sidebar-brand">后台管理</div>
+      <nav class="sidebar-nav">
+        <button type="button" class="sidebar-nav-item" :class="{ active: tab === 'member' }" @click="switchTab('member')">玩家列表</button>
+
+        <div class="sidebar-nav-group" :class="{ 'has-active': isRoleGroupTab }">
+          <button type="button" class="sidebar-nav-group-head" @click="roleMenuOpen = !roleMenuOpen">
+            <span>角色管理</span>
+            <span class="sidebar-nav-chevron">{{ roleMenuOpen ? '▾' : '▸' }}</span>
+          </button>
+          <div v-show="roleMenuOpen" class="sidebar-nav-sub">
+            <button type="button" class="sidebar-nav-sub-item" :class="{ active: tab === 'roleTemplate' }" @click="switchTab('roleTemplate')">角色模板</button>
+            <button type="button" class="sidebar-nav-sub-item" :class="{ active: tab === 'playerRole' }" @click="switchTab('playerRole')">玩家角色管理</button>
+            <button type="button" class="sidebar-nav-sub-item" :class="{ active: tab === 'monster' }" @click="switchTab('monster')">怪物角色管理</button>
+          </div>
+        </div>
+
+        <button type="button" class="sidebar-nav-item" :class="{ active: tab === 'stage' }" @click="switchTab('stage')">关卡管理</button>
+
+        <div class="sidebar-nav-group" :class="{ 'has-active': isSkillGroupTab }">
+          <button type="button" class="sidebar-nav-group-head" @click="skillMenuOpen = !skillMenuOpen">
+            <span>技能管理</span>
+            <span class="sidebar-nav-chevron">{{ skillMenuOpen ? '▾' : '▸' }}</span>
+          </button>
+          <div v-show="skillMenuOpen" class="sidebar-nav-sub">
+            <div class="sidebar-nav-sub-group nested">
+              <div class="sidebar-nav-sub-group-label">充能技能</div>
+              <button type="button" class="sidebar-nav-sub-item" :class="{ active: tab === 'activeSkill' }" @click="switchTab('activeSkill')">完整充能技能管理</button>
+              <button type="button" class="sidebar-nav-sub-item" :class="{ active: tab === 'skillChargeGroup' }" @click="switchTab('skillChargeGroup')">快捷充能组</button>
+              <button type="button" class="sidebar-nav-sub-item" :class="{ active: tab === 'skillEffectGroup' }" @click="switchTab('skillEffectGroup')">快捷效果组</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="sidebar-nav-group" :class="{ 'has-active': isItemGroupTab }">
+          <button type="button" class="sidebar-nav-group-head" @click="itemMenuOpen = !itemMenuOpen">
+            <span>物品系统</span>
+            <span class="sidebar-nav-chevron">{{ itemMenuOpen ? '▾' : '▸' }}</span>
+          </button>
+          <div v-show="itemMenuOpen" class="sidebar-nav-sub">
+            <button type="button" class="sidebar-nav-sub-item" :class="{ active: tab === 'item' }" @click="switchTab('item')">物品总表</button>
+            <button type="button" class="sidebar-nav-sub-item" :class="{ active: tab === 'recipe' }" @click="switchTab('recipe')">配方管理</button>
+            <button type="button" class="sidebar-nav-sub-item" :class="{ active: tab === 'drop' }" @click="switchTab('drop')">怪物掉落</button>
+          </div>
+        </div>
+
+        <div class="sidebar-nav-group" :class="{ 'has-active': isEquipGroupTab }">
+          <button type="button" class="sidebar-nav-group-head" @click="equipMenuOpen = !equipMenuOpen">
+            <span>装备管理</span>
+            <span class="sidebar-nav-chevron">{{ equipMenuOpen ? '▾' : '▸' }}</span>
+          </button>
+          <div v-show="equipMenuOpen" class="sidebar-nav-sub">
+            <button
+              type="button"
+              class="sidebar-nav-sub-item"
+              v-for="eq in equipMenus"
+              :key="eq.tab"
+              :class="{ active: tab === eq.tab }"
+              @click="switchTab(eq.tab)"
+            >{{ eq.label }}</button>
+          </div>
+        </div>
+      </nav>
+      <div class="sidebar-footer">
+        <button type="button" class="sidebar-nav-item" @click="logout">退出</button>
+      </div>
+    </aside>
+
+    <main class="admin-main">
+      <div class="admin-topbar">
+        <h2>{{ tabTitle }}</h2>
+      </div>
+      <div class="admin-content">
+
+        <!-- 玩家列表 -->
+        <div v-if="tab === 'member'" class="admin-panel">
+          <div class="panel-toolbar">
+            <h3>玩家列表</h3>
+            <div class="panel-toolbar-actions">
+              <button type="button" class="btn-mini secondary" :disabled="memberLoading" @click="loadMembers">刷新</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>邮箱</th>
+                  <th>昵称</th>
+                  <th class="col-actions">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="m in members" :key="m.id">
+                  <td class="col-id">{{ m.id }}</td>
+                  <td>{{ m.email }}</td>
+                  <td>{{ m.name || '—' }}</td>
+                  <td class="col-actions">
+                    <button type="button" class="btn-mini" @click="openGiftDrawer(m)">赠送</button>
+                  </td>
+                </tr>
+                <tr v-if="!memberLoading && !members.length">
+                  <td colspan="4" class="empty-hint">暂无玩家</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 角色模板 -->
+        <div v-if="tab === 'roleTemplate'" class="admin-panel">
+          <div class="panel-toolbar">
+            <h3>角色模板</h3>
+            <div class="panel-toolbar-actions">
+              <button type="button" class="btn-primary btn-mini" @click="openRoleDrawer()">+ 新增模板</button>
+              <button type="button" class="btn-mini secondary" @click="loadRoleList">刷新</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>名称</th>
+                  <th>攻/生/防/行</th>
+                  <th>额外</th>
+                  <th>比例</th>
+                  <th>标记</th>
+                  <th>排序</th>
+                  <th class="col-actions">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in roleList" :key="item.id">
+                  <td>{{ item.name }}</td>
+                  <td>{{ item.baseAtk }}/{{ item.baseHp }}/{{ item.baseDef }}/{{ item.baseAtkSpeed != null ? item.baseAtkSpeed : (item.baseAction ? (100 / item.baseAction).toFixed(2) : 1) }}速</td>
+                  <td>生{{ item.extraHp }}/攻{{ item.extraAtk }}/防{{ item.extraDef }}</td>
+                  <td>造{{ item.dealDmgRatio }}% / 受{{ item.takenDmgRatio }}% / 吸{{ item.lifeStealRatio }}%</td>
+                  <td>
+                    <span v-if="item.mainRole" class="muted">主角 </span>
+                    <span v-if="item.defaultOwn" class="muted">默认拥有</span>
+                    <span v-if="!item.mainRole && !item.defaultOwn">—</span>
+                  </td>
+                  <td>{{ item.sort }}</td>
+                  <td class="col-actions">
+                    <button type="button" class="btn-mini" @click="openRoleDrawer(item)">编辑</button>
+                    <button type="button" class="btn-mini danger" @click="removeRoleTemplate(item)">删除</button>
+                  </td>
+                </tr>
+                <tr v-if="!roleList.length">
+                  <td colspan="7" class="empty-hint">暂无角色模板</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 玩家角色管理 -->
+        <div v-if="tab === 'playerRole'" class="admin-panel">
+          <div class="panel-toolbar">
+            <h3>玩家角色管理</h3>
+            <div class="panel-toolbar-actions">
+              <button type="button" class="btn-primary btn-mini" @click="openGrantDrawer">发放角色</button>
+            </div>
+          </div>
+          <div class="panel-filter-bar">
+            <div class="panel-filter-fields">
+              <div class="panel-filter-field panel-filter-grow">
+                <label>玩家 UID</label>
+                <input v-model.trim="playerRoleUid" placeholder="输入 uid 筛选" @keyup.enter="loadPlayerRoles">
+              </div>
+            </div>
+            <div class="panel-filter-actions">
+              <button type="button" class="btn-primary btn-mini" :disabled="playerRoleLoading" @click="loadPlayerRoles">查询</button>
+              <button type="button" class="btn-mini secondary" @click="playerRoleUid = ''; loadPlayerRoles()">清空</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>UID</th>
+                  <th>名称</th>
+                  <th>攻/生/防/行</th>
+                  <th>主角</th>
+                  <th>占地</th>
+                  <th class="col-actions">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="pr in playerRoles" :key="pr.id">
+                  <td class="col-id">{{ pr.id }}</td>
+                  <td class="col-id">{{ pr.uid }}</td>
+                  <td>{{ pr.name }}</td>
+                  <td>{{ pr.baseAtk }}/{{ pr.baseHp }}/{{ pr.baseDef }}/{{ pr.baseAtkSpeed != null ? pr.baseAtkSpeed : (pr.baseAction ? (100 / pr.baseAction).toFixed(2) : 1) }}速</td>
+                  <td>{{ pr.mainRole ? '是' : '否' }}</td>
+                  <td>{{ pr.gridH || 1 }}×{{ pr.gridW || 1 }}</td>
+                  <td class="col-actions">
+                    <button type="button" class="btn-mini" @click="openPlayerRoleEdit(pr)">编辑</button>
+                    <button type="button" class="btn-mini danger" @click="removePlayerRole(pr)">删除</button>
+                  </td>
+                </tr>
+                <tr v-if="!playerRoleLoading && !playerRoles.length">
+                  <td colspan="7" class="empty-hint">暂无玩家角色</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 怪物角色管理 -->
+        <div v-if="tab === 'monster'" class="admin-panel">
+          <div class="panel-toolbar">
+            <h3>怪物角色管理</h3>
+            <div class="panel-toolbar-actions">
+              <button type="button" class="btn-primary btn-mini" @click="openMonsterDrawer()">+ 新增怪物</button>
+              <button type="button" class="btn-mini secondary" :disabled="monsterLoading" @click="loadMonsters">刷新</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>名称</th>
+                  <th>稀有度</th>
+                  <th>占地</th>
+                  <th>攻/生/防/行</th>
+                  <th>排序</th>
+                  <th>备注</th>
+                  <th class="col-actions">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="m in monsters" :key="m.id">
+                  <td>{{ m.name }}</td>
+                  <td>{{ rarityLabel(m.rarity) }}</td>
+                  <td>{{ m.gridH || 1 }}×{{ m.gridW || 1 }}</td>
+                  <td>{{ m.baseAtk }}/{{ m.baseHp }}/{{ m.baseDef }}/{{ m.baseAction }}</td>
+                  <td>{{ m.sort }}</td>
+                  <td class="muted">{{ m.remark || '—' }}</td>
+                  <td class="col-actions">
+                    <button type="button" class="btn-mini" @click="openMonsterDrawer(m)">编辑</button>
+                    <button type="button" class="btn-mini danger" @click="removeMonster(m)">删除</button>
+                  </td>
+                </tr>
+                <tr v-if="!monsterLoading && !monsters.length">
+                  <td colspan="7" class="empty-hint">暂无怪物</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 关卡管理 -->
+        <div v-if="tab === 'stage'" class="admin-panel">
+          <div class="panel-toolbar">
+            <h3>关卡管理</h3>
+            <div class="panel-toolbar-actions">
+              <button type="button" class="btn-mini secondary" @click="loadStageTree">刷新树</button>
+            </div>
+          </div>
+
+          <div class="drill-breadcrumb">
+            <span class="crumb" :class="{ active: !selectedTypeId }" @click="resetStagePick('root')">全部分类</span>
+            <template v-if="selectedTypeId">
+              <span class="sep">›</span>
+              <span class="crumb" :class="{ active: !selectedChapterId }" @click="resetStagePick('type')">{{ selectedTypeName }}</span>
+            </template>
+            <template v-if="selectedChapterId">
+              <span class="sep">›</span>
+              <span class="crumb" :class="{ active: !selectedLevelId }" @click="resetStagePick('chapter')">{{ selectedChapterName }}</span>
+            </template>
+            <template v-if="selectedLevelId">
+              <span class="sep">›</span>
+              <span class="crumb active">{{ selectedLevelName }}</span>
+            </template>
+          </div>
+
+          <div class="drill-columns">
+            <div class="drill-col">
+              <div class="drill-col-head">① 分类</div>
+              <div class="drill-col-list">
+                <button
+                  type="button"
+                  class="drill-item"
+                  v-for="t in stageTree"
+                  :key="t.id"
+                  :class="{ selected: selectedTypeId === t.id }"
+                  @click="pickType(t)"
+                >
+                  {{ t.name }}
+                  <span class="sub-id">{{ t.code || t.id }}</span>
+                </button>
+                <div v-if="!stageTree.length" class="empty-hint" style="padding:12px">暂无分类</div>
+              </div>
+              <div class="drill-col-actions">
+                <button type="button" class="btn-primary btn-mini" @click="openTypeDrawer()">+ 新增</button>
+                <button type="button" class="btn-mini" v-if="selectedTypeId" @click="openTypeDrawer(currentType)">编辑</button>
+                <button type="button" class="btn-mini danger" v-if="selectedTypeId" @click="removeType">删除</button>
+              </div>
+            </div>
+
+            <div class="drill-col">
+              <div class="drill-col-head">② 大关</div>
+              <div class="drill-col-list">
+                <button
+                  type="button"
+                  class="drill-item"
+                  v-for="ch in drillChapters"
+                  :key="ch.id"
+                  :class="{ selected: selectedChapterId === ch.id }"
+                  @click="pickChapter(ch)"
+                >
+                  {{ ch.name }}
+                  <span class="sub-id">{{ ch.code || ch.id }}</span>
+                </button>
+                <div v-if="selectedTypeId && !drillChapters.length" class="empty-hint" style="padding:12px">无大关</div>
+                <div v-if="!selectedTypeId" class="empty-hint" style="padding:12px">← 先选分类</div>
+              </div>
+              <div class="drill-col-actions" v-if="selectedTypeId">
+                <button type="button" class="btn-primary btn-mini" @click="openChapterDrawer()">+ 新增</button>
+                <button type="button" class="btn-mini" v-if="selectedChapterId" @click="openChapterDrawer(currentChapter)">编辑</button>
+                <button type="button" class="btn-mini danger" v-if="selectedChapterId" @click="removeChapter">删除</button>
+              </div>
+            </div>
+
+            <div class="drill-col">
+              <div class="drill-col-head">③ 小关</div>
+              <div class="drill-col-list">
+                <button
+                  type="button"
+                  class="drill-item"
+                  v-for="lv in drillLevels"
+                  :key="lv.id"
+                  :class="{ selected: selectedLevelId === lv.id }"
+                  @click="pickLevel(lv)"
+                >
+                  {{ lv.name }}
+                  <span class="sub-id">{{ lv.code || lv.id }}</span>
+                </button>
+                <div v-if="selectedChapterId && !drillLevels.length" class="empty-hint" style="padding:12px">暂无小关</div>
+                <div v-if="!selectedChapterId" class="empty-hint" style="padding:12px">← 先选大关</div>
+              </div>
+              <div class="drill-col-actions" v-if="selectedChapterId">
+                <button type="button" class="btn-primary btn-mini" @click="openLevelDrawer()">+ 新增</button>
+                <button type="button" class="btn-mini" v-if="selectedLevelId" @click="openLevelDrawer(currentLevel)">编辑</button>
+                <button type="button" class="btn-mini danger" v-if="selectedLevelId" @click="removeLevel">删除</button>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="selectedLevelId" class="stage-battle-panel">
+            <div class="stage-battle-head">
+              <h4>{{ selectedLevelName }} · 怪物布置（6×5）</h4>
+              <button type="button" class="btn-mini secondary" @click="openLevelDrawer(currentLevel)">编辑小关</button>
+            </div>
+            <p class="wm-hint">按住怪物拖到格子松手落位；右上角红叉移除。添加后会随机落位。</p>
+
+            <div
+              class="wm-board"
+              ref="wmBoard"
+              @pointermove="onWmPointerMove"
+              @pointerup="onWmPointerUp"
+              @pointercancel="onWmPointerUp"
+            >
+              <div class="wm-cells" aria-hidden="true">
+                <div
+                  v-for="n in COLS * ROWS"
+                  :key="'cell-' + n"
+                  class="wm-cell"
+                  :class="{ hot: isWmCellHot(n - 1) }"
+                ></div>
+              </div>
+              <div class="wm-units">
+                <div
+                  v-for="wm in levelMonsters"
+                  :key="wm.id"
+                  class="wm-unit-wrap"
+                  :class="wmUnitClass(wm)"
+                  :style="wmUnitStyle(wm)"
+                  @pointerdown.prevent="onWmPointerDown($event, wm)"
+                  @pointermove="onWmPointerMove"
+                  @pointerup="onWmPointerUp"
+                  @pointercancel="onWmPointerUp"
+                >
+                  <button type="button" class="wm-remove" title="移除" @pointerdown.stop @click.stop="removeLevelMonster(wm)">×</button>
+                  <div class="wm-unit">
+                    <div class="wm-unit-name">{{ wm.monsterName || wm.monsterId }}</div>
+                    <div class="wm-unit-meta">{{ (wm.gridH || 1) }}×{{ (wm.gridW || 1) }} · {{ rarityLabel(wm.rarity) }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="wave-add-row" style="margin-top:14px">
+              <div class="field" style="margin:0">
+                <label>添加怪物</label>
+                <admin-select v-model="addMonsterId" :options="monsterSelectOptions" placeholder="选择怪物" searchable clearable />
+              </div>
+              <div></div>
+              <button type="button" class="btn-primary btn-mini" :disabled="wmActing || !addMonsterId" @click="addMonsterToLevel">添加</button>
+            </div>
+          </div>
+          <div v-else-if="selectedChapterId" class="stage-battle-panel">
+            <p class="empty-hint">在右侧选择一个小关，即可布置怪物</p>
+          </div>
+        </div>
+
+        <!-- 物品总表 -->
+        <div v-if="tab === 'item'" class="admin-panel">
+          <div class="panel-toolbar">
+            <h3>物品总表</h3>
+            <div class="panel-toolbar-actions">
+              <button type="button" class="btn-primary btn-mini" @click="openItemDrawer()">+ 新增物品</button>
+              <admin-select v-model="itemTypeFilter" :options="itemTypeOptions" placeholder="全部类型" clearable style="min-width:140px" @change="loadItems" />
+              <button type="button" class="btn-mini secondary" :disabled="itemLoading" @click="loadItems">刷新</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>编码</th>
+                  <th>名称</th>
+                  <th>类型</th>
+                  <th>堆叠</th>
+                  <th>重量</th>
+                  <th>排序</th>
+                  <th>备注</th>
+                  <th class="col-actions">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="it in items" :key="it.id">
+                  <td class="col-id">{{ it.code || '—' }}</td>
+                  <td>{{ it.name }}</td>
+                  <td>{{ itemTypeLabel(it.itemType) }}</td>
+                  <td>{{ it.maxStack }}</td>
+                  <td>{{ it.weight }}</td>
+                  <td>{{ it.sort }}</td>
+                  <td class="muted">{{ it.remark || '—' }}</td>
+                  <td class="col-actions">
+                    <button type="button" class="btn-mini" @click="openItemDrawer(it)">编辑</button>
+                    <button type="button" class="btn-mini danger" @click="removeItem(it)">删除</button>
+                  </td>
+                </tr>
+                <tr v-if="!itemLoading && !items.length">
+                  <td colspan="8" class="empty-hint">暂无物品</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 配方管理 -->
+        <div v-if="tab === 'recipe'" class="admin-panel">
+          <div class="panel-toolbar">
+            <h3>配方管理</h3>
+            <div class="panel-toolbar-actions">
+              <button type="button" class="btn-primary btn-mini" @click="openRecipeDrawer()">+ 新增配方</button>
+              <button type="button" class="btn-mini secondary" :disabled="recipeLoading" @click="loadRecipes">刷新</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>名称</th>
+                  <th>产出物品</th>
+                  <th>产出数量</th>
+                  <th>排序</th>
+                  <th>备注</th>
+                  <th class="col-actions">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="r in recipes" :key="r.id">
+                  <td>{{ r.name }}</td>
+                  <td>{{ r.outputItemName || r.outputItemId || '—' }}</td>
+                  <td>{{ r.outputQty }}</td>
+                  <td>{{ r.sort }}</td>
+                  <td class="muted">{{ r.remark || '—' }}</td>
+                  <td class="col-actions">
+                    <button type="button" class="btn-mini" @click="openRecipeDrawer(r)">编辑</button>
+                    <button type="button" class="btn-mini danger" @click="removeRecipe(r)">删除</button>
+                  </td>
+                </tr>
+                <tr v-if="!recipeLoading && !recipes.length">
+                  <td colspan="6" class="empty-hint">暂无配方</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 怪物掉落 -->
+        <div v-if="tab === 'drop'" class="admin-panel">
+          <div class="panel-toolbar">
+            <h3>怪物掉落</h3>
+            <div class="panel-toolbar-actions">
+              <button type="button" class="btn-primary btn-mini" @click="openDropDrawer()">+ 新增掉落</button>
+              <admin-select v-model="dropMonsterFilter" :options="monsterNameSelectOptions" placeholder="全部怪物" clearable searchable style="min-width:160px" @change="loadDrops" />
+              <button type="button" class="btn-mini secondary" :disabled="dropLoading" @click="loadDrops">刷新</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>怪物</th>
+                  <th>物品</th>
+                  <th>掉落率</th>
+                  <th>数量</th>
+                  <th>排序</th>
+                  <th class="col-actions">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="d in drops" :key="d.id">
+                  <td>{{ monsterName(d.monsterId) }}</td>
+                  <td>{{ d.itemName || d.itemId || '—' }}</td>
+                  <td>{{ d.dropRate }}</td>
+                  <td>{{ d.minQty }}-{{ d.maxQty }}</td>
+                  <td>{{ d.sort }}</td>
+                  <td class="col-actions">
+                    <button type="button" class="btn-mini" @click="openDropDrawer(d)">编辑</button>
+                    <button type="button" class="btn-mini danger" @click="removeDrop(d)">删除</button>
+                  </td>
+                </tr>
+                <tr v-if="!dropLoading && !drops.length">
+                  <td colspan="6" class="empty-hint">暂无掉落配置</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 完整充能技能管理 -->
+        <div v-if="tab === 'activeSkill'" class="admin-panel">
+          <div class="panel-toolbar">
+            <h3>完整充能技能管理</h3>
+            <div class="panel-toolbar-actions">
+              <button type="button" class="btn-primary btn-mini" @click="openSkillDrawer()">+ 新增技能</button>
+              <admin-select v-model="skillTypeFilter" :options="skillTypeOptions" placeholder="全部类型" clearable style="min-width:140px" @change="loadActiveSkills" />
+              <button type="button" class="btn-mini secondary" :disabled="skillLoading" @click="loadActiveSkills">刷新</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>名称</th>
+                  <th>编码</th>
+                  <th>类型</th>
+                  <th>所需充能</th>
+                  <th>排序</th>
+                  <th>备注</th>
+                  <th class="col-actions">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="sk in activeSkills" :key="sk.id">
+                  <td>{{ sk.name }}</td>
+                  <td class="col-id">{{ sk.code || '—' }}</td>
+                  <td>{{ skillTypeLabel(sk.skillType) }}</td>
+                  <td>{{ needChargeDisplay(sk) }}</td>
+                  <td>{{ sk.sort }}</td>
+                  <td class="muted">{{ sk.remark || '—' }}</td>
+                  <td class="col-actions">
+                    <button type="button" class="btn-mini" @click="openSkillDrawer(sk)">编辑</button>
+                    <button type="button" class="btn-mini danger" @click="removeActiveSkill(sk)">删除</button>
+                  </td>
+                </tr>
+                <tr v-if="!skillLoading && !activeSkills.length">
+                  <td colspan="7" class="empty-hint">暂无主动技能</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 快捷充能组 -->
+        <div v-if="tab === 'skillChargeGroup'" class="admin-panel">
+          <div class="panel-toolbar">
+            <h3>快捷充能组</h3>
+            <div class="panel-toolbar-actions">
+              <button type="button" class="btn-primary btn-mini" @click="openChargeGroupDrawer()">+ 新增充能组</button>
+              <button type="button" class="btn-mini secondary" :disabled="chargeGroupLoading" @click="loadChargeGroups">刷新</button>
+            </div>
+          </div>
+          <p class="muted" style="margin:0 0 12px;font-size:13px">细节后续补充</p>
+          <div class="table-wrap">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>名称</th>
+                  <th>排序</th>
+                  <th>备注</th>
+                  <th class="col-actions">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="g in chargeGroups" :key="g.id">
+                  <td>{{ g.name }}</td>
+                  <td>{{ g.sort }}</td>
+                  <td class="muted">{{ g.remark || '—' }}</td>
+                  <td class="col-actions">
+                    <button type="button" class="btn-mini" @click="openChargeGroupDrawer(g)">编辑</button>
+                    <button type="button" class="btn-mini danger" @click="removeChargeGroup(g)">删除</button>
+                  </td>
+                </tr>
+                <tr v-if="!chargeGroupLoading && !chargeGroups.length">
+                  <td colspan="4" class="empty-hint">暂无快捷充能组</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 快捷效果组 -->
+        <div v-if="tab === 'skillEffectGroup'" class="admin-panel">
+          <div class="panel-toolbar">
+            <h3>快捷效果组</h3>
+            <div class="panel-toolbar-actions">
+              <button type="button" class="btn-primary btn-mini" @click="openEffectGroupDrawer()">+ 新增效果组</button>
+              <button type="button" class="btn-mini secondary" :disabled="effectGroupLoading" @click="loadEffectGroups">刷新</button>
+            </div>
+          </div>
+          <p class="muted" style="margin:0 0 12px;font-size:13px">配置目标 + 伤害/治疗/属性修改公式</p>
+          <div class="table-wrap">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>名称</th>
+                  <th>目标</th>
+                  <th>效果</th>
+                  <th>段数</th>
+                  <th>排序</th>
+                  <th class="col-actions">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="g in effectGroups" :key="g.id">
+                  <td>{{ g.name }}</td>
+                  <td>{{ effectTargetLabel(g.targetType) }}</td>
+                  <td>
+                    {{ effectTypeLabel(g.effectType) }}
+                    <template v-if="g.effectType === 'ATTR_MODIFY'">
+                      · {{ attrModifyKeyLabel(g.attrKey) }}{{ attrModifyDirLabel(g.attrDir) }}
+                    </template>
+                  </td>
+                  <td>{{ g.hitSegments != null ? g.hitSegments : '—' }}</td>
+                  <td>{{ g.sort }}</td>
+                  <td class="col-actions">
+                    <button type="button" class="btn-mini" @click="openEffectGroupDrawer(g)">编辑</button>
+                    <button type="button" class="btn-mini danger" @click="removeEffectGroup(g)">删除</button>
+                  </td>
+                </tr>
+                <tr v-if="!effectGroupLoading && !effectGroups.length">
+                  <td colspan="6" class="empty-hint">暂无快捷效果组</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 装备管理（武器/护甲/护手/头盔/饰品/护腿） -->
+        <div v-if="isEquipGroupTab && currentEquip" class="admin-panel">
+          <div class="panel-toolbar">
+            <h3>{{ currentEquip.label }}</h3>
+            <div class="panel-toolbar-actions">
+              <button type="button" class="btn-primary btn-mini" @click="openEquipDrawer()">+ 新增{{ currentEquip.shortLabel }}</button>
+              <button type="button" class="btn-mini secondary" :disabled="equipLoading" @click="loadEquipList">刷新</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>编码</th>
+                  <th>名称</th>
+                  <th v-if="currentEquip.type === 'WEAPON'">攻击</th>
+                  <th v-if="currentEquip.type === 'WEAPON' || currentEquip.type === 'ACCESSORY'">攻速</th>
+                  <th v-if="currentEquip.showHpDef">生命</th>
+                  <th v-if="currentEquip.showHpDef">防御</th>
+                  <th>排序</th>
+                  <th>备注</th>
+                  <th class="col-actions">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in equipRows" :key="row.id">
+                  <td class="col-id">{{ row.code || '—' }}</td>
+                  <td>{{ row.name }}</td>
+                  <td v-if="currentEquip.type === 'WEAPON'">{{ row.ext.baseAtk ?? 0 }}</td>
+                  <td v-if="currentEquip.type === 'WEAPON' || currentEquip.type === 'ACCESSORY'">{{ formatAtkSpeedBonus(row.ext) }}</td>
+                  <td v-if="currentEquip.showHpDef">{{ row.ext.hp ?? 0 }}</td>
+                  <td v-if="currentEquip.showHpDef">{{ row.ext.defense ?? 0 }}</td>
+                  <td>{{ row.sort }}</td>
+                  <td class="muted">{{ row.remark || '—' }}</td>
+                  <td class="col-actions">
+                    <button type="button" class="btn-mini" @click="openEquipDrawer(row)">编辑</button>
+                    <button
+                      v-if="currentEquip.type === 'WEAPON'"
+                      type="button"
+                      class="btn-mini secondary"
+                      @click="openWeaponNormalSkillEditor(row)"
+                    >普攻</button>
+                    <button type="button" class="btn-mini secondary" @click="openEquipRecipeDrawer(row)">配方</button>
+                    <button type="button" class="btn-mini secondary" @click="openDefaultSkillDrawer(row)">默认技能</button>
+                    <button type="button" class="btn-mini danger" @click="removeEquip(row)">删除</button>
+                  </td>
+                </tr>
+                <tr v-if="!equipLoading && !equipRows.length">
+                  <td :colspan="equipColspan" class="empty-hint">暂无{{ currentEquip.shortLabel }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- 角色模板抽屉 -->
+  <div v-if="roleDrawerShow" class="admin-drawer-mask" @click.self="roleDrawerShow = false">
+    <div class="admin-drawer">
+      <div class="drawer-header">
+        <h3>{{ roleForm.id ? '编辑角色模板' : '新增角色模板' }}</h3>
+        <button type="button" class="drawer-close" @click="roleDrawerShow = false">×</button>
+      </div>
+      <div class="drawer-body">
+        <div class="form-grid">
+          <div class="field"><label>配置名称</label><input v-model.trim="roleForm.name" placeholder="配置名称"></div>
+          <div class="field"><label>排序</label><input v-model.number="roleForm.sort" type="number"></div>
+          <div class="field"><label>基础攻击力</label><input v-model.number="roleForm.baseAtk" type="number"></div>
+          <div class="field"><label>基础生命值</label><input v-model.number="roleForm.baseHp" type="number"></div>
+          <div class="field"><label>基础防御力</label><input v-model.number="roleForm.baseDef" type="number"></div>
+          <div class="field"><label>攻速</label><input v-model.number="roleForm.baseAtkSpeed" type="number" step="0.01" min="0.01" @input="onRoleAtkSpeedInput(roleForm)"></div>
+          <div class="field"><label>行动值（自动）</label><input :value="roleForm.baseAction" type="number" readonly></div>
+          <div class="field"><label>额外生命值</label><input v-model.number="roleForm.extraHp" type="number"></div>
+          <div class="field"><label>额外攻击力</label><input v-model.number="roleForm.extraAtk" type="number"></div>
+          <div class="field"><label>额外防御力</label><input v-model.number="roleForm.extraDef" type="number"></div>
+          <div class="field"><label>造成伤害比例(%)</label><input v-model="roleForm.dealDmgRatio" type="number" step="1" title="单位1%，默认100"></div>
+          <div class="field"><label>受到伤害比例(%)</label><input v-model="roleForm.takenDmgRatio" type="number" step="1" title="单位1%，默认100"></div>
+          <div class="field"><label>吸血比例(%)</label><input v-model="roleForm.lifeStealRatio" type="number" step="1" title="单位1%，默认0"></div>
+          <div class="field"><label>增加攻速(%)</label><input v-model="roleForm.atkSpeedUpRatio" type="number" step="1" title="攻速×(1+比例%)，再反推行动值"></div>
+          <div class="field"><label>减少攻速(%)</label><input v-model="roleForm.atkSpeedDownRatio" type="number" step="1" title="攻速×(1-比例%)，再反推行动值"></div>
+          <div class="field full muted" style="margin:0">编辑「攻速」（默认1），行动值自动=100/攻速。装备增减再叠乘攻速后反推行动值。例：攻速1 +20% → 1.2 → 行动值≈83</div>
+          <div class="field">
+            <label>玩家默认拥有</label>
+            <label class="admin-switch">
+              <input type="checkbox" v-model="roleForm.defaultOwn">
+              <span class="admin-switch-slider"></span>
+              <span class="admin-switch-text">{{ roleForm.defaultOwn ? '是' : '否' }}</span>
+            </label>
+          </div>
+          <div class="field">
+            <label>主角</label>
+            <label class="admin-switch">
+              <input type="checkbox" v-model="roleForm.mainRole">
+              <span class="admin-switch-slider"></span>
+              <span class="admin-switch-text">{{ roleForm.mainRole ? '是' : '否' }}</span>
+            </label>
+          </div>
+          <div class="field full"><label>备注</label><input v-model.trim="roleForm.remark" placeholder="备注"></div>
+        </div>
+      </div>
+      <div class="drawer-footer">
+        <button type="button" class="btn-mini secondary" @click="roleDrawerShow = false">取消</button>
+        <button type="button" class="btn-primary" :disabled="roleSaving" @click="saveRoleTemplate">
+          {{ roleSaving ? '保存中...' : '保存' }}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 赠送物品抽屉 -->
+  <div v-if="giftDrawerShow" class="admin-drawer-mask" @click.self="giftDrawerShow = false">
+    <div class="admin-drawer member-grant-drawer">
+      <div class="drawer-header">
+        <h3>赠送物品</h3>
+        <button type="button" class="drawer-close" @click="giftDrawerShow = false">×</button>
+      </div>
+      <div class="drawer-body">
+        <div class="form-grid" style="grid-template-columns:1fr">
+          <div class="field">
+            <label>玩家</label>
+            <div class="field-value">{{ giftForm.name || '—' }} <span class="muted">（{{ giftForm.uid }}）</span></div>
+          </div>
+          <div class="field">
+            <label>物品</label>
+            <admin-select v-model="giftForm.itemId" :options="itemSelectOptions" placeholder="请选择物品" searchable clearable />
+          </div>
+          <div class="field">
+            <label>数量</label>
+            <input v-model.number="giftForm.quantity" type="number" min="1" step="1" placeholder="数量">
+          </div>
+          <div class="field full muted" style="margin:0">物品将直接放入该玩家仓库</div>
+        </div>
+      </div>
+      <div class="drawer-footer">
+        <button type="button" class="btn-mini secondary" @click="giftDrawerShow = false">取消</button>
+        <button type="button" class="btn-primary" :disabled="giftSaving" @click="submitGift">{{ giftSaving ? '赠送中...' : '确认赠送' }}</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 发放角色抽屉 -->
+  <div v-if="grantDrawerShow" class="admin-drawer-mask" @click.self="grantDrawerShow = false">
+    <div class="admin-drawer member-grant-drawer">
+      <div class="drawer-header">
+        <h3>发放角色</h3>
+        <button type="button" class="drawer-close" @click="grantDrawerShow = false">×</button>
+      </div>
+      <div class="drawer-body">
+        <div class="form-grid" style="grid-template-columns:1fr">
+          <div class="field">
+            <label>玩家 UID</label>
+            <input v-model.trim="grantForm.uid" placeholder="玩家 uid">
+          </div>
+          <div class="field">
+            <label>角色模板</label>
+            <admin-select v-model="grantForm.baseStatId" :options="roleTemplateSelectOptions" placeholder="请选择角色模板" searchable clearable />
+          </div>
+        </div>
+      </div>
+      <div class="drawer-footer">
+        <button type="button" class="btn-mini secondary" @click="grantDrawerShow = false">取消</button>
+        <button type="button" class="btn-primary" :disabled="grantSaving" @click="submitGrant">{{ grantSaving ? '发放中...' : '确认发放' }}</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 编辑玩家角色抽屉 -->
+  <div v-if="playerRoleDrawerShow" class="admin-drawer-mask" @click.self="playerRoleDrawerShow = false">
+    <div class="admin-drawer">
+      <div class="drawer-header">
+        <h3>编辑玩家角色</h3>
+        <button type="button" class="drawer-close" @click="playerRoleDrawerShow = false">×</button>
+      </div>
+      <div class="drawer-body">
+        <div class="form-grid">
+          <div class="field"><label>名称</label><input v-model.trim="playerRoleForm.name"></div>
+          <div class="field"><label>UID</label><span class="field-value muted">{{ playerRoleForm.uid }}</span></div>
+          <div class="field"><label>基础攻击力</label><input v-model.number="playerRoleForm.baseAtk" type="number"></div>
+          <div class="field"><label>基础生命值</label><input v-model.number="playerRoleForm.baseHp" type="number"></div>
+          <div class="field"><label>基础防御力</label><input v-model.number="playerRoleForm.baseDef" type="number"></div>
+          <div class="field"><label>攻速</label><input v-model.number="playerRoleForm.baseAtkSpeed" type="number" step="0.01" min="0.01" @input="onRoleAtkSpeedInput(playerRoleForm)"></div>
+          <div class="field"><label>行动值（自动）</label><input :value="playerRoleForm.baseAction" type="number" readonly></div>
+          <div class="field"><label>额外生命值</label><input v-model.number="playerRoleForm.extraHp" type="number"></div>
+          <div class="field"><label>额外攻击力</label><input v-model.number="playerRoleForm.extraAtk" type="number"></div>
+          <div class="field"><label>额外防御力</label><input v-model.number="playerRoleForm.extraDef" type="number"></div>
+          <div class="field"><label>造成伤害比例(%)</label><input v-model="playerRoleForm.dealDmgRatio" type="number" step="1"></div>
+          <div class="field"><label>受到伤害比例(%)</label><input v-model="playerRoleForm.takenDmgRatio" type="number" step="1"></div>
+          <div class="field"><label>吸血比例(%)</label><input v-model="playerRoleForm.lifeStealRatio" type="number" step="1"></div>
+          <div class="field"><label>增加攻速(%)</label><input v-model="playerRoleForm.atkSpeedUpRatio" type="number" step="1"></div>
+          <div class="field"><label>减少攻速(%)</label><input v-model="playerRoleForm.atkSpeedDownRatio" type="number" step="1"></div>
+          <div class="field"><label>占地高</label><input v-model.number="playerRoleForm.gridH" type="number" min="1"></div>
+          <div class="field"><label>占地宽</label><input v-model.number="playerRoleForm.gridW" type="number" min="1"></div>
+          <div class="field">
+            <label>主角</label>
+            <label class="admin-switch">
+              <input type="checkbox" v-model="playerRoleForm.mainRole">
+              <span class="admin-switch-slider"></span>
+              <span class="admin-switch-text">{{ playerRoleForm.mainRole ? '是' : '否' }}</span>
+            </label>
+          </div>
+        </div>
+      </div>
+      <div class="drawer-footer">
+        <button type="button" class="btn-mini secondary" @click="playerRoleDrawerShow = false">取消</button>
+        <button type="button" class="btn-primary" :disabled="playerRoleSaving" @click="savePlayerRole">{{ playerRoleSaving ? '保存中...' : '保存' }}</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 怪物抽屉 -->
+  <div v-if="monsterDrawerShow" class="admin-drawer-mask" @click.self="monsterDrawerShow = false">
+    <div class="admin-drawer">
+      <div class="drawer-header">
+        <h3>{{ monsterForm.id ? '编辑怪物' : '新增怪物' }}</h3>
+        <button type="button" class="drawer-close" @click="monsterDrawerShow = false">×</button>
+      </div>
+      <div class="drawer-body">
+        <div class="form-grid">
+          <div class="field"><label>名称</label><input v-model.trim="monsterForm.name" placeholder="怪物名称"></div>
+          <div class="field">
+            <label>稀有度</label>
+            <admin-select v-model="monsterForm.rarity" :options="raritySelectOptions" @change="onMonsterRarityChange" />
+          </div>
+          <div class="field">
+            <label>占地高</label>
+            <input v-model.number="monsterForm.gridH" type="number" min="1" :max="ROWS" :readonly="!isSpecialRarity">
+          </div>
+          <div class="field">
+            <label>占地宽</label>
+            <input v-model.number="monsterForm.gridW" type="number" min="1" :max="COLS" :readonly="!isSpecialRarity">
+          </div>
+          <div class="field"><label>基础攻击力</label><input v-model.number="monsterForm.baseAtk" type="number"></div>
+          <div class="field"><label>基础生命值</label><input v-model.number="monsterForm.baseHp" type="number"></div>
+          <div class="field"><label>基础防御力</label><input v-model.number="monsterForm.baseDef" type="number"></div>
+          <div class="field"><label>基础行动值</label><input v-model.number="monsterForm.baseAction" type="number"></div>
+          <div class="field"><label>排序</label><input v-model.number="monsterForm.sort" type="number"></div>
+          <div class="field full"><label>备注</label><input v-model.trim="monsterForm.remark" placeholder="备注"></div>
+        </div>
+        <p class="muted" v-if="!isSpecialRarity">非特殊稀有度占地由系统固定：普通 1×1 / 稀有 1×2 / 史诗 2×2 / BOSS 2×4</p>
+      </div>
+      <div class="drawer-footer">
+        <button type="button" class="btn-mini secondary" @click="monsterDrawerShow = false">取消</button>
+        <button type="button" class="btn-primary" :disabled="monsterSaving" @click="saveMonster">{{ monsterSaving ? '保存中...' : '保存' }}</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 分类抽屉 -->
+  <div v-if="typeDrawerShow" class="admin-drawer-mask" @click.self="typeDrawerShow = false">
+    <div class="admin-drawer member-grant-drawer">
+      <div class="drawer-header">
+        <h3>{{ typeForm.id ? '编辑分类' : '新增分类' }}</h3>
+        <button type="button" class="drawer-close" @click="typeDrawerShow = false">×</button>
+      </div>
+      <div class="drawer-body">
+        <div class="form-grid" style="grid-template-columns:1fr">
+          <div class="field"><label>名称</label><input v-model.trim="typeForm.name"></div>
+          <div class="field"><label>编码</label><input v-model.trim="typeForm.code"></div>
+          <div class="field"><label>排序</label><input v-model.number="typeForm.sort" type="number"></div>
+          <div class="field"><label>备注</label><input v-model.trim="typeForm.remark"></div>
+        </div>
+      </div>
+      <div class="drawer-footer">
+        <button type="button" class="btn-mini secondary" @click="typeDrawerShow = false">取消</button>
+        <button type="button" class="btn-primary" :disabled="stageSaving" @click="saveType">{{ stageSaving ? '保存中...' : '保存' }}</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 大关抽屉 -->
+  <div v-if="chapterDrawerShow" class="admin-drawer-mask" @click.self="chapterDrawerShow = false">
+    <div class="admin-drawer member-grant-drawer">
+      <div class="drawer-header">
+        <h3>{{ chapterForm.id ? '编辑大关' : '新增大关' }}</h3>
+        <button type="button" class="drawer-close" @click="chapterDrawerShow = false">×</button>
+      </div>
+      <div class="drawer-body">
+        <div class="form-grid" style="grid-template-columns:1fr">
+          <div class="field"><label>名称</label><input v-model.trim="chapterForm.name"></div>
+          <div class="field"><label>编码</label><input v-model.trim="chapterForm.code"></div>
+          <div class="field"><label>排序</label><input v-model.number="chapterForm.sort" type="number"></div>
+          <div class="field"><label>备注</label><input v-model.trim="chapterForm.remark"></div>
+        </div>
+      </div>
+      <div class="drawer-footer">
+        <button type="button" class="btn-mini secondary" @click="chapterDrawerShow = false">取消</button>
+        <button type="button" class="btn-primary" :disabled="stageSaving" @click="saveChapter">{{ stageSaving ? '保存中...' : '保存' }}</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 小关抽屉 -->
+  <div v-if="levelDrawerShow" class="admin-drawer-mask" @click.self="levelDrawerShow = false">
+    <div class="admin-drawer member-grant-drawer">
+      <div class="drawer-header">
+        <h3>{{ levelForm.id ? '编辑小关' : '新增小关' }}</h3>
+        <button type="button" class="drawer-close" @click="levelDrawerShow = false">×</button>
+      </div>
+      <div class="drawer-body">
+        <div class="form-grid" style="grid-template-columns:1fr">
+          <div class="field"><label>名称</label><input v-model.trim="levelForm.name"></div>
+          <div class="field"><label>编码</label><input v-model.trim="levelForm.code" placeholder="如 1-1"></div>
+          <div class="field"><label>排序</label><input v-model.number="levelForm.sort" type="number"></div>
+          <div class="field"><label>备注</label><input v-model.trim="levelForm.remark"></div>
+        </div>
+      </div>
+      <div class="drawer-footer">
+        <button type="button" class="btn-mini secondary" @click="levelDrawerShow = false">取消</button>
+        <button type="button" class="btn-primary" :disabled="stageSaving" @click="saveLevel">{{ stageSaving ? '保存中...' : '保存' }}</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 物品抽屉 -->
+  <div v-if="itemDrawerShow" class="admin-drawer-mask" @click.self="itemDrawerShow = false">
+    <div class="admin-drawer">
+      <div class="drawer-header">
+        <h3>{{ itemDrawerTitle }}</h3>
+        <button type="button" class="drawer-close" @click="itemDrawerShow = false">×</button>
+      </div>
+      <div class="drawer-body">
+        <div class="form-grid">
+          <div class="field"><label>编码</label><input v-model.trim="itemForm.code" placeholder="物品编码"></div>
+          <div class="field"><label>名称</label><input v-model.trim="itemForm.name" placeholder="物品名称"></div>
+          <div class="field">
+            <label>类型</label>
+            <admin-select v-model="itemForm.itemType" :options="itemTypeOptions" :disabled="itemTypeLocked" placeholder="请选择类型" />
+          </div>
+          <div class="field"><label>图标</label><input v-model.trim="itemForm.icon" placeholder="图标"></div>
+          <div class="field"><label>最大堆叠</label><input v-model.number="itemForm.maxStack" type="number" min="1"></div>
+          <div class="field"><label>重量</label><input v-model.number="itemForm.weight" type="number" step="0.01"></div>
+          <div class="field"><label>排序</label><input v-model.number="itemForm.sort" type="number"></div>
+          <div class="field full"><label>备注</label><input v-model.trim="itemForm.remark" placeholder="备注"></div>
+        </div>
+
+        <template v-if="itemForm.itemType && itemForm.itemType !== 'MATERIAL'">
+          <h4 style="margin:18px 0 10px;font-size:14px">技能槽</h4>
+          <div class="form-grid">
+            <div class="field"><label>充能技能槽数量</label><input v-model.number="itemForm.chargeSkillSlotCount" type="number" min="0" max="8"></div>
+            <div class="field">
+              <label>玩家可编辑技能槽</label>
+              <label class="admin-switch">
+                <input type="checkbox" v-model="itemForm.playerCanEditSkillSlot">
+                <span class="admin-switch-slider"></span>
+                <span class="admin-switch-text">{{ itemForm.playerCanEditSkillSlot ? '是' : '否' }}</span>
+              </label>
+            </div>
+          </div>
+        </template>
+
+        <template v-if="itemForm.itemType">
+          <h4 style="margin:18px 0 10px;font-size:14px">类型扩展</h4>
+          <div class="form-grid" v-if="itemForm.itemType === 'MATERIAL'">
+            <div class="field"><label>品级</label><input v-model.number="itemExtForm.grade" type="number"></div>
+            <div class="field full"><label>扩展备注</label><input v-model.trim="itemExtForm.remark" placeholder="备注"></div>
+          </div>
+          <div class="form-grid" v-else-if="itemForm.itemType === 'WEAPON'">
+            <div class="field"><label>基础攻击力</label><input v-model.number="itemExtForm.baseAtk" type="number"></div>
+            <div class="field">
+              <label>攻速增减</label>
+              <admin-select v-model="itemAtkSpeedDir" :options="atkSpeedDirOptions" @change="onItemAtkSpeedDirChange" />
+            </div>
+            <div class="field">
+              <label>数值</label>
+              <div class="pct-input-wrap">
+                <input v-model.number="itemAtkSpeedValue" type="number" min="0" step="1" placeholder="0">
+                <span class="pct-suffix">%</span>
+              </div>
+            </div>
+          </div>
+          <div class="form-grid" v-else-if="itemForm.itemType === 'ARMOR' || itemForm.itemType === 'GLOVES' || itemForm.itemType === 'HELMET' || itemForm.itemType === 'LEGS'">
+            <div class="field"><label>生命</label><input v-model.number="itemExtForm.hp" type="number"></div>
+            <div class="field"><label>防御力</label><input v-model.number="itemExtForm.defense" type="number"></div>
+          </div>
+          <div class="form-grid" v-else-if="itemForm.itemType === 'ACCESSORY'">
+            <div class="field">
+              <label>攻速增减</label>
+              <admin-select v-model="itemAtkSpeedDir" :options="atkSpeedDirOptions" @change="onItemAtkSpeedDirChange" />
+            </div>
+            <div class="field">
+              <label>数值</label>
+              <div class="pct-input-wrap">
+                <input v-model.number="itemAtkSpeedValue" type="number" min="0" step="1" placeholder="0">
+                <span class="pct-suffix">%</span>
+              </div>
+            </div>
+            <div class="field full"><label>扩展备注</label><input v-model.trim="itemExtForm.remark" placeholder="备注"></div>
+          </div>
+        </template>
+      </div>
+      <div class="drawer-footer">
+        <button type="button" class="btn-mini secondary" @click="itemDrawerShow = false">取消</button>
+        <button type="button" class="btn-primary" :disabled="itemSaving" @click="saveItem">{{ itemSaving ? '保存中...' : '保存' }}</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 装备默认充能技能弹窗 -->
+  <div v-if="defaultSkillDrawerShow" class="admin-drawer-mask" @click.self="closeDefaultSkillDrawer">
+    <div class="admin-drawer member-grant-drawer">
+      <div class="drawer-header">
+        <h3>默认技能 · {{ defaultSkillItemName }}</h3>
+        <button type="button" class="drawer-close" @click="closeDefaultSkillDrawer">×</button>
+      </div>
+      <div class="drawer-body">
+        <p class="muted" style="margin:0 0 12px;font-size:12px">
+          技能槽数量：{{ defaultSkillSlots.length }}（在装备编辑里修改「充能技能槽数量」后保存再生效）
+        </p>
+        <div class="effect-block" v-for="(slot, idx) in defaultSkillSlots" :key="'ds-' + idx">
+          <div class="effect-block-head">
+            <span>技能槽 {{ idx + 1 }}</span>
+            <button
+              v-if="slot.skillId"
+              type="button"
+              class="btn-mini danger"
+              @click="clearDefaultSkillSlot(idx)"
+            >清空</button>
+          </div>
+          <div class="form-grid" style="grid-template-columns:1fr">
+            <div class="field">
+              <label>充能技能</label>
+              <admin-select
+                v-model="slot.skillId"
+                :options="chargeSkillSelectOptions"
+                placeholder="未配置"
+                searchable
+                clearable
+              />
+            </div>
+          </div>
+        </div>
+        <p v-if="!defaultSkillSlots.length" class="empty-hint">请先在装备编辑中设置充能技能槽数量（≥1）</p>
+      </div>
+      <div class="drawer-footer">
+        <button type="button" class="btn-mini secondary" @click="closeDefaultSkillDrawer">取消</button>
+        <button
+          type="button"
+          class="btn-primary"
+          :disabled="defaultSkillSaving || !defaultSkillSlots.length"
+          @click="saveDefaultSkills"
+        >{{ defaultSkillSaving ? '保存中...' : '确认保存' }}</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 配方抽屉（产出 + 材料一体编辑；装备管理可快捷打开） -->
+  <div v-if="recipeDrawerShow" class="admin-drawer-mask" @click.self="closeRecipeDrawer">
+    <div class="admin-drawer member-grant-drawer">
+      <div class="drawer-header">
+        <h3>{{ recipeDrawerTitle }}</h3>
+        <button type="button" class="drawer-close" @click="closeRecipeDrawer">×</button>
+      </div>
+      <div class="drawer-body">
+        <p v-if="recipeOutputLocked" class="muted" style="margin:0 0 12px;font-size:12px">以本装备为产出物配置合成配方（与配方管理共用）</p>
+        <div class="form-grid" style="grid-template-columns:1fr">
+          <div class="field"><label>名称</label><input v-model.trim="recipeForm.name" placeholder="留空则按产出物品自动生成"></div>
+          <div class="field" v-if="recipeOutputLocked">
+            <label>产出物品</label>
+            <div class="field-value">{{ recipeQuickItemLabel || recipeForm.outputItemId }}</div>
+          </div>
+          <div class="field" v-else>
+            <label>产出物品</label>
+            <admin-select v-model="recipeForm.outputItemId" :options="itemSelectOptions" placeholder="选择合成产物" searchable clearable />
+          </div>
+          <div class="field"><label>产出数量</label><input v-model.number="recipeForm.outputQty" type="number" min="1"></div>
+          <div class="field"><label>排序</label><input v-model.number="recipeForm.sort" type="number"></div>
+          <div class="field"><label>备注</label><input v-model.trim="recipeForm.remark" placeholder="备注"></div>
+        </div>
+        <div class="drawer-section-title">所需材料</div>
+        <div class="effect-block" v-for="(mat, idx) in recipeForm.materials" :key="'rm-' + idx">
+          <div class="effect-block-head">
+            <span>材料 {{ idx + 1 }}</span>
+            <button type="button" class="btn-mini danger" @click="removeRecipeMaterialRow(idx)" v-if="recipeForm.materials.length > 1">删</button>
+          </div>
+          <div class="form-grid">
+            <div class="field">
+              <label>材料物品</label>
+              <admin-select v-model="mat.itemId" :options="itemSelectOptions" placeholder="选择材料" searchable clearable />
+            </div>
+            <div class="field"><label>数量</label><input v-model.number="mat.quantity" type="number" min="1"></div>
+          </div>
+        </div>
+        <button type="button" class="btn-mini" @click="addRecipeMaterialRow">+ 添加材料</button>
+      </div>
+      <div class="drawer-footer">
+        <button type="button" class="btn-mini secondary" @click="closeRecipeDrawer">取消</button>
+        <button type="button" class="btn-primary" :disabled="recipeSaving" @click="saveRecipe">{{ recipeSaving ? '保存中...' : '保存' }}</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 掉落抽屉 -->
+  <div v-if="dropDrawerShow" class="admin-drawer-mask" @click.self="dropDrawerShow = false">
+    <div class="admin-drawer member-grant-drawer">
+      <div class="drawer-header">
+        <h3>{{ dropForm.id ? '编辑掉落' : '新增掉落' }}</h3>
+        <button type="button" class="drawer-close" @click="dropDrawerShow = false">×</button>
+      </div>
+      <div class="drawer-body">
+        <div class="form-grid" style="grid-template-columns:1fr">
+          <div class="field">
+            <label>怪物</label>
+            <admin-select v-model="dropForm.monsterId" :options="monsterNameSelectOptions" placeholder="请选择怪物" searchable clearable />
+          </div>
+          <div class="field">
+            <label>物品</label>
+            <admin-select v-model="dropForm.itemId" :options="itemSelectOptions" placeholder="请选择物品" searchable clearable />
+          </div>
+          <div class="field"><label>掉落率(100=100%，独立判定)</label><input v-model.number="dropForm.dropRate" type="number" step="1" min="0" max="100"></div>
+          <div class="field"><label>最小数量</label><input v-model.number="dropForm.minQty" type="number" min="0"></div>
+          <div class="field"><label>最大数量</label><input v-model.number="dropForm.maxQty" type="number" min="0"></div>
+          <div class="field"><label>排序</label><input v-model.number="dropForm.sort" type="number"></div>
+          <div class="field"><label>备注</label><input v-model.trim="dropForm.remark" placeholder="备注"></div>
+        </div>
+      </div>
+      <div class="drawer-footer">
+        <button type="button" class="btn-mini secondary" @click="dropDrawerShow = false">取消</button>
+        <button type="button" class="btn-primary" :disabled="dropSaving" @click="saveDrop">{{ dropSaving ? '保存中...' : '保存' }}</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 完整充能技能抽屉 -->
+  <div v-if="skillDrawerShow" class="admin-drawer-mask" @click.self="closeSkillDrawer">
+    <div class="admin-drawer wide">
+      <div class="drawer-header">
+        <h3>{{ skillDrawerTitle }}</h3>
+        <button type="button" class="drawer-close" @click="closeSkillDrawer">×</button>
+      </div>
+      <div class="drawer-body">
+        <div v-if="skillBindWeaponItemId" class="weapon-normal-bind-tip">
+          <p class="muted" style="margin:0;font-size:12px;flex:1">
+            武器普攻：保存后绑定到「{{ skillBindWeaponName || '武器' }}」普攻槽；清空绑定后战斗使用通用普攻。
+          </p>
+          <button
+            v-if="skillForm.id"
+            type="button"
+            class="btn-mini danger"
+            :disabled="skillSaving"
+            @click="unbindWeaponNormalSkill"
+          >清空绑定</button>
+        </div>
+        <div class="form-grid">
+          <div class="field"><label>名称</label><input v-model.trim="skillForm.name" placeholder="技能名称"></div>
+          <div class="field"><label>编码</label><input v-model.trim="skillForm.code" placeholder="技能编码"></div>
+          <div class="field">
+            <label>类型</label>
+            <admin-select v-model="skillForm.skillType" :options="skillTypeOptions" placeholder="请选择类型" :disabled="skillTypeLocked" />
+          </div>
+          <div class="field"><label>排序</label><input v-model.number="skillForm.sort" type="number"></div>
+          <div class="field full"><label>备注</label><input v-model.trim="skillForm.remark" placeholder="备注"></div>
+        </div>
+
+        <div class="skill-form-section">
+          <h4>充能</h4>
+          <div class="form-grid" style="margin-bottom:12px">
+            <div class="field full">
+              <label>所需充能</label>
+              <div class="choice-pills">
+                <button
+                  type="button"
+                  class="choice-pill"
+                  :class="{ active: skillForm.needChargeMode === 'SELF_BASE_ACTION' }"
+                  @click="skillForm.needChargeMode = 'SELF_BASE_ACTION'"
+                >自己的基础行动值</button>
+                <button
+                  type="button"
+                  class="choice-pill"
+                  :class="{ active: skillForm.needChargeMode === 'MANUAL' }"
+                  @click="skillForm.needChargeMode = 'MANUAL'"
+                >手动输入</button>
+              </div>
+              <input
+                v-if="skillForm.needChargeMode === 'MANUAL'"
+                class="choice-pill-input"
+                v-model.number="skillForm.needCharge"
+                type="number"
+                min="0"
+                placeholder="输入所需充能值"
+              >
+              <p v-else class="muted" style="margin:8px 0 0;font-size:12px">释放时取施法者自己的基础行动值作为所需充能</p>
+            </div>
+          </div>
+          <div class="skill-inline-actions">
+            <button type="button" class="btn-mini" @click="addDraftCharge">添加充能条件</button>
+            <admin-select v-model="pickChargeConditionType" :options="chargeConditionTypeOptions" style="min-width:160px" @change="onPickChargeConditionTypeChange" />
+            <template v-if="pickChargeConditionType === 'SKILL_CHARGE'">
+              <admin-select v-model="pickSkillChargeEvent" :options="skillChargeEventOptions" style="min-width:100px" />
+              <admin-select v-model="pickSkillChargeMatch" :options="skillChargeMatchOptions" style="min-width:120px" @change="onPickSkillChargeMatchChange" />
+              <admin-select
+                v-if="pickSkillChargeMatch === 'ANY_TYPE'"
+                v-model="pickSkillChargeSkillType"
+                :options="skillTypeOptions"
+                placeholder="选择一个类型"
+                style="min-width:130px"
+              />
+              <admin-select
+                v-if="pickSkillChargeMatch === 'SPECIFIC'"
+                v-model="pickSkillChargeSkillId"
+                :options="activeSkillSelectOptions"
+                placeholder="选择一个技能"
+                clearable
+                searchable
+                style="min-width:180px"
+              />
+            </template>
+            <admin-select v-model="pickChargeGroupId" :options="chargeGroupSelectOptions" placeholder="从快捷充能组添加…" clearable searchable style="min-width:180px" />
+            <button type="button" class="btn-mini secondary" :disabled="!pickChargeGroupId" @click="addChargeFromGroup">添加</button>
+          </div>
+          <div v-for="(c, idx) in draftCharges" :key="'dc-' + idx" class="skill-draft-row skill-charge-draft-row" :class="{ 'skill-charge-draft-skill': c.conditionType === 'SKILL_CHARGE' }">
+            <div class="field field-name"><label>名称</label><input v-model.trim="c.name" placeholder="充能条件名"></div>
+            <div class="field field-type-tag"><label>类型</label>
+              <span class="skill-charge-type-tag">{{ chargeConditionTypeLabel(c.conditionType) }}</span>
+            </div>
+            <template v-if="c.conditionType === 'ACTION_VALUE'">
+              <div class="field field-slim"><label>每经过行动值 x</label><input v-model.number="c.everyActionValue" type="number" min="1" placeholder="x"></div>
+              <div class="field field-charge-gain"><label>增加充能 y</label><input v-model.number="c.chargeGain" type="number" min="0" placeholder="y"></div>
+            </template>
+            <template v-else-if="c.conditionType === 'SKILL_CHARGE'">
+              <div class="field field-charge-event"><label>事件</label>
+                <admin-select v-model="c.skillChargeEvent" :options="skillChargeEventOptions" />
+              </div>
+              <div class="field field-charge-select"><label>范围</label>
+                <admin-select v-model="c.skillChargeMatch" :options="skillChargeMatchOptions" @change="onDraftSkillChargeMatchChange(c)" />
+              </div>
+              <div class="field field-charge-select" v-if="c.skillChargeMatch === 'ANY_TYPE'"><label>类型</label>
+                <admin-select v-model="c.matchSkillType" :options="skillTypeOptions" placeholder="选择一个类型" />
+              </div>
+              <div class="field field-charge-select field-charge-skill" v-if="c.skillChargeMatch === 'SPECIFIC'"><label>技能</label>
+                <admin-select v-model="c.matchSkillId" :options="activeSkillSelectOptions" placeholder="选择一个技能" clearable searchable />
+              </div>
+              <div class="field field-charge-gain"><label>增加充能</label><input v-model.number="c.chargeGain" type="number" min="0" placeholder="y"></div>
+            </template>
+            <button type="button" class="btn-mini danger skill-draft-remove" @click="removeDraftCharge(idx)">移除</button>
+          </div>
+          <p v-if="!draftCharges.length" class="muted" style="margin:0;font-size:12px">暂无充能条件</p>
+          <p class="muted" style="margin:8px 0 0;font-size:12px">行动值：全局每经过 x 行动值 +y 充能。技能充能：释放/受到 任意、某类型或指定技能时 +y 充能。</p>
+        </div>
+
+        <div class="skill-form-section">
+          <h4>释放与效果</h4>
+          <div class="form-grid" style="margin-bottom:12px">
+            <div class="field full">
+              <label>本技能最大释放次数</label>
+              <div class="choice-pills">
+                <button
+                  type="button"
+                  class="choice-pill"
+                  :class="{ active: skillForm.maxCastSkillMode === 'UNLIMITED' }"
+                  @click="setMaxCastSkillMode('UNLIMITED')"
+                >无限</button>
+                <button
+                  type="button"
+                  class="choice-pill"
+                  :class="{ active: skillForm.maxCastSkillMode === 'MANUAL' }"
+                  @click="setMaxCastSkillMode('MANUAL')"
+                >手动输入</button>
+              </div>
+              <input
+                v-if="skillForm.maxCastSkillMode === 'MANUAL'"
+                class="choice-pill-input"
+                v-model.number="skillForm.maxCastSkill"
+                type="number"
+                min="1"
+                placeholder="输入最大释放次数"
+              >
+              <p v-else class="muted" style="margin:8px 0 0;font-size:12px">本技能释放次数不限制</p>
+            </div>
+          </div>
+          <div class="skill-inline-actions">
+            <button type="button" class="btn-mini" @click="addDraftEffect">添加技能效果</button>
+            <admin-select v-model="pickEffectGroupId" :options="effectGroupSelectOptions" placeholder="从快捷效果组添加…" clearable searchable style="min-width:180px" />
+            <button type="button" class="btn-mini secondary" :disabled="!pickEffectGroupId" @click="addEffectFromGroup">添加</button>
+          </div>
+          <div v-for="(e, idx) in draftEffects" :key="'de-' + idx" class="skill-effect-card">
+            <div class="skill-effect-card-head">
+              <strong>效果 #{{ idx + 1 }}</strong>
+            </div>
+            <div class="skill-effect-target-row">
+              <div class="field field-effect-target">
+                <label>选择目标</label>
+                <admin-select v-model="e.targetType" :options="effectTargetOptions" />
+              </div>
+              <button type="button" class="btn-mini danger skill-effect-remove" @click="removeDraftEffect(idx)">移除</button>
+            </div>
+            <div class="form-grid skill-effect-meta-grid">
+              <div class="field field-effect-name"><label>名称</label><input v-model.trim="e.name" placeholder="效果名"></div>
+              <div class="field field-effect-type">
+                <label>触发效果</label>
+                <admin-select v-model="e.effectType" :options="effectTypeOptions" />
+              </div>
+              <div class="field field-effect-attr" v-if="e.effectType === 'ATTR_MODIFY'">
+                <label>属性</label>
+                <admin-select v-model="e.attrKey" :options="attrModifyKeyOptions" />
+              </div>
+              <div class="field field-effect-attr-dir" v-if="e.effectType === 'ATTR_MODIFY'">
+                <label>增减</label>
+                <admin-select v-model="e.attrDir" :options="attrModifyDirOptions" />
+              </div>
+              <div class="field field-effect-seg" v-if="e.effectType === 'DAMAGE' || e.effectType === 'HEAL' || e.effectType === 'ATTR_MODIFY'">
+                <label>触发段数</label>
+                <input v-model.number="e.hitSegments" type="number" min="1" placeholder="1">
+              </div>
+              <div class="field field-effect-sort"><label>排序</label><input v-model.number="e.sort" type="number"></div>
+              <div class="field field-effect-remark"><label>备注</label><input v-model.trim="e.remark" placeholder="备注"></div>
+            </div>
+            <template v-if="e.effectType === 'DAMAGE' || e.effectType === 'HEAL' || e.effectType === 'ATTR_MODIFY'">
+              <p class="muted" style="margin:10px 0 8px;font-size:12px">
+                <template v-if="e.effectType === 'DAMAGE'">伤害公式（读取可选「自己 / 每个目标」）</template>
+                <template v-else-if="e.effectType === 'HEAL'">治疗公式（读取可选「自己 / 每个目标」）</template>
+                <template v-else>属性修改量公式（例：每个目标·防御 × 0.05 = 减少其防御的 5%；攻击/防御最低 0）</template>
+              </p>
+              <div class="formula-palette">
+                <button type="button" class="formula-palette-btn" @click="openFormulaParamPicker('draft', idx)">参数</button>
+                <button type="button" class="formula-palette-btn" @click="addFormulaOpTo(e.formulaTokens, '+')">+</button>
+                <button type="button" class="formula-palette-btn" @click="addFormulaOpTo(e.formulaTokens, '-')">−</button>
+                <button type="button" class="formula-palette-btn" @click="addFormulaOpTo(e.formulaTokens, '*')">×</button>
+                <button type="button" class="formula-palette-btn" @click="addFormulaOpTo(e.formulaTokens, '/')">÷</button>
+                <button type="button" class="formula-palette-btn" @click="addFormulaOpTo(e.formulaTokens, '(')">(</button>
+                <button type="button" class="formula-palette-btn" @click="addFormulaOpTo(e.formulaTokens, ')')">)</button>
+              </div>
+              <div class="formula-canvas" @dragover.prevent @drop.prevent="onListFormulaCanvasDrop(e)">
+                <div v-if="!e.formulaTokens.length" class="formula-empty">点击上方添加；拖拽可调整顺序</div>
+                <div
+                  v-for="(tok, tIdx) in e.formulaTokens"
+                  :key="tok.uid"
+                  class="formula-token"
+                  :class="tok.kind === 'OP' ? 'is-op' : (tok.paramMode === 'READ' ? 'is-read' : 'is-literal')"
+                  draggable="true"
+                  @dragstart="onListFormulaDragStart($event, e, tIdx)"
+                  @dragover.prevent
+                  @drop.prevent="onListFormulaDrop($event, e, tIdx)"
+                  @dragend="onListFormulaDragEnd(e)"
+                >
+                  <button type="button" class="formula-token-remove" title="移除" @click.stop="e.formulaTokens.splice(tIdx, 1)">×</button>
+                  <template v-if="tok.kind === 'OP'">
+                    <span class="formula-token-op">{{ formulaOpLabel(tok.op) }}</span>
+                  </template>
+                  <template v-else-if="tok.paramMode === 'LITERAL'">
+                    <span class="formula-token-tag">手动</span>
+                    <input class="formula-token-input" v-model.trim="tok.value" type="text" placeholder="数值" @mousedown.stop>
+                  </template>
+                  <template v-else>
+                    <span class="formula-token-tag">读取</span>
+                    <label class="formula-token-field">
+                      <span>角色</span>
+                      <select class="formula-token-native" v-model="tok.readRole" @mousedown.stop @click.stop>
+                        <option v-for="opt in formulaReadRoleOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                      </select>
+                    </label>
+                    <label class="formula-token-field">
+                      <span>属性</span>
+                      <select class="formula-token-native" v-model="tok.readKey" @mousedown.stop @click.stop>
+                        <option v-for="opt in formulaReadOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                      </select>
+                    </label>
+                  </template>
+                </div>
+              </div>
+            </template>
+          </div>
+          <p v-if="!draftEffects.length" class="muted" style="margin:0;font-size:12px">暂无技能效果</p>
+          <p class="muted" style="margin:8px 0 0;font-size:12px">前排/后排/首目标/敌方全部/己方全部见目标约定；多目标时「每个目标」按目标分别取值</p>
+        </div>
+      </div>
+      <div class="drawer-footer">
+        <button type="button" class="btn-mini secondary" @click="closeSkillDrawer">取消</button>
+        <button
+          v-if="skillBindWeaponItemId && skillForm.id"
+          type="button"
+          class="btn-mini danger"
+          :disabled="skillSaving"
+          @click="unbindWeaponNormalSkill"
+        >清空绑定</button>
+        <button type="button" class="btn-primary" :disabled="skillSaving" @click="saveActiveSkill">{{ skillSaving ? '保存中...' : '保存' }}</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 公式参数选择 -->
+  <div v-if="formulaParamPickerShow" class="admin-drawer-mask" style="z-index:1200" @click.self="formulaParamPickerShow = false">
+    <div class="admin-drawer member-grant-drawer">
+      <div class="drawer-header">
+        <h3>添加参数</h3>
+        <button type="button" class="drawer-close" @click="formulaParamPickerShow = false">×</button>
+      </div>
+      <div class="drawer-body">
+        <div class="form-grid" style="grid-template-columns:1fr">
+          <div class="field">
+            <label>方式</label>
+            <admin-select v-model="formulaParamDraft.paramMode" :options="formulaParamModeOptions" />
+          </div>
+          <div class="field" v-if="formulaParamDraft.paramMode === 'LITERAL'">
+            <label>数值</label>
+            <input v-model.trim="formulaParamDraft.value" type="text" placeholder="如 1.5">
+          </div>
+          <template v-else>
+            <div class="field" v-if="formulaParamNeedRole">
+              <label>读取角色</label>
+              <admin-select v-model="formulaParamDraft.readRole" :options="formulaReadRoleOptions" />
+            </div>
+            <div class="field">
+              <label>读取属性</label>
+              <admin-select v-model="formulaParamDraft.readKey" :options="formulaReadOptions" />
+            </div>
+          </template>
+        </div>
+      </div>
+      <div class="drawer-footer">
+        <button type="button" class="btn-mini secondary" @click="formulaParamPickerShow = false">取消</button>
+        <button type="button" class="btn-primary" @click="confirmFormulaParam">添加到公式</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 快捷充能组抽屉 -->
+  <div v-if="chargeGroupDrawerShow" class="admin-drawer-mask" @click.self="chargeGroupDrawerShow = false">
+    <div class="admin-drawer">
+      <div class="drawer-header">
+        <h3>{{ chargeGroupForm.id ? '编辑充能组' : '新增充能组' }}</h3>
+        <button type="button" class="drawer-close" @click="chargeGroupDrawerShow = false">×</button>
+      </div>
+      <div class="drawer-body">
+        <div class="form-grid">
+          <div class="field"><label>名称</label><input v-model.trim="chargeGroupForm.name" placeholder="充能组名称"></div>
+          <div class="field"><label>排序</label><input v-model.number="chargeGroupForm.sort" type="number"></div>
+          <div class="field full"><label>备注</label><input v-model.trim="chargeGroupForm.remark" placeholder="备注"></div>
+          <div class="field full"><label>扩展</label><textarea v-model.trim="chargeGroupForm.more" rows="3" placeholder="细节后续补充"></textarea></div>
+        </div>
+        <p class="muted" style="margin:10px 0 0;font-size:12px">细节后续补充</p>
+      </div>
+      <div class="drawer-footer">
+        <button type="button" class="btn-mini secondary" @click="chargeGroupDrawerShow = false">取消</button>
+        <button type="button" class="btn-primary" :disabled="chargeGroupSaving" @click="saveChargeGroup">{{ chargeGroupSaving ? '保存中...' : '保存' }}</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 快捷效果组抽屉 -->
+  <div v-if="effectGroupDrawerShow" class="admin-drawer-mask" @click.self="effectGroupDrawerShow = false">
+    <div class="admin-drawer wide">
+      <div class="drawer-header">
+        <h3>{{ effectGroupForm.id ? '编辑效果组' : '新增效果组' }}</h3>
+        <button type="button" class="drawer-close" @click="effectGroupDrawerShow = false">×</button>
+      </div>
+      <div class="drawer-body">
+        <div class="form-grid">
+          <div class="field"><label>名称</label><input v-model.trim="effectGroupForm.name" placeholder="效果组名称"></div>
+          <div class="field"><label>排序</label><input v-model.number="effectGroupForm.sort" type="number"></div>
+          <div class="field full"><label>备注</label><input v-model.trim="effectGroupForm.remark" placeholder="备注"></div>
+        </div>
+
+        <div class="skill-form-section">
+          <h4>1. 选择目标</h4>
+          <div class="skill-effect-target-row" style="max-width:280px;margin-bottom:0">
+            <div class="field field-effect-target">
+              <label>目标</label>
+              <admin-select v-model="effectGroupForm.targetType" :options="effectTargetOptions" />
+            </div>
+          </div>
+          <p class="muted" style="margin:8px 0 0;font-size:12px">
+            布阵 6×5。怪物：最下前排、最上后排。己方：最上前排、最下后排。
+            首目标：从前排起从左到右找可用单位，本排没有则下一排继续。支持「敌方全部 / 己方全部」。
+          </p>
+        </div>
+
+        <div class="skill-form-section">
+          <h4>2. 选择触发效果</h4>
+          <div class="form-grid">
+            <div class="field">
+              <label>效果类型</label>
+              <admin-select v-model="effectGroupForm.effectType" :options="effectTypeOptions" />
+            </div>
+            <div class="field" v-if="effectGroupForm.effectType === 'ATTR_MODIFY'">
+              <label>属性</label>
+              <admin-select v-model="effectGroupForm.attrKey" :options="attrModifyKeyOptions" />
+            </div>
+            <div class="field" v-if="effectGroupForm.effectType === 'ATTR_MODIFY'">
+              <label>增减</label>
+              <admin-select v-model="effectGroupForm.attrDir" :options="attrModifyDirOptions" />
+            </div>
+            <div class="field" v-if="effectGroupForm.effectType === 'DAMAGE' || effectGroupForm.effectType === 'HEAL' || effectGroupForm.effectType === 'ATTR_MODIFY'">
+              <label>本公式触发段数</label>
+              <input v-model.number="effectGroupForm.hitSegments" type="number" min="1" placeholder="1">
+            </div>
+          </div>
+
+          <template v-if="effectGroupForm.effectType === 'DAMAGE' || effectGroupForm.effectType === 'HEAL' || effectGroupForm.effectType === 'ATTR_MODIFY'">
+            <p class="muted" style="margin:12px 0 8px;font-size:12px">
+              <template v-if="effectGroupForm.effectType === 'DAMAGE'">
+                伤害公式：例「每个目标·最大生命 × 0.15」= 对每个目标造成其生命上限 15%；
+                「自己·攻击 × 1.2」= 自己攻击 120%。段数=2 则结算两次。
+              </template>
+              <template v-else-if="effectGroupForm.effectType === 'HEAL'">
+                治疗公式：例「自己·攻击 × 0.5」。段数=2 则结算两次。
+              </template>
+              <template v-else>
+                属性修改量公式：例「每个目标·防御 × 0.05」+ 防御/减少 = 目标防御减少 5%（防御最低 0）。
+              </template>
+            </p>
+            <div class="formula-palette">
+              <button type="button" class="formula-palette-btn" @click="openFormulaParamPicker('effectGroup')">参数</button>
+              <button type="button" class="formula-palette-btn" @click="addFormulaOpTo(effectGroupFormulaTokens, '+')">+</button>
+              <button type="button" class="formula-palette-btn" @click="addFormulaOpTo(effectGroupFormulaTokens, '-')">−</button>
+              <button type="button" class="formula-palette-btn" @click="addFormulaOpTo(effectGroupFormulaTokens, '*')">×</button>
+              <button type="button" class="formula-palette-btn" @click="addFormulaOpTo(effectGroupFormulaTokens, '/')">÷</button>
+              <button type="button" class="formula-palette-btn" @click="addFormulaOpTo(effectGroupFormulaTokens, '(')">(</button>
+              <button type="button" class="formula-palette-btn" @click="addFormulaOpTo(effectGroupFormulaTokens, ')')">)</button>
+            </div>
+            <div
+              class="formula-canvas"
+              @dragover.prevent
+              @drop.prevent="effectGroupDragFrom = -1"
+            >
+              <div v-if="!effectGroupFormulaTokens.length" class="formula-empty">点击上方 7 项添加；拖拽可调整顺序</div>
+              <div
+                v-for="(tok, idx) in effectGroupFormulaTokens"
+                :key="tok.uid"
+                class="formula-token"
+                :class="tok.kind === 'OP' ? 'is-op' : (tok.paramMode === 'READ' ? 'is-read' : 'is-literal')"
+                draggable="true"
+                @dragstart="onEffectGroupFormulaDragStart($event, idx)"
+                @dragover.prevent
+                @drop.prevent="onEffectGroupFormulaDrop($event, idx)"
+                @dragend="effectGroupDragFrom = -1"
+              >
+                <button type="button" class="formula-token-remove" title="移除" @click.stop="effectGroupFormulaTokens.splice(idx, 1)">×</button>
+                <template v-if="tok.kind === 'OP'">
+                  <span class="formula-token-op">{{ formulaOpLabel(tok.op) }}</span>
+                </template>
+                <template v-else-if="tok.paramMode === 'LITERAL'">
+                  <span class="formula-token-tag">手动</span>
+                  <input class="formula-token-input" v-model.trim="tok.value" type="text" placeholder="数值" @mousedown.stop>
+                </template>
+                <template v-else>
+                  <span class="formula-token-tag">读取</span>
+                  <label class="formula-token-field">
+                    <span>角色</span>
+                    <select class="formula-token-native" v-model="tok.readRole" @mousedown.stop @click.stop>
+                      <option v-for="opt in formulaReadRoleOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                    </select>
+                  </label>
+                  <label class="formula-token-field">
+                    <span>属性</span>
+                    <select class="formula-token-native" v-model="tok.readKey" @mousedown.stop @click.stop>
+                      <option v-for="opt in formulaReadOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                    </select>
+                  </label>
+                </template>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+      <div class="drawer-footer">
+        <button type="button" class="btn-mini secondary" @click="effectGroupDrawerShow = false">取消</button>
+        <button type="button" class="btn-primary" :disabled="effectGroupSaving" @click="saveEffectGroup">{{ effectGroupSaving ? '保存中...' : '保存' }}</button>
+      </div>
+    </div>
+  </div>
+
+  <div v-if="wmGhost.show" class="wm-finger-ghost" :style="{ left: wmGhost.x + 'px', top: wmGhost.y + 'px' }">{{ wmGhost.name }}</div>
+  <div v-if="toast.show" class="toast" :class="toast.type">{{ toast.text }}</div>
+</div>
+
+<script src="/js/config.js"></script>
+<script src="/js/admin-api.js?v=20260805"></script>
+<script src="/js/admin-select.js?v=20260805"></script>
+<script>
+const { createApp } = Vue;
+
+const COLS = 6;
+const ROWS = 5;
+
+const RARITY_META = {
+  NORMAL: { label: '普通', gridH: 1, gridW: 1, fixed: true },
+  RARE: { label: '稀有', gridH: 1, gridW: 2, fixed: true },
+  EPIC: { label: '史诗', gridH: 2, gridW: 2, fixed: true },
+  BOSS: { label: 'BOSS', gridH: 2, gridW: 4, fixed: true },
+  SPECIAL: { label: '特殊', gridH: 1, gridW: 1, fixed: false }
+};
+
+const ITEM_TYPE_LABELS = {
+  MATERIAL: '材料',
+  WEAPON: '武器',
+  ARMOR: '护甲',
+  GLOVES: '护手',
+  HELMET: '头盔',
+  ACCESSORY: '饰品',
+  LEGS: '护腿'
+};
+
+const SKILL_TYPE_LABELS = {
+  NORMAL: '普攻',
+  ULTIMATE: '大招',
+  SMALL: '小技能'
+};
+
+const FORMULA_READ_OPTIONS = [
+  { value: 'MAX_HP', label: '最大生命' },
+  { value: 'HP', label: '当前生命' },
+  { value: 'ATK', label: '攻击力' },
+  { value: 'DEF', label: '防御力' },
+  { value: 'ACTION', label: '行动值' },
+  { value: 'ELAPSED_ACTION', label: '已经过行动值' }
+];
+
+const FORMULA_READ_ROLE_OPTIONS = [
+  { value: 'SELF', label: '自己' },
+  { value: 'EACH_TARGET', label: '每个目标' }
+];
+
+const EFFECT_TARGET_OPTIONS = [
+  { value: 'SELF', label: '自己' },
+  { value: 'FIRST', label: '首目标' },
+  { value: 'FRONT_ROW', label: '前排' },
+  { value: 'BACK_ROW', label: '后排' },
+  { value: 'RANDOM_ENEMY', label: '随机一个敌方' },
+  { value: 'ENEMY_MAX_HP', label: '生命值最高敌方' },
+  { value: 'ENEMY_MIN_HP', label: '生命值最低敌方' },
+  { value: 'ALLY_MIN_HP', label: '生命值最低己方' },
+  { value: 'ALL_ENEMY', label: '敌方全部' },
+  { value: 'ALL_ALLY', label: '己方全部' }
+];
+
+const EFFECT_TYPE_OPTIONS = [
+  { value: 'DAMAGE', label: '伤害' },
+  { value: 'HEAL', label: '治疗' },
+  { value: 'ATTR_MODIFY', label: '属性修改' }
+];
+
+const ATTR_MODIFY_KEY_OPTIONS = [
+  { value: 'ATK', label: '攻击' },
+  { value: 'MAX_HP', label: '最大生命' },
+  { value: 'DEF', label: '防御' }
+];
+
+const ATTR_MODIFY_DIR_OPTIONS = [
+  { value: 'INCREASE', label: '增加' },
+  { value: 'DECREASE', label: '减少' }
+];
+
+var _formulaUid = 1;
+function nextFormulaUid() {
+  _formulaUid += 1;
+  return 'ft_' + _formulaUid + '_' + Date.now();
+}
+
+function parseFormulaTokens(raw) {
+  if (!raw) return [];
+  try {
+    var arr = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    if (!Array.isArray(arr)) return [];
+    return arr.map(function (t) {
+      var tok = Object.assign({ uid: nextFormulaUid() }, t);
+      if (tok.kind !== 'OP' && tok.paramMode === 'READ' && !tok.readRole) {
+        tok.readRole = 'SELF';
+      }
+      return tok;
+    });
+  } catch (e) {
+    return [];
+  }
+}
+
+function serializeFormulaTokens(tokens) {
+  return JSON.stringify((tokens || []).map(function (t) {
+    if (t.kind === 'OP') {
+      return { kind: 'OP', op: t.op };
+    }
+    if (t.paramMode === 'READ') {
+      var o = { kind: 'PARAM', paramMode: 'READ', readKey: t.readKey || 'ATK' };
+      if (t.readRole) o.readRole = t.readRole;
+      return o;
+    }
+    return { kind: 'PARAM', paramMode: 'LITERAL', value: t.value != null ? String(t.value) : '0' };
+  }));
+}
+
+function labelOf(options, value) {
+  var hit = (options || []).find(function (o) { return o.value === value; });
+  return hit ? hit.label : (value || '—');
+}
+
+const EQUIP_MENUS = [
+  { tab: 'eqWeapon', type: 'WEAPON', label: '武器管理', shortLabel: '武器', showHpDef: false },
+  { tab: 'eqArmor', type: 'ARMOR', label: '护甲管理', shortLabel: '护甲', showHpDef: true },
+  { tab: 'eqGloves', type: 'GLOVES', label: '护手管理', shortLabel: '护手', showHpDef: true },
+  { tab: 'eqHelmet', type: 'HELMET', label: '头盔管理', shortLabel: '头盔', showHpDef: true },
+  { tab: 'eqAccessory', type: 'ACCESSORY', label: '饰品管理', shortLabel: '饰品', showHpDef: false },
+  { tab: 'eqLegs', type: 'LEGS', label: '护腿管理', shortLabel: '护腿', showHpDef: true }
+];
+
+function emptyRole() {
+  return {
+    id: null, name: '', sort: 0,
+    baseAtk: 0, baseHp: 0, baseDef: 0,
+    baseAtkSpeed: 1, baseAction: 100,
+    extraHp: 0, extraAtk: 0, extraDef: 0,
+    dealDmgRatio: 100, takenDmgRatio: 100, lifeStealRatio: 0,
+    atkSpeedUpRatio: 0, atkSpeedDownRatio: 0,
+    defaultOwn: false, mainRole: false, remark: ''
+  };
+}
+
+function emptyMonster() {
+  return {
+    id: null, name: '', rarity: 'NORMAL',
+    gridH: 1, gridW: 1,
+    baseAtk: 0, baseHp: 0, baseDef: 0, baseAction: 0,
+    sort: 0, remark: ''
+  };
+}
+
+function emptyType() {
+  return { id: null, name: '', code: '', sort: 0, enable: true, remark: '' };
+}
+
+function emptyChapter() {
+  return { id: null, typeId: '', name: '', code: '', sort: 0, enable: true, remark: '' };
+}
+
+function emptyLevel() {
+  return { id: null, chapterId: '', name: '', code: '', sort: 0, enable: true, remark: '' };
+}
+
+function emptyPlayerRole() {
+  return {
+    id: null, uid: '', baseStatId: '', name: '',
+    baseAtk: 0, baseHp: 0, baseDef: 0,
+    baseAtkSpeed: 1, baseAction: 100,
+    extraHp: 0, extraAtk: 0, extraDef: 0,
+    dealDmgRatio: 100, takenDmgRatio: 100, lifeStealRatio: 0,
+    atkSpeedUpRatio: 0, atkSpeedDownRatio: 0,
+    mainRole: false, gridH: 1, gridW: 1
+  };
+}
+
+function emptyItem() {
+  return {
+    id: null, code: '', name: '', icon: '',
+    itemType: 'MATERIAL', maxStack: 1, weight: 0,
+    sort: 0, enable: true, remark: '',
+    chargeSkillSlotCount: 0,
+    playerCanEditSkillSlot: false
+  };
+}
+
+function emptyExt() {
+  return {
+    id: null, itemId: '',
+    grade: 1, remark: '',
+    baseAtk: 0,
+    atkSpeedUpRatio: 0,
+    atkSpeedDownRatio: 0,
+    normalSkillId: '',
+    hp: 0, defense: 0
+  };
+}
+
+function emptyRecipeMaterialRow() {
+  return { id: null, itemId: '', quantity: 1, sort: 0 };
+}
+
+function emptyRecipe() {
+  return {
+    id: null, name: '', outputItemId: '', outputQty: 1,
+    sort: 0, enable: true, remark: '',
+    materials: [emptyRecipeMaterialRow()]
+  };
+}
+
+function emptyDrop() {
+  return {
+    id: null, monsterId: '', itemId: '',
+    dropRate: 1, minQty: 1, maxQty: 1,
+    sort: 0, enable: true, remark: ''
+  };
+}
+
+function emptyActiveSkill() {
+  return {
+    id: null, name: '', code: '', skillType: 'NORMAL',
+    needChargeMode: 'MANUAL', needCharge: 0,
+    maxCastSkillMode: 'UNLIMITED',
+    maxCastSkill: 0, maxCastGlobal: 0, maxCastAllMeans: 0, maxCastRole: 0,
+    sort: 0, enable: true, remark: '', more: ''
+  };
+}
+
+function emptyDraftCharge() {
+  return {
+    name: '',
+    conditionType: 'ACTION_VALUE',
+    scope: 'GLOBAL',
+    everyActionValue: 1,
+    chargeGain: 1,
+    skillChargeEvent: 'CAST',
+    skillChargeMatch: 'ANY',
+    matchSkillType: '',
+    matchSkillId: '',
+    sort: 0,
+    remark: '',
+    more: '',
+    groupId: ''
+  };
+}
+
+function emptyDraftEffect() {
+  return {
+    name: '',
+    targetType: 'FIRST',
+    effectType: 'DAMAGE',
+    attrKey: 'ATK',
+    attrDir: 'INCREASE',
+    formulaJson: '[]',
+    formulaTokens: [],
+    hitSegments: 1,
+    sort: 0,
+    remark: '',
+    more: '',
+    groupId: '',
+    _dragFrom: -1
+  };
+}
+
+function emptySkillChargeGroup() {
+  return { id: null, name: '', sort: 0, enable: true, remark: '', more: '' };
+}
+
+function emptySkillEffectGroup() {
+  return {
+    id: null,
+    name: '',
+    targetType: 'FIRST',
+    effectType: 'DAMAGE',
+    attrKey: 'ATK',
+    attrDir: 'INCREASE',
+    formulaJson: '[]',
+    hitSegments: 1,
+    sort: 0,
+    enable: true,
+    remark: '',
+    more: ''
+  };
+}
+
+createApp({
+  components: { AdminSelect: window.AdminSelectComponent },
+  data() {
+    return {
+      COLS, ROWS,
+      loggedIn: !!AdminApi.getAdminToken(),
+      authMode: 'login',
+      loading: false,
+      sendingCode: false,
+      countdown: 0,
+      timer: null,
+      authForm: { email: '', password: '', emsCode: '', psdAgain: '' },
+      toast: { show: false, text: '', type: 'error' },
+
+      tab: 'member',
+      roleMenuOpen: true,
+      itemMenuOpen: true,
+      equipMenuOpen: true,
+      skillMenuOpen: true,
+      equipMenus: EQUIP_MENUS,
+      tabTitles: {
+        member: '玩家列表',
+        roleTemplate: '角色模板',
+        playerRole: '玩家角色管理',
+        monster: '怪物角色管理',
+        stage: '关卡管理',
+        item: '物品总表',
+        recipe: '配方管理',
+        drop: '怪物掉落',
+        eqWeapon: '武器管理',
+        eqArmor: '护甲管理',
+        eqGloves: '护手管理',
+        eqHelmet: '头盔管理',
+        eqAccessory: '饰品管理',
+        eqLegs: '护腿管理',
+        activeSkill: '完整充能技能管理',
+        skillChargeGroup: '快捷充能组',
+        skillEffectGroup: '快捷效果组'
+      },
+
+      members: [],
+      memberLoading: false,
+
+      roleList: [],
+      roleDrawerShow: false,
+      roleForm: emptyRole(),
+      roleSaving: false,
+
+      playerRoleUid: '',
+      playerRoles: [],
+      playerRoleLoading: false,
+      giftDrawerShow: false,
+      giftForm: { uid: '', name: '', itemId: '', quantity: 1 },
+      giftSaving: false,
+      grantDrawerShow: false,
+      grantForm: { uid: '', baseStatId: '' },
+      grantSaving: false,
+      playerRoleDrawerShow: false,
+      playerRoleForm: emptyPlayerRole(),
+      playerRoleSaving: false,
+
+      monsters: [],
+      monsterLoading: false,
+      monsterDrawerShow: false,
+      monsterForm: emptyMonster(),
+      monsterSaving: false,
+      rarityOptions: Object.keys(RARITY_META).map((k) => ({
+        value: k,
+        label: RARITY_META[k].label,
+        gridH: RARITY_META[k].gridH,
+        gridW: RARITY_META[k].gridW
+      })),
+
+      stageTree: [],
+      selectedTypeId: '',
+      selectedChapterId: '',
+      selectedLevelId: '',
+      levelMonsters: [],
+      addMonsterId: '',
+      wmActing: false,
+      wmDrag: null,
+      wmHover: null,
+      wmGhost: { show: false, x: 0, y: 0, name: '' },
+
+      typeDrawerShow: false,
+      typeForm: emptyType(),
+      chapterDrawerShow: false,
+      chapterForm: emptyChapter(),
+      levelDrawerShow: false,
+      levelForm: emptyLevel(),
+      stageSaving: false,
+
+      items: [],
+      itemLoading: false,
+      itemTypeFilter: '',
+      itemTypeOptions: Object.keys(ITEM_TYPE_LABELS).map((k) => ({ value: k, label: ITEM_TYPE_LABELS[k] })),
+      itemDrawerShow: false,
+      itemForm: emptyItem(),
+      itemExtForm: emptyExt(),
+      itemAtkSpeedDir: 'UP',
+      atkSpeedDirOptions: [
+        { value: 'UP', label: '增加' },
+        { value: 'DOWN', label: '减少' }
+      ],
+      itemSaving: false,
+      itemTypeLocked: false,
+      itemFromEquip: false,
+
+      equipRows: [],
+      equipLoading: false,
+
+      defaultSkillDrawerShow: false,
+      defaultSkillSaving: false,
+      defaultSkillItemId: '',
+      defaultSkillItemName: '',
+      defaultSkillSlots: [],
+      chargeSkillOptions: [],
+      normalSkillOptions: [],
+
+      recipes: [],
+      recipeLoading: false,
+      recipeDrawerShow: false,
+      recipeForm: emptyRecipe(),
+      recipeSaving: false,
+      recipeOutputLocked: false,
+      recipeQuickItemLabel: '',
+
+      drops: [],
+      dropLoading: false,
+      dropMonsterFilter: '',
+      dropDrawerShow: false,
+      dropForm: emptyDrop(),
+      dropSaving: false,
+
+      activeSkills: [],
+      skillLoading: false,
+      skillTypeFilter: '',
+      skillTypeOptions: Object.keys(SKILL_TYPE_LABELS).map((k) => ({ value: k, label: SKILL_TYPE_LABELS[k] })),
+      skillDrawerShow: false,
+      skillForm: emptyActiveSkill(),
+      skillTypeLocked: false,
+      skillBindWeaponItemId: '',
+      skillBindWeaponExtId: '',
+      skillBindWeaponName: '',
+      skillSaving: false,
+      draftCharges: [],
+      draftEffects: [],
+      chargeGroups: [],
+      effectGroups: [],
+      chargeGroupLoading: false,
+      effectGroupLoading: false,
+      chargeGroupDrawerShow: false,
+      effectGroupDrawerShow: false,
+      chargeGroupForm: emptySkillChargeGroup(),
+      effectGroupForm: emptySkillEffectGroup(),
+      chargeGroupSaving: false,
+      effectGroupSaving: false,
+      pickChargeConditionType: 'ACTION_VALUE',
+      pickSkillChargeEvent: 'CAST',
+      pickSkillChargeMatch: 'ANY',
+      pickSkillChargeSkillType: 'NORMAL',
+      pickSkillChargeSkillId: '',
+      pickChargeGroupId: '',
+      pickEffectGroupId: '',
+
+      formulaParamPickerShow: false,
+      formulaParamDraft: { paramMode: 'LITERAL', value: '1', readKey: 'ATK', readRole: 'SELF' },
+      formulaParamCtx: 'effectGroup',
+      formulaParamDraftIdx: -1,
+      formulaReadOptions: FORMULA_READ_OPTIONS,
+      formulaReadRoleOptions: FORMULA_READ_ROLE_OPTIONS,
+      effectTargetOptions: EFFECT_TARGET_OPTIONS,
+      effectTypeOptions: EFFECT_TYPE_OPTIONS,
+      attrModifyKeyOptions: ATTR_MODIFY_KEY_OPTIONS,
+      attrModifyDirOptions: ATTR_MODIFY_DIR_OPTIONS,
+      effectGroupFormulaTokens: [],
+      effectGroupDragFrom: -1,
+      chargeConditionTypeOptions: [
+        { value: 'ACTION_VALUE', label: '充能条件-行动值' },
+        { value: 'SKILL_CHARGE', label: '充能条件-技能充能' }
+      ],
+      skillChargeEventOptions: [
+        { value: 'CAST', label: '释放' },
+        { value: 'RECEIVE', label: '受到' }
+      ],
+      skillChargeMatchOptions: [
+        { value: 'ANY', label: '任意' },
+        { value: 'ANY_TYPE', label: '任意类型' },
+        { value: 'SPECIFIC', label: '指定一个' }
+      ],
+      chargeScopeOptions: [{ value: 'GLOBAL', label: '全局' }],
+      formulaParamModeOptions: [
+        { value: 'LITERAL', label: '手动输入' },
+        { value: 'READ', label: '读取' }
+      ]
+    };
+  },
+  computed: {
+    formulaParamNeedRole() {
+      return this.formulaParamCtx === 'effectGroup' || this.formulaParamCtx === 'draft';
+    },
+    monsterSelectOptions() {
+      var self = this;
+      return (this.monsters || []).map(function (m) {
+        return {
+          value: m.id,
+          label: m.name + '（' + self.rarityLabel(m.rarity) + ' · ' + (m.gridH || 1) + '×' + (m.gridW || 1) + '）'
+        };
+      });
+    },
+    monsterNameSelectOptions() {
+      return (this.monsters || []).map(function (m) {
+        return { value: m.id, label: m.name };
+      });
+    },
+    itemSelectOptions() {
+      return (this.items || []).map(function (it) {
+        return { value: it.id, label: it.name + '（' + (it.code || it.id) + '）' };
+      });
+    },
+    chargeSkillSelectOptions() {
+      return (this.chargeSkillOptions || []).map(function (sk) {
+        var typeLabel = sk.skillType === 'ULTIMATE' ? '大招' : (sk.skillType === 'SMALL' ? '小技能' : sk.skillType);
+        return { value: sk.id, label: (sk.name || sk.id) + '（' + typeLabel + '）' };
+      });
+    },
+    normalSkillSelectOptions() {
+      return (this.normalSkillOptions || []).map(function (sk) {
+        return { value: sk.id, label: (sk.name || sk.id) + (sk.code ? '（' + sk.code + '）' : '') };
+      });
+    },
+    activeSkillSelectOptions() {
+      var self = this;
+      return (this.activeSkills || []).map(function (sk) {
+        return {
+          value: sk.id,
+          label: (sk.name || sk.id) + '（' + self.skillTypeLabel(sk.skillType) + (sk.code ? ' · ' + sk.code : '') + '）'
+        };
+      });
+    },
+    roleTemplateSelectOptions() {
+      return (this.roleList || []).map(function (r) {
+        return { value: r.id, label: r.name };
+      });
+    },
+    raritySelectOptions() {
+      return (this.rarityOptions || []).map(function (opt) {
+        var hint = opt.value === 'SPECIAL' ? '占地可编辑' : ((opt.gridH || 1) + '×' + (opt.gridW || 1));
+        return { value: opt.value, label: opt.label + '（' + hint + '）' };
+      });
+    },
+    chargeGroupSelectOptions() {
+      return (this.enabledChargeGroups || []).map(function (g) {
+        return { value: g.id, label: g.name };
+      });
+    },
+    effectGroupSelectOptions() {
+      return (this.enabledEffectGroups || []).map(function (g) {
+        return { value: g.id, label: g.name };
+      });
+    },
+    tabTitle() {
+      return this.tabTitles[this.tab] || '后台管理';
+    },
+    isRoleGroupTab() {
+      return this.tab === 'roleTemplate' || this.tab === 'playerRole' || this.tab === 'monster';
+    },
+    isItemGroupTab() {
+      return this.tab === 'item' || this.tab === 'recipe' || this.tab === 'drop';
+    },
+    isSkillGroupTab() {
+      return this.tab === 'activeSkill' || this.tab === 'skillChargeGroup' || this.tab === 'skillEffectGroup';
+    },
+    enabledChargeGroups() {
+      return this.chargeGroups || [];
+    },
+    enabledEffectGroups() {
+      return this.effectGroups || [];
+    },
+    isEquipGroupTab() {
+      return !!EQUIP_MENUS.find((e) => e.tab === this.tab);
+    },
+    currentEquip() {
+      return EQUIP_MENUS.find((e) => e.tab === this.tab) || null;
+    },
+    equipColspan() {
+      if (!this.currentEquip) return 6;
+      if (this.currentEquip.type === 'WEAPON') return 7;
+      if (this.currentEquip.showHpDef) return 7;
+      if (this.currentEquip.type === 'ACCESSORY') return 6;
+      return 6;
+    },
+    itemAtkSpeedValue: {
+      get() {
+        if (this.itemAtkSpeedDir === 'DOWN') {
+          return Number(this.itemExtForm && this.itemExtForm.atkSpeedDownRatio) || 0;
+        }
+        return Number(this.itemExtForm && this.itemExtForm.atkSpeedUpRatio) || 0;
+      },
+      set(v) {
+        var n = Math.max(0, Number(v) || 0);
+        if (!this.itemExtForm) return;
+        if (this.itemAtkSpeedDir === 'DOWN') {
+          this.itemExtForm.atkSpeedDownRatio = n;
+          this.itemExtForm.atkSpeedUpRatio = 0;
+        } else {
+          this.itemExtForm.atkSpeedUpRatio = n;
+          this.itemExtForm.atkSpeedDownRatio = 0;
+        }
+      }
+    },
+    itemDrawerTitle() {
+      if (this.itemFromEquip && this.currentEquip) {
+        return (this.itemForm.id ? '编辑' : '新增') + this.currentEquip.shortLabel;
+      }
+      return this.itemForm.id ? '编辑物品' : '新增物品';
+    },
+    recipeDrawerTitle() {
+      if (this.recipeOutputLocked) {
+        var name = this.recipeQuickItemLabel || '装备';
+        return (this.recipeForm.id ? '编辑配方 · ' : '添加配方 · ') + name;
+      }
+      return this.recipeForm.id ? '编辑配方' : '新增配方';
+    },
+    skillDrawerTitle() {
+      if (this.skillBindWeaponItemId) {
+        var wname = this.skillBindWeaponName || '武器';
+        return (this.skillForm.id ? '编辑普攻 · ' : '新建普攻 · ') + wname;
+      }
+      return this.skillForm.id ? '编辑技能' : '新增技能';
+    },
+    isSpecialRarity() {
+      return this.monsterForm.rarity === 'SPECIAL';
+    },
+    currentType() {
+      return this.stageTree.find((t) => t.id === this.selectedTypeId) || null;
+    },
+    drillChapters() {
+      return (this.currentType && this.currentType.chapters) || [];
+    },
+    currentChapter() {
+      return this.drillChapters.find((c) => c.id === this.selectedChapterId) || null;
+    },
+    drillLevels() {
+      return (this.currentChapter && this.currentChapter.levels) || [];
+    },
+    currentLevel() {
+      return this.drillLevels.find((l) => l.id === this.selectedLevelId) || null;
+    },
+    selectedTypeName() {
+      return (this.currentType && this.currentType.name) || '';
+    },
+    selectedChapterName() {
+      return (this.currentChapter && this.currentChapter.name) || '';
+    },
+    selectedLevelName() {
+      return (this.currentLevel && this.currentLevel.name) || '';
+    }
+  },
+  mounted() {
+    if (this.loggedIn) this.loadTabData(this.tab);
+  },
+  beforeUnmount() {
+    if (this.timer) clearInterval(this.timer);
+  },
+  methods: {
+    showToast(text, type) {
+      this.toast = { show: true, text: text || '', type: type || 'error' };
+      setTimeout(() => { this.toast.show = false; }, 2200);
+    },
+    rarityLabel(r) {
+      return (RARITY_META[r] && RARITY_META[r].label) || r || '普通';
+    },
+    switchTab(key) {
+      this.tab = key;
+      if (this.isRoleGroupTab) this.roleMenuOpen = true;
+      if (this.isItemGroupTab) this.itemMenuOpen = true;
+      if (this.isEquipGroupTab) this.equipMenuOpen = true;
+      if (this.isSkillGroupTab) this.skillMenuOpen = true;
+      this.loadTabData(key);
+    },
+    loadTabData(key) {
+      if (key === 'member') this.loadMembers();
+      if (key === 'roleTemplate') this.loadRoleList();
+      if (key === 'playerRole') {
+        this.loadRoleList();
+        this.loadPlayerRoles();
+      }
+      if (key === 'monster') this.loadMonsters();
+      if (key === 'stage') {
+        this.loadStageTree();
+        if (!this.monsters.length) this.loadMonsters();
+      }
+      if (key === 'item') this.loadItems();
+      if (key === 'recipe') {
+        this.loadItems();
+        this.loadRecipes();
+      }
+      if (key === 'drop') {
+        this.loadMonsters();
+        this.loadItems();
+        this.loadDrops();
+      }
+      if (key === 'activeSkill') {
+        this.loadActiveSkills();
+        this.loadChargeGroups();
+        this.loadEffectGroups();
+      }
+      if (key === 'skillChargeGroup') this.loadChargeGroups();
+      if (key === 'skillEffectGroup') this.loadEffectGroups();
+      if (EQUIP_MENUS.some((e) => e.tab === key)) this.loadEquipList();
+    },
+    itemTypeLabel(type) {
+      return ITEM_TYPE_LABELS[type] || type || '—';
+    },
+    skillTypeLabel(type) {
+      return SKILL_TYPE_LABELS[type] || type || '—';
+    },
+    itemName(id) {
+      if (!id) return '';
+      var it = this.items.find((x) => x.id === id);
+      return it ? it.name : '';
+    },
+    monsterName(id) {
+      if (!id) return '—';
+      var m = this.monsters.find((x) => x.id === id);
+      return m ? m.name : id;
+    },
+
+    /* ---------- 登录注册 ---------- */
+    validateEmail() {
+      if (!this.authForm.email) { this.showToast('请输入邮箱'); return false; }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.authForm.email)) {
+        this.showToast('邮箱格式不正确'); return false;
+      }
+      return true;
+    },
+    startCountdown() {
+      this.countdown = 60;
+      if (this.timer) clearInterval(this.timer);
+      this.timer = setInterval(() => {
+        this.countdown -= 1;
+        if (this.countdown <= 0) { clearInterval(this.timer); this.timer = null; }
+      }, 1000);
+    },
+    sendCode() {
+      if (!this.validateEmail() || this.countdown > 0) return;
+      this.sendingCode = true;
+      AdminApi.sendEmailCode(this.authForm.email)
+        .then(() => { this.showToast('验证码已发送', 'success'); this.startCountdown(); })
+        .catch((err) => this.showToast(err.message))
+        .finally(() => { this.sendingCode = false; });
+    },
+    submitAuth() {
+      if (!this.validateEmail()) return;
+      if (this.authMode === 'login') {
+        if (!this.authForm.password) { this.showToast('请输入密码'); return; }
+        this.loading = true;
+        AdminApi.login(this.authForm.email, this.authForm.password)
+          .then((res) => {
+            AdminApi.saveAdminToken(res.token);
+            this.loggedIn = true;
+            this.showToast('登录成功', 'success');
+            this.loadTabData(this.tab);
+          })
+          .catch((err) => this.showToast(err.message))
+          .finally(() => { this.loading = false; });
+        return;
+      }
+      if (!this.authForm.emsCode) { this.showToast('请输入验证码'); return; }
+      if (!this.authForm.password || this.authForm.password.length < 6) { this.showToast('密码至少6位'); return; }
+      if (this.authForm.password !== this.authForm.psdAgain) { this.showToast('两次密码不一致'); return; }
+      this.loading = true;
+      AdminApi.register(this.authForm.email, this.authForm.emsCode, this.authForm.password, this.authForm.psdAgain)
+        .then((res) => {
+          AdminApi.saveAdminToken(res.token);
+          this.loggedIn = true;
+          this.showToast('注册成功', 'success');
+          this.loadTabData(this.tab);
+        })
+        .catch((err) => this.showToast(err.message))
+        .finally(() => { this.loading = false; });
+    },
+    logout() {
+      AdminApi.clearAdminToken();
+      this.loggedIn = false;
+      this.authMode = 'login';
+      this.tab = 'member';
+      this.members = [];
+      this.roleList = [];
+      this.playerRoles = [];
+      this.monsters = [];
+      this.stageTree = [];
+      this.items = [];
+      this.recipes = [];
+      this.drops = [];
+      this.resetStagePick('root');
+    },
+
+    /* ---------- 玩家 ---------- */
+    loadMembers() {
+      this.memberLoading = true;
+      AdminApi.memberList({ memberRole: 'USER' })
+        .then((res) => { this.members = res.data || []; })
+        .catch((err) => this.showToast(err.message))
+        .finally(() => { this.memberLoading = false; });
+    },
+    openGiftDrawer(m) {
+      if (!m || !m.id) return;
+      this.giftForm = {
+        uid: m.id,
+        name: m.name || m.email || '',
+        itemId: '',
+        quantity: 1
+      };
+      this.giftDrawerShow = true;
+      if (!this.items.length) this.loadItems();
+    },
+    submitGift() {
+      if (!this.giftForm.uid) { this.showToast('玩家无效'); return; }
+      if (!this.giftForm.itemId) { this.showToast('请选择物品'); return; }
+      var qty = Number(this.giftForm.quantity);
+      if (!qty || qty < 1 || Math.floor(qty) !== qty) {
+        this.showToast('数量须为正整数');
+        return;
+      }
+      this.giftSaving = true;
+      AdminApi.memberGift(this.giftForm.uid, this.giftForm.itemId, qty)
+        .then(() => {
+          this.showToast('赠送成功（已入仓库）', 'success');
+          this.giftDrawerShow = false;
+        })
+        .catch((err) => this.showToast(err.message || '赠送失败'))
+        .finally(() => { this.giftSaving = false; });
+    },
+
+    /* ---------- 角色模板 ---------- */
+    loadRoleList() {
+      AdminApi.roleBaseStatList({})
+        .then((res) => { this.roleList = res.data || []; })
+        .catch((err) => this.showToast(err.message));
+    },
+    onRoleAtkSpeedInput(form) {
+      if (!form) return;
+      var speed = Number(form.baseAtkSpeed);
+      if (!(speed > 0)) {
+        form.baseAtkSpeed = 1;
+        form.baseAction = 100;
+        return;
+      }
+      form.baseAction = Math.max(1, Math.round(100 / speed));
+    },
+    normalizeRoleAtkSpeedForm(form) {
+      if (!form) return form;
+      var speed = Number(form.baseAtkSpeed);
+      if (speed > 0) {
+        form.baseAtkSpeed = speed;
+        form.baseAction = Math.max(1, Math.round(100 / speed));
+        return form;
+      }
+      var action = Number(form.baseAction);
+      if (action > 0) {
+        form.baseAtkSpeed = Number((100 / action).toFixed(4));
+        form.baseAction = action;
+        return form;
+      }
+      form.baseAtkSpeed = 1;
+      form.baseAction = 100;
+      return form;
+    },
+    openRoleDrawer(item) {
+      this.roleForm = this.normalizeRoleAtkSpeedForm(item ? Object.assign(emptyRole(), item) : emptyRole());
+      this.roleDrawerShow = true;
+    },
+    saveRoleTemplate() {
+      if (!this.roleForm.name) { this.showToast('请输入配置名称'); return; }
+      this.onRoleAtkSpeedInput(this.roleForm);
+      this.roleSaving = true;
+      AdminApi.roleBaseStatUpdate(this.roleForm)
+        .then(() => {
+          this.showToast('保存成功', 'success');
+          this.roleDrawerShow = false;
+          this.roleForm = emptyRole();
+          this.loadRoleList();
+        })
+        .catch((err) => this.showToast(err.message))
+        .finally(() => { this.roleSaving = false; });
+    },
+    removeRoleTemplate(item) {
+      if (!confirm('确认删除配置：' + (item.name || item.id) + '？')) return;
+      AdminApi.roleBaseStatRemove(item.id)
+        .then(() => {
+          this.showToast('已删除', 'success');
+          if (this.roleForm.id === item.id) {
+            this.roleDrawerShow = false;
+            this.roleForm = emptyRole();
+          }
+          this.loadRoleList();
+        })
+        .catch((err) => this.showToast(err.message));
+    },
+
+    /* ---------- 玩家角色 ---------- */
+    loadPlayerRoles() {
+      this.playerRoleLoading = true;
+      var body = {};
+      if (this.playerRoleUid) body.uid = this.playerRoleUid;
+      AdminApi.playerRoleList(body)
+        .then((res) => { this.playerRoles = res.data || []; })
+        .catch((err) => this.showToast(err.message))
+        .finally(() => { this.playerRoleLoading = false; });
+    },
+    openGrantDrawer() {
+      this.grantForm = { uid: this.playerRoleUid || '', baseStatId: '' };
+      this.grantDrawerShow = true;
+      if (!this.roleList.length) this.loadRoleList();
+    },
+    submitGrant() {
+      if (!this.grantForm.uid) { this.showToast('请输入玩家 UID'); return; }
+      if (!this.grantForm.baseStatId) { this.showToast('请选择角色模板'); return; }
+      this.grantSaving = true;
+      AdminApi.playerRoleGrant(this.grantForm.uid, this.grantForm.baseStatId)
+        .then(() => {
+          this.showToast('发放成功', 'success');
+          this.grantDrawerShow = false;
+          this.playerRoleUid = this.grantForm.uid;
+          this.loadPlayerRoles();
+        })
+        .catch((err) => this.showToast(err.message))
+        .finally(() => { this.grantSaving = false; });
+    },
+    openPlayerRoleEdit(pr) {
+      this.playerRoleForm = this.normalizeRoleAtkSpeedForm(Object.assign(emptyPlayerRole(), pr));
+      this.playerRoleDrawerShow = true;
+    },
+    savePlayerRole() {
+      if (!this.playerRoleForm.name) { this.showToast('请输入名称'); return; }
+      this.onRoleAtkSpeedInput(this.playerRoleForm);
+      this.playerRoleSaving = true;
+      AdminApi.playerRoleUpdate(this.playerRoleForm)
+        .then(() => {
+          this.showToast('保存成功', 'success');
+          this.playerRoleDrawerShow = false;
+          this.loadPlayerRoles();
+        })
+        .catch((err) => this.showToast(err.message))
+        .finally(() => { this.playerRoleSaving = false; });
+    },
+    removePlayerRole(pr) {
+      if (!confirm('确认删除玩家角色：' + (pr.name || pr.id) + '？')) return;
+      AdminApi.playerRoleRemove(pr.id)
+        .then(() => {
+          this.showToast('已删除', 'success');
+          this.loadPlayerRoles();
+        })
+        .catch((err) => this.showToast(err.message));
+    },
+
+    /* ---------- 怪物 ---------- */
+    loadMonsters() {
+      this.monsterLoading = true;
+      AdminApi.monsterList({})
+        .then((res) => { this.monsters = res.data || []; })
+        .catch((err) => this.showToast(err.message))
+        .finally(() => { this.monsterLoading = false; });
+    },
+    openMonsterDrawer(m) {
+      if (m) {
+        this.monsterForm = Object.assign(emptyMonster(), m);
+      } else {
+        this.monsterForm = emptyMonster();
+      }
+      this.onMonsterRarityChange();
+      this.monsterDrawerShow = true;
+    },
+    onMonsterRarityChange() {
+      var meta = RARITY_META[this.monsterForm.rarity] || RARITY_META.NORMAL;
+      if (meta.fixed) {
+        this.monsterForm.gridH = meta.gridH;
+        this.monsterForm.gridW = meta.gridW;
+      } else {
+        if (!this.monsterForm.gridH || this.monsterForm.gridH < 1) this.monsterForm.gridH = meta.gridH;
+        if (!this.monsterForm.gridW || this.monsterForm.gridW < 1) this.monsterForm.gridW = meta.gridW;
+      }
+    },
+    saveMonster() {
+      if (!this.monsterForm.name) { this.showToast('请输入怪物名称'); return; }
+      this.onMonsterRarityChange();
+      this.monsterSaving = true;
+      AdminApi.monsterUpdate(this.monsterForm)
+        .then(() => {
+          this.showToast('保存成功', 'success');
+          this.monsterDrawerShow = false;
+          this.loadMonsters();
+        })
+        .catch((err) => this.showToast(err.message))
+        .finally(() => { this.monsterSaving = false; });
+    },
+    removeMonster(m) {
+      if (!confirm('确认删除怪物：' + (m.name || m.id) + '？')) return;
+      AdminApi.monsterRemove(m.id)
+        .then(() => {
+          this.showToast('已删除', 'success');
+          this.loadMonsters();
+        })
+        .catch((err) => this.showToast(err.message));
+    },
+
+    /* ---------- 物品 ---------- */
+    loadItems() {
+      this.itemLoading = true;
+      var body = {};
+      if (this.itemTypeFilter) body.itemType = this.itemTypeFilter;
+      AdminApi.itemList(body)
+        .then((res) => { this.items = res.data || []; })
+        .catch((err) => this.showToast(err.message))
+        .finally(() => { this.itemLoading = false; });
+    },
+    openItemDrawer(item) {
+      this.itemTypeLocked = false;
+      this.itemFromEquip = false;
+      this.itemForm = emptyItem();
+      this.itemExtForm = emptyExt();
+      this.itemAtkSpeedDir = 'UP';
+      if (item) {
+        this.itemForm = Object.assign(emptyItem(), item);
+        var type = this.itemForm.itemType;
+        if (type && this.itemForm.id) {
+          AdminApi.itemExtList(type, { itemId: this.itemForm.id })
+            .then((res) => {
+              var list = res.data || [];
+              if (list.length) {
+                this.itemExtForm = Object.assign(emptyExt(), list[0]);
+                this.syncItemAtkSpeedDirFromExt();
+              }
+            })
+            .catch((err) => this.showToast(err.message));
+        }
+      }
+      this.itemDrawerShow = true;
+    },
+    syncItemAtkSpeedDirFromExt() {
+      var up = Number(this.itemExtForm && this.itemExtForm.atkSpeedUpRatio) || 0;
+      var down = Number(this.itemExtForm && this.itemExtForm.atkSpeedDownRatio) || 0;
+      this.itemAtkSpeedDir = (down > 0 && up <= 0) ? 'DOWN' : 'UP';
+      // 互斥：只保留当前方向一侧
+      if (this.itemAtkSpeedDir === 'DOWN') this.itemExtForm.atkSpeedUpRatio = 0;
+      else this.itemExtForm.atkSpeedDownRatio = 0;
+    },
+    onItemAtkSpeedDirChange() {
+      if (!this.itemExtForm) return;
+      var up = Number(this.itemExtForm.atkSpeedUpRatio) || 0;
+      var down = Number(this.itemExtForm.atkSpeedDownRatio) || 0;
+      var v = Math.max(up, down);
+      if (this.itemAtkSpeedDir === 'DOWN') {
+        this.itemExtForm.atkSpeedDownRatio = v;
+        this.itemExtForm.atkSpeedUpRatio = 0;
+      } else {
+        this.itemExtForm.atkSpeedUpRatio = v;
+        this.itemExtForm.atkSpeedDownRatio = 0;
+      }
+    },
+    formatAtkSpeedBonus(ext) {
+      if (!ext) return '—';
+      var up = Number(ext.atkSpeedUpRatio) || 0;
+      var down = Number(ext.atkSpeedDownRatio) || 0;
+      if (up > 0) return '增加 ' + up + '%';
+      if (down > 0) return '减少 ' + down + '%';
+      return '—';
+    },
+    reloadAfterItemSave() {
+      if (this.itemFromEquip || this.isEquipGroupTab) {
+        this.loadEquipList();
+      } else {
+        this.loadItems();
+      }
+    },
+    buildItemExtPayload(type, itemId) {
+      var src = this.itemExtForm || {};
+      var body = { id: src.id || null, itemId: itemId, remark: src.remark || '' };
+      if (type === 'MATERIAL') {
+        body.grade = src.grade != null ? src.grade : 1;
+        return body;
+      }
+      if (type === 'WEAPON') {
+        body.baseAtk = src.baseAtk != null ? src.baseAtk : 0;
+        // 普攻在列表「普攻」按钮里配置，这里保留已有绑定，避免编辑武器时被清空
+        body.normalSkillId = src.normalSkillId || null;
+        var wVal = Math.max(0, Number(this.itemAtkSpeedValue) || 0);
+        body.atkSpeedUpRatio = this.itemAtkSpeedDir === 'UP' ? wVal : 0;
+        body.atkSpeedDownRatio = this.itemAtkSpeedDir === 'DOWN' ? wVal : 0;
+      } else if (type === 'ARMOR' || type === 'GLOVES' || type === 'HELMET' || type === 'LEGS') {
+        body.hp = src.hp != null ? src.hp : 0;
+        body.defense = src.defense != null ? src.defense : 0;
+        // 护甲类不处理攻速
+        body.atkSpeedUpRatio = 0;
+        body.atkSpeedDownRatio = 0;
+      } else if (type === 'ACCESSORY') {
+        var aVal = Math.max(0, Number(this.itemAtkSpeedValue) || 0);
+        body.atkSpeedUpRatio = this.itemAtkSpeedDir === 'UP' ? aVal : 0;
+        body.atkSpeedDownRatio = this.itemAtkSpeedDir === 'DOWN' ? aVal : 0;
+      }
+      return body;
+    },
+    saveItem() {
+      if (!this.itemForm.name) { this.showToast('请输入物品名称'); return; }
+      if (!this.itemForm.itemType) { this.showToast('请选择物品类型'); return; }
+      var self = this;
+      this.itemSaving = true;
+      AdminApi.itemUpdate(this.itemForm)
+        .then(() => {
+          var itemId = self.itemForm.id;
+          var code = self.itemForm.code;
+          var type = self.itemForm.itemType;
+          var finish = function (resolvedId) {
+            if (!resolvedId || !type) {
+              self.showToast('保存成功', 'success');
+              self.itemDrawerShow = false;
+              self.reloadAfterItemSave();
+              return;
+            }
+            var extBody = self.buildItemExtPayload(type, resolvedId);
+            return AdminApi.itemExtUpdate(type, extBody)
+              .then(() => {
+                self.showToast('保存成功', 'success');
+                self.itemDrawerShow = false;
+                self.reloadAfterItemSave();
+              });
+          };
+          if (itemId) return finish(itemId);
+          return AdminApi.itemList(code ? { code: code } : { itemType: type })
+            .then((res) => {
+              var list = res.data || [];
+              var found = list.find((x) => x.code === code) || list.find((x) => x.name === self.itemForm.name) || list[0];
+              return finish(found && found.id);
+            });
+        })
+        .catch((err) => this.showToast(err.message))
+        .finally(() => { this.itemSaving = false; });
+    },
+    removeItem(it) {
+      if (!confirm('确认删除物品：' + (it.name || it.id) + '？')) return;
+      AdminApi.itemRemove(it.id)
+        .then(() => {
+          this.showToast('已删除', 'success');
+          this.loadItems();
+        })
+        .catch((err) => this.showToast(err.message));
+    },
+
+    /* ---------- 装备管理 ---------- */
+    loadEquipList() {
+      if (!this.currentEquip) return;
+      var type = this.currentEquip.type;
+      this.equipLoading = true;
+      Promise.all([
+        AdminApi.itemList({ itemType: type }),
+        AdminApi.itemExtList(type, {})
+      ])
+        .then(function (results) {
+          var items = (results[0] && results[0].data) || [];
+          var exts = (results[1] && results[1].data) || [];
+          var extMap = {};
+          exts.forEach(function (e) { if (e && e.itemId) extMap[e.itemId] = e; });
+          this.equipRows = items.map(function (it) {
+            return Object.assign({}, it, { ext: extMap[it.id] || {} });
+          });
+        }.bind(this))
+        .catch((err) => this.showToast(err.message))
+        .finally(() => { this.equipLoading = false; });
+    },
+    openEquipDrawer(row) {
+      if (!this.currentEquip) return;
+      this.itemTypeLocked = true;
+      this.itemFromEquip = true;
+      this.itemForm = emptyItem();
+      this.itemExtForm = emptyExt();
+      this.itemAtkSpeedDir = 'UP';
+      this.itemForm.itemType = this.currentEquip.type;
+      if (this.currentEquip.type !== 'MATERIAL') {
+        this.itemForm.maxStack = 1;
+      }
+      if (row) {
+        this.itemForm = Object.assign(emptyItem(), row, { itemType: this.currentEquip.type });
+        if (row.ext) {
+          this.itemExtForm = Object.assign(emptyExt(), row.ext);
+          this.syncItemAtkSpeedDirFromExt();
+        } else if (row.id) {
+          var type = this.currentEquip.type;
+          AdminApi.itemExtList(type, { itemId: row.id })
+            .then((res) => {
+              var list = res.data || [];
+              if (list.length) {
+                this.itemExtForm = Object.assign(emptyExt(), list[0]);
+                this.syncItemAtkSpeedDirFromExt();
+              }
+            })
+            .catch((err) => this.showToast(err.message));
+        }
+      }
+      this.itemDrawerShow = true;
+    },
+    removeEquip(row) {
+      if (!confirm('确认删除：' + (row.name || row.id) + '？')) return;
+      AdminApi.itemRemove(row.id)
+        .then(() => {
+          this.showToast('已删除', 'success');
+          this.loadEquipList();
+        })
+        .catch((err) => this.showToast(err.message));
+    },
+    ensureChargeSkillOptions() {
+      var self = this;
+      if (this.chargeSkillOptions.length) return Promise.resolve();
+      // list 分页默认 20，选择器用 size=100
+      return Promise.all([
+        AdminApi.activeSkillList({ skillType: 'ULTIMATE' }, { size: 100 }),
+        AdminApi.activeSkillList({ skillType: 'SMALL' }, { size: 100 })
+      ]).then(function (arr) {
+        var list = [];
+        arr.forEach(function (res) {
+          (res.data || []).forEach(function (sk) { list.push(sk); });
+        });
+        self.chargeSkillOptions = list;
+      });
+    },
+    ensureNormalSkillOptions() {
+      var self = this;
+      if (this.normalSkillOptions.length) return Promise.resolve();
+      return AdminApi.activeSkillList({ skillType: 'NORMAL' }, { size: 100 })
+        .then(function (res) {
+          self.normalSkillOptions = res.data || [];
+        })
+        .catch(function (err) { self.showToast(err.message); });
+    },
+    closeDefaultSkillDrawer() {
+      this.defaultSkillDrawerShow = false;
+      this.defaultSkillItemId = '';
+      this.defaultSkillItemName = '';
+      this.defaultSkillSlots = [];
+    },
+    openDefaultSkillDrawer(row) {
+      if (!row || !row.id) {
+        this.showToast('请先保存装备');
+        return;
+      }
+      var slotCount = row.chargeSkillSlotCount != null ? Number(row.chargeSkillSlotCount) : 0;
+      if (!slotCount || slotCount < 1) {
+        this.showToast('请先编辑装备，设置充能技能槽数量（≥1）并保存');
+        return;
+      }
+      var self = this;
+      this.defaultSkillItemId = row.id;
+      this.defaultSkillItemName = row.name || row.code || row.id;
+      this.ensureChargeSkillOptions()
+        .then(function () {
+          return AdminApi.itemDefaultSkillList(row.id);
+        })
+        .then(function (res) {
+          var existing = res.data || [];
+          var bySlot = {};
+          existing.forEach(function (x) {
+            if (x && x.slotNo != null) bySlot[x.slotNo] = x.skillId;
+          });
+          var slots = [];
+          for (var i = 0; i < slotCount; i++) {
+            slots.push({ slotNo: i, skillId: bySlot[i] || '' });
+          }
+          self.defaultSkillSlots = slots;
+          self.defaultSkillDrawerShow = true;
+        })
+        .catch(function (err) { self.showToast(err.message); });
+    },
+    clearDefaultSkillSlot(idx) {
+      var slots = this.defaultSkillSlots || [];
+      if (!slots[idx]) return;
+      slots[idx].skillId = '';
+    },
+    saveDefaultSkills() {
+      if (!this.defaultSkillItemId) return;
+      var slots = this.defaultSkillSlots || [];
+      if (!slots.length) {
+        this.showToast('请先设置充能技能槽数量');
+        return;
+      }
+      // 允许空槽：未配置的 skillId 传空，后端跳过落库
+      var skills = slots.map(function (s, idx) {
+        return { skillId: s.skillId || '', slotNo: idx, sort: idx };
+      });
+      this.defaultSkillSaving = true;
+      AdminApi.itemDefaultSkillSave(this.defaultSkillItemId, skills)
+        .then(() => {
+          this.showToast('默认技能已保存', 'success');
+          this.closeDefaultSkillDrawer();
+        })
+        .catch((err) => this.showToast(err.message))
+        .finally(() => { this.defaultSkillSaving = false; });
+    },
+
+    /* ---------- 配方 ---------- */
+    loadRecipes() {
+      this.recipeLoading = true;
+      AdminApi.recipeList({})
+        .then((res) => { this.recipes = res.data || []; })
+        .catch((err) => this.showToast(err.message))
+        .finally(() => { this.recipeLoading = false; });
+    },
+    closeRecipeDrawer() {
+      this.recipeDrawerShow = false;
+      this.recipeOutputLocked = false;
+      this.recipeQuickItemLabel = '';
+    },
+    applyRecipeDetail(data, extras) {
+      extras = extras || {};
+      var mats = (data.materials && data.materials.length)
+        ? data.materials.map(function (m) {
+          return {
+            id: m.id || null,
+            itemId: m.itemId || '',
+            quantity: m.quantity != null ? m.quantity : 1,
+            sort: m.sort != null ? m.sort : 0
+          };
+        })
+        : [emptyRecipeMaterialRow()];
+      this.recipeForm = Object.assign(emptyRecipe(), data, extras, { materials: mats });
+      this.recipeDrawerShow = true;
+    },
+    openRecipeDrawer(r) {
+      this.recipeOutputLocked = false;
+      this.recipeQuickItemLabel = '';
+      if (!this.items.length) this.loadItems();
+      if (!r || !r.id) {
+        this.recipeForm = emptyRecipe();
+        this.recipeDrawerShow = true;
+        return;
+      }
+      AdminApi.recipeDetail(r.id)
+        .then((res) => { this.applyRecipeDetail(res.data || {}); })
+        .catch((err) => this.showToast(err.message));
+    },
+    /** 装备管理快捷：以当前装备为产出，编辑/新增同一套配方接口 */
+    openEquipRecipeDrawer(row) {
+      if (!row || !row.id) {
+        this.showToast('请先保存装备');
+        return;
+      }
+      if (!this.items.length) this.loadItems();
+      var self = this;
+      var itemLabel = (row.name || '') + (row.code ? '（' + row.code + '）' : '');
+      this.recipeOutputLocked = true;
+      this.recipeQuickItemLabel = itemLabel || row.id;
+      AdminApi.recipeList({ outputItemId: row.id })
+        .then(function (res) {
+          var list = res.data || [];
+          var hit = list.find(function (x) { return x.outputItemId === row.id; }) || list[0];
+          if (hit && hit.id) {
+            return AdminApi.recipeDetail(hit.id).then(function (detailRes) {
+              self.applyRecipeDetail(detailRes.data || {}, { outputItemId: row.id });
+            });
+          }
+          self.applyRecipeDetail({
+            name: (row.name || '装备') + '配方',
+            outputItemId: row.id,
+            outputQty: 1,
+            sort: row.sort != null ? row.sort : 0,
+            remark: ''
+          });
+        })
+        .catch(function (err) { self.showToast(err.message); });
+    },
+    addRecipeMaterialRow() {
+      if (!this.recipeForm.materials) this.recipeForm.materials = [];
+      this.recipeForm.materials.push(emptyRecipeMaterialRow());
+    },
+    removeRecipeMaterialRow(idx) {
+      if (!this.recipeForm.materials || this.recipeForm.materials.length <= 1) return;
+      this.recipeForm.materials.splice(idx, 1);
+    },
+    saveRecipe() {
+      if (!this.recipeForm.outputItemId) { this.showToast('请选择产出物品'); return; }
+      var mats = this.recipeForm.materials || [];
+      if (!mats.length) { this.showToast('至少添加一种材料'); return; }
+      for (var i = 0; i < mats.length; i++) {
+        if (!mats[i].itemId) { this.showToast('请选择材料 ' + (i + 1)); return; }
+        if (!mats[i].quantity || mats[i].quantity < 1) { this.showToast('材料数量必须大于 0'); return; }
+      }
+      this.recipeSaving = true;
+      AdminApi.recipeUpdate(this.recipeForm)
+        .then(() => {
+          this.showToast('保存成功', 'success');
+          this.closeRecipeDrawer();
+          this.loadRecipes();
+        })
+        .catch((err) => this.showToast(err.message))
+        .finally(() => { this.recipeSaving = false; });
+    },
+    removeRecipe(r) {
+      if (!confirm('确认删除配方：' + (r.name || r.id) + '？')) return;
+      AdminApi.recipeRemove(r.id)
+        .then(() => {
+          this.showToast('已删除', 'success');
+          this.loadRecipes();
+        })
+        .catch((err) => this.showToast(err.message));
+    },
+
+    /* ---------- 怪物掉落 ---------- */
+    loadDrops() {
+      this.dropLoading = true;
+      var req = this.dropMonsterFilter
+        ? AdminApi.monsterDropListByMonster(this.dropMonsterFilter)
+        : AdminApi.monsterDropList({});
+      req
+        .then((res) => { this.drops = res.data || []; })
+        .catch((err) => this.showToast(err.message))
+        .finally(() => { this.dropLoading = false; });
+    },
+    openDropDrawer(d) {
+      this.dropForm = d ? Object.assign(emptyDrop(), d) : emptyDrop();
+      if (this.dropMonsterFilter && !this.dropForm.monsterId) {
+        this.dropForm.monsterId = this.dropMonsterFilter;
+      }
+      if (!this.monsters.length) this.loadMonsters();
+      if (!this.items.length) this.loadItems();
+      this.dropDrawerShow = true;
+    },
+    saveDrop() {
+      if (!this.dropForm.monsterId) { this.showToast('请选择怪物'); return; }
+      if (!this.dropForm.itemId) { this.showToast('请选择物品'); return; }
+      this.dropSaving = true;
+      AdminApi.monsterDropUpdate(this.dropForm)
+        .then(() => {
+          this.showToast('保存成功', 'success');
+          this.dropDrawerShow = false;
+          this.loadDrops();
+        })
+        .catch((err) => this.showToast(err.message))
+        .finally(() => { this.dropSaving = false; });
+    },
+    removeDrop(d) {
+      if (!confirm('确认删除该掉落配置？')) return;
+      AdminApi.monsterDropRemove(d.id)
+        .then(() => {
+          this.showToast('已删除', 'success');
+          this.loadDrops();
+        })
+        .catch((err) => this.showToast(err.message));
+    },
+
+    /* ---------- 充能技能 ---------- */
+    loadActiveSkills() {
+      this.skillLoading = true;
+      var body = {};
+      if (this.skillTypeFilter) body.skillType = this.skillTypeFilter;
+      AdminApi.activeSkillList(body)
+        .then((res) => { this.activeSkills = res.data || []; })
+        .catch((err) => this.showToast(err.message))
+        .finally(() => { this.skillLoading = false; });
+    },
+    loadChargeGroups() {
+      this.chargeGroupLoading = true;
+      AdminApi.skillChargeGroupList({})
+        .then((res) => { this.chargeGroups = res.data || []; })
+        .catch((err) => this.showToast(err.message))
+        .finally(() => { this.chargeGroupLoading = false; });
+    },
+    loadEffectGroups() {
+      this.effectGroupLoading = true;
+      AdminApi.skillEffectGroupList({})
+        .then((res) => { this.effectGroups = res.data || []; })
+        .catch((err) => this.showToast(err.message))
+        .finally(() => { this.effectGroupLoading = false; });
+    },
+    closeSkillDrawer() {
+      this.skillDrawerShow = false;
+      this.skillTypeLocked = false;
+      this.skillBindWeaponItemId = '';
+      this.skillBindWeaponExtId = '';
+      this.skillBindWeaponName = '';
+    },
+    openWeaponNormalSkillEditor(row) {
+      if (!row || !row.id) {
+        this.showToast('请先保存武器');
+        return;
+      }
+      var ext = row.ext || {};
+      this.skillBindWeaponItemId = row.id;
+      this.skillBindWeaponExtId = ext.id || '';
+      this.skillBindWeaponName = row.name || row.code || row.id;
+      this.skillTypeLocked = true;
+      var skillId = ext.normalSkillId || '';
+      if (skillId) {
+        this.openSkillDrawer({ id: skillId }, { keepWeaponBind: true });
+        return;
+      }
+      this.openSkillDrawer(null, {
+        keepWeaponBind: true,
+        forceType: 'NORMAL',
+        defaultName: (row.name || '武器') + '普攻',
+        defaultNormalCharge: true
+      });
+    },
+    bindWeaponNormalSkill(skillId) {
+      var self = this;
+      var itemId = this.skillBindWeaponItemId;
+      if (!itemId || !skillId) return Promise.resolve();
+      return AdminApi.itemExtList('WEAPON', { itemId: itemId })
+        .then(function (res) {
+          var list = res.data || [];
+          var ext = list[0] || { itemId: itemId };
+          var body = Object.assign({}, emptyExt(), ext, {
+            id: ext.id || self.skillBindWeaponExtId || null,
+            itemId: itemId,
+            normalSkillId: skillId
+          });
+          return AdminApi.itemExtUpdate('WEAPON', body);
+        })
+        .then(function () {
+          self.normalSkillOptions = [];
+          if (self.itemForm && self.itemForm.id === itemId) {
+            self.itemExtForm.normalSkillId = skillId;
+          }
+          if (self.isEquipGroupTab) self.loadEquipList();
+        });
+    },
+    /** 解除武器普攻槽绑定（不删除技能本身），回落通用普攻 */
+    unbindWeaponNormalSkill() {
+      var itemId = this.skillBindWeaponItemId;
+      if (!itemId) return;
+      if (!confirm('确认清空该武器的普攻绑定？清空后战斗将使用通用普攻。')) return;
+      var self = this;
+      this.skillSaving = true;
+      AdminApi.itemExtList('WEAPON', { itemId: itemId })
+        .then(function (res) {
+          var list = res.data || [];
+          var ext = list[0];
+          if (!ext || !ext.id) {
+            return Promise.reject(new Error('武器扩展不存在'));
+          }
+          var body = Object.assign({}, emptyExt(), ext, {
+            id: ext.id,
+            itemId: itemId,
+            normalSkillId: null
+          });
+          return AdminApi.itemExtUpdate('WEAPON', body);
+        })
+        .then(function () {
+          self.normalSkillOptions = [];
+          if (self.itemForm && self.itemForm.id === itemId) {
+            self.itemExtForm.normalSkillId = '';
+          }
+          if (self.isEquipGroupTab) self.loadEquipList();
+          self.showToast('已清空绑定，将使用通用普攻', 'success');
+          self.closeSkillDrawer();
+        })
+        .catch(function (err) { self.showToast(err.message || '清空失败'); })
+        .finally(function () { self.skillSaving = false; });
+    },
+    openSkillDrawer(sk, opts) {
+      opts = opts || {};
+      if (!opts.keepWeaponBind) {
+        this.skillBindWeaponItemId = '';
+        this.skillBindWeaponExtId = '';
+        this.skillBindWeaponName = '';
+        this.skillTypeLocked = !!opts.lockType;
+      }
+      this.pickChargeGroupId = '';
+      this.pickEffectGroupId = '';
+      this.pickChargeConditionType = 'ACTION_VALUE';
+      this.pickSkillChargeEvent = 'CAST';
+      this.pickSkillChargeMatch = 'ANY';
+      this.pickSkillChargeSkillType = 'NORMAL';
+      this.pickSkillChargeSkillId = '';
+      this.loadChargeGroups();
+      this.loadEffectGroups();
+      if (!this.activeSkills.length) this.loadActiveSkills();
+      if (sk && sk.id) {
+        AdminApi.activeSkillDetail(sk.id)
+          .then((res) => {
+            var data = res.data || {};
+            this.skillForm = Object.assign(emptyActiveSkill(), data.skill || sk);
+            if (!this.skillForm.needChargeMode) this.skillForm.needChargeMode = 'MANUAL';
+            this.skillForm.maxCastSkillMode = (this.skillForm.maxCastSkill != null && this.skillForm.maxCastSkill > 0)
+              ? 'MANUAL'
+              : 'UNLIMITED';
+            if (this.skillForm.maxCastSkillMode === 'UNLIMITED') this.skillForm.maxCastSkill = 0;
+            if (this.skillBindWeaponItemId) {
+              this.skillForm.skillType = 'NORMAL';
+              this.skillTypeLocked = true;
+            }
+            this.draftCharges = (data.charges || []).map((c) => ({
+              name: c.name || '',
+              conditionType: c.conditionType || 'ACTION_VALUE',
+              scope: c.scope || 'GLOBAL',
+              everyActionValue: c.everyActionValue != null ? c.everyActionValue : 1,
+              chargeGain: c.chargeGain != null ? c.chargeGain : 1,
+              skillChargeEvent: c.skillChargeEvent || 'CAST',
+              skillChargeMatch: c.skillChargeMatch || 'ANY',
+              matchSkillType: c.matchSkillType || '',
+              matchSkillId: c.matchSkillId || '',
+              sort: c.sort != null ? c.sort : 0,
+              remark: c.remark || '',
+              more: c.more || '',
+              groupId: ''
+            }));
+            this.draftEffects = (data.effects || []).map((e) => {
+              var row = emptyDraftEffect();
+              row.name = e.name || '';
+              row.targetType = e.targetType || 'FIRST';
+              row.effectType = e.effectType || 'DAMAGE';
+              row.attrKey = e.attrKey || 'ATK';
+              row.attrDir = e.attrDir || 'INCREASE';
+              row.formulaJson = e.formulaJson || '[]';
+              row.formulaTokens = parseFormulaTokens(e.formulaJson);
+              row.hitSegments = e.hitSegments != null ? e.hitSegments : 1;
+              row.sort = e.sort != null ? e.sort : 0;
+              row.remark = e.remark || '';
+              row.more = e.more || '';
+              row.groupId = '';
+              return row;
+            });
+            this.skillDrawerShow = true;
+          })
+          .catch((err) => this.showToast(err.message));
+      } else {
+        this.skillForm = emptyActiveSkill();
+        if (opts.forceType) this.skillForm.skillType = opts.forceType;
+        if (opts.defaultName) this.skillForm.name = opts.defaultName;
+        if (opts.defaultNeedCharge != null) {
+          this.skillForm.needChargeMode = 'MANUAL';
+          this.skillForm.needCharge = opts.defaultNeedCharge;
+        }
+        if (this.skillBindWeaponItemId || opts.forceType === 'NORMAL' || opts.defaultNormalCharge) {
+          this.skillForm.skillType = 'NORMAL';
+          this.skillTypeLocked = true;
+          // 普攻默认：所需=自己基础行动值；每1行动值+1充能
+          this.skillForm.needChargeMode = 'SELF_BASE_ACTION';
+          this.skillForm.needCharge = 0;
+        }
+        this.draftCharges = [];
+        this.draftEffects = [];
+        if (opts.defaultNormalCharge || opts.forceType === 'NORMAL') {
+          this.draftCharges.push({
+            name: '行动充能',
+            conditionType: 'ACTION_VALUE',
+            scope: 'GLOBAL',
+            everyActionValue: 1,
+            chargeGain: 1,
+            skillChargeEvent: 'CAST',
+            skillChargeMatch: 'ANY',
+            matchSkillType: '',
+            matchSkillId: '',
+            sort: 0,
+            remark: '普攻默认：每1行动值+1充能',
+            more: '',
+            groupId: ''
+          });
+        }
+        this.skillDrawerShow = true;
+      }
+    },
+    effectTargetLabel(v) { return labelOf(EFFECT_TARGET_OPTIONS, v); },
+    effectTypeLabel(v) { return labelOf(EFFECT_TYPE_OPTIONS, v); },
+    attrModifyKeyLabel(v) { return labelOf(ATTR_MODIFY_KEY_OPTIONS, v); },
+    attrModifyDirLabel(v) { return labelOf(ATTR_MODIFY_DIR_OPTIONS, v); },
+    formulaReadRoleLabel(v) { return labelOf(FORMULA_READ_ROLE_OPTIONS, v || 'SELF'); },
+    needChargeDisplay(sk) {
+      if (!sk) return '—';
+      if (sk.needChargeMode === 'SELF_BASE_ACTION') return '自己基础行动值';
+      return sk.needCharge != null ? sk.needCharge : 0;
+    },
+    setMaxCastSkillMode(mode) {
+      this.skillForm.maxCastSkillMode = mode;
+      if (mode === 'UNLIMITED') {
+        this.skillForm.maxCastSkill = 0;
+      } else if (!this.skillForm.maxCastSkill || this.skillForm.maxCastSkill < 1) {
+        this.skillForm.maxCastSkill = 1;
+      }
+    },
+    formulaOpLabel(op) {
+      return { '+': '+', '-': '−', '*': '×', '/': '÷', '(': '(', ')': ')' }[op] || op;
+    },
+    resolveFormulaTokenList() {
+      if (this.formulaParamCtx === 'effectGroup') return this.effectGroupFormulaTokens;
+      if (this.formulaParamCtx === 'draft') {
+        var row = this.draftEffects[this.formulaParamDraftIdx];
+        return row ? row.formulaTokens : null;
+      }
+      return null;
+    },
+    openFormulaParamPicker(ctx, draftIdx) {
+      this.formulaParamCtx = ctx || 'effectGroup';
+      this.formulaParamDraftIdx = draftIdx != null ? draftIdx : -1;
+      this.formulaParamDraft = {
+        paramMode: 'LITERAL',
+        value: '1',
+        readKey: 'ATK',
+        readRole: 'SELF'
+      };
+      this.formulaParamPickerShow = true;
+    },
+    confirmFormulaParam() {
+      var d = this.formulaParamDraft || {};
+      var list = this.resolveFormulaTokenList();
+      if (!list) { this.showToast('公式目标无效'); return; }
+      if (d.paramMode === 'LITERAL') {
+        if (d.value === '' || d.value == null) { this.showToast('请输入数值'); return; }
+        list.push({
+          uid: nextFormulaUid(),
+          kind: 'PARAM',
+          paramMode: 'LITERAL',
+          value: String(d.value)
+        });
+      } else {
+        var tok = {
+          uid: nextFormulaUid(),
+          kind: 'PARAM',
+          paramMode: 'READ',
+          readKey: d.readKey || 'ATK'
+        };
+        if (this.formulaParamNeedRole) tok.readRole = d.readRole || 'SELF';
+        list.push(tok);
+      }
+      this.formulaParamPickerShow = false;
+    },
+    addFormulaOpTo(list, op) {
+      if (!list) return;
+      list.push({ uid: nextFormulaUid(), kind: 'OP', op: op });
+    },
+    onEffectGroupFormulaDragStart(e, idx) {
+      this.effectGroupDragFrom = idx;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', String(idx));
+    },
+    onEffectGroupFormulaDrop(e, idx) {
+      var from = this.effectGroupDragFrom;
+      if (from < 0 || from === idx) return;
+      var list = this.effectGroupFormulaTokens.slice();
+      var item = list.splice(from, 1)[0];
+      list.splice(idx, 0, item);
+      this.effectGroupFormulaTokens = list;
+      this.effectGroupDragFrom = -1;
+    },
+    onListFormulaDragStart(ev, row, idx) {
+      row._dragFrom = idx;
+      ev.dataTransfer.effectAllowed = 'move';
+      ev.dataTransfer.setData('text/plain', String(idx));
+    },
+    onListFormulaDrop(ev, row, idx) {
+      var from = row._dragFrom;
+      if (from < 0 || from === idx) return;
+      var list = row.formulaTokens.slice();
+      var item = list.splice(from, 1)[0];
+      list.splice(idx, 0, item);
+      row.formulaTokens = list;
+      row._dragFrom = -1;
+    },
+    onListFormulaCanvasDrop(row) {
+      row._dragFrom = -1;
+    },
+    onListFormulaDragEnd(row) {
+      row._dragFrom = -1;
+    },
+    chargeConditionTypeLabel(type) {
+      var hit = (this.chargeConditionTypeOptions || []).find((o) => o.value === type);
+      return hit ? hit.label : (type || '—');
+    },
+    onPickChargeConditionTypeChange() {
+      if (this.pickChargeConditionType !== 'SKILL_CHARGE') return;
+      if (!this.pickSkillChargeEvent) this.pickSkillChargeEvent = 'CAST';
+      if (!this.pickSkillChargeMatch) this.pickSkillChargeMatch = 'ANY';
+      if (!this.activeSkills.length) this.loadActiveSkills();
+    },
+    onPickSkillChargeMatchChange() {
+      if (this.pickSkillChargeMatch === 'ANY_TYPE' && !this.pickSkillChargeSkillType) {
+        this.pickSkillChargeSkillType = 'NORMAL';
+      }
+      if (this.pickSkillChargeMatch === 'SPECIFIC' && !this.activeSkills.length) {
+        this.loadActiveSkills();
+      }
+      if (this.pickSkillChargeMatch !== 'ANY_TYPE') this.pickSkillChargeSkillType = 'NORMAL';
+      if (this.pickSkillChargeMatch !== 'SPECIFIC') this.pickSkillChargeSkillId = '';
+    },
+    onDraftSkillChargeMatchChange(c) {
+      if (!c) return;
+      if (c.skillChargeMatch === 'ANY') {
+        c.matchSkillType = '';
+        c.matchSkillId = '';
+      } else if (c.skillChargeMatch === 'ANY_TYPE') {
+        c.matchSkillId = '';
+        if (!c.matchSkillType) c.matchSkillType = 'NORMAL';
+        if (!this.activeSkills.length) this.loadActiveSkills();
+      } else if (c.skillChargeMatch === 'SPECIFIC') {
+        c.matchSkillType = '';
+        if (!this.activeSkills.length) this.loadActiveSkills();
+      }
+    },
+    addDraftCharge() {
+      var row = emptyDraftCharge();
+      row.conditionType = this.pickChargeConditionType || 'ACTION_VALUE';
+      if (row.conditionType === 'ACTION_VALUE') {
+        row.name = '行动值充能';
+      } else if (row.conditionType === 'SKILL_CHARGE') {
+        row.name = '技能充能';
+        row.skillChargeEvent = this.pickSkillChargeEvent || 'CAST';
+        row.skillChargeMatch = this.pickSkillChargeMatch || 'ANY';
+        row.matchSkillType = row.skillChargeMatch === 'ANY_TYPE' ? (this.pickSkillChargeSkillType || 'NORMAL') : '';
+        row.matchSkillId = row.skillChargeMatch === 'SPECIFIC' ? (this.pickSkillChargeSkillId || '') : '';
+        if (row.skillChargeMatch === 'ANY_TYPE' && !row.matchSkillType) {
+          this.showToast('请选择技能类型');
+          return;
+        }
+        if (row.skillChargeMatch === 'SPECIFIC' && !row.matchSkillId) {
+          this.showToast('请选择一个技能');
+          return;
+        }
+      } else {
+        row.name = '';
+      }
+      row.sort = this.draftCharges.length;
+      this.draftCharges.push(row);
+    },
+    removeDraftCharge(idx) {
+      this.draftCharges.splice(idx, 1);
+    },
+    addChargeFromGroup() {
+      var g = this.enabledChargeGroups.find((x) => x.id === this.pickChargeGroupId);
+      if (!g) { this.showToast('请选择快捷充能组'); return; }
+      var row = emptyDraftCharge();
+      row.name = g.name || '行动值充能';
+      row.sort = g.sort != null ? g.sort : this.draftCharges.length;
+      row.remark = g.remark ? g.remark : ('来自充能组 ' + g.id);
+      row.more = g.more || ('{"groupId":"' + g.id + '"}');
+      row.groupId = g.id;
+      this.draftCharges.push(row);
+      this.pickChargeGroupId = '';
+    },
+    addDraftEffect() {
+      var row = emptyDraftEffect();
+      row.sort = this.draftEffects.length;
+      this.draftEffects.push(row);
+    },
+    removeDraftEffect(idx) {
+      this.draftEffects.splice(idx, 1);
+    },
+    addEffectFromGroup() {
+      var g = this.enabledEffectGroups.find((x) => x.id === this.pickEffectGroupId);
+      if (!g) { this.showToast('请选择快捷效果组'); return; }
+      var row = emptyDraftEffect();
+      row.name = g.name || '';
+      row.targetType = g.targetType || 'FIRST';
+      row.effectType = g.effectType || 'DAMAGE';
+      row.attrKey = g.attrKey || 'ATK';
+      row.attrDir = g.attrDir || 'INCREASE';
+      row.formulaJson = g.formulaJson || '[]';
+      row.formulaTokens = parseFormulaTokens(g.formulaJson);
+      row.hitSegments = g.hitSegments != null ? g.hitSegments : 1;
+      row.sort = g.sort != null ? g.sort : this.draftEffects.length;
+      row.remark = g.remark ? g.remark : ('来自效果组 ' + g.id);
+      row.more = g.more || ('{"groupId":"' + g.id + '"}');
+      row.groupId = g.id;
+      this.draftEffects.push(row);
+      this.pickEffectGroupId = '';
+    },
+    resolveSkillIdAfterSave(wasNew) {
+      if (!wasNew && this.skillForm.id) return Promise.resolve(this.skillForm.id);
+      var body = {};
+      if (this.skillForm.code) body.code = this.skillForm.code;
+      else body.name = this.skillForm.name;
+      return AdminApi.activeSkillList(body).then((res) => {
+        var list = res.data || [];
+        var code = this.skillForm.code;
+        var name = this.skillForm.name;
+        var found = list.find((s) => (code && s.code === code) || s.name === name) || list[0];
+        if (!found || !found.id) return Promise.reject(new Error('保存成功但无法解析技能ID'));
+        this.skillForm.id = found.id;
+        return found.id;
+      });
+    },
+    syncSkillChildren(skillId, isEdit) {
+      var self = this;
+      var clearOld = Promise.resolve();
+      if (isEdit) {
+        clearOld = Promise.all([
+          AdminApi.skillChargeList(skillId),
+          AdminApi.skillEffectList(skillId)
+        ]).then(function (pair) {
+          var oldCharges = (pair[0].data || []);
+          var oldEffects = (pair[1].data || []);
+          var removes = oldCharges.map(function (c) { return AdminApi.skillChargeRemove(c.id); })
+            .concat(oldEffects.map(function (e) { return AdminApi.skillEffectRemove(e.id); }));
+          return Promise.all(removes);
+        });
+      }
+      return clearOld.then(function () {
+        var creates = self.draftCharges.map(function (c, idx) {
+          var payload = {
+            skillId: skillId,
+            name: c.name || '',
+            conditionType: c.conditionType || 'ACTION_VALUE',
+            scope: c.scope || 'GLOBAL',
+            everyActionValue: c.everyActionValue != null ? c.everyActionValue : 1,
+            chargeGain: c.chargeGain != null ? c.chargeGain : 1,
+            skillChargeEvent: null,
+            skillChargeMatch: null,
+            matchSkillType: null,
+            matchSkillId: null,
+            sort: idx,
+            remark: c.remark || '',
+            more: c.more || ''
+          };
+          if (payload.conditionType === 'SKILL_CHARGE') {
+            payload.skillChargeEvent = c.skillChargeEvent || 'CAST';
+            payload.skillChargeMatch = c.skillChargeMatch || 'ANY';
+            payload.matchSkillType = payload.skillChargeMatch === 'ANY_TYPE' ? (c.matchSkillType || null) : null;
+            payload.matchSkillId = payload.skillChargeMatch === 'SPECIFIC' ? (c.matchSkillId || null) : null;
+            payload.everyActionValue = null;
+          }
+          return AdminApi.skillChargeUpdate(payload);
+        }).concat(self.draftEffects.map(function (e) {
+          var isAttr = e.effectType === 'ATTR_MODIFY';
+          return AdminApi.skillEffectUpdate({
+            skillId: skillId,
+            name: e.name || '',
+            targetType: e.targetType || 'FIRST',
+            effectType: e.effectType || 'DAMAGE',
+            attrKey: isAttr ? (e.attrKey || 'ATK') : null,
+            attrDir: isAttr ? (e.attrDir || 'INCREASE') : null,
+            formulaJson: serializeFormulaTokens(e.formulaTokens || []),
+            hitSegments: e.hitSegments != null ? e.hitSegments : 1,
+            sort: e.sort != null ? e.sort : 0,
+            remark: e.remark || '',
+            more: e.more || ''
+          });
+        }));
+        return Promise.all(creates);
+      });
+    },
+    saveActiveSkill() {
+      if (!this.skillForm.name) { this.showToast('请输入技能名称'); return; }
+      if (!this.skillForm.skillType) { this.showToast('请选择技能类型'); return; }
+      if (this.skillBindWeaponItemId) {
+        this.skillForm.skillType = 'NORMAL';
+      }
+      if (this.skillForm.maxCastSkillMode === 'UNLIMITED') {
+        this.skillForm.maxCastSkill = 0;
+      } else if (!this.skillForm.maxCastSkill || this.skillForm.maxCastSkill < 1) {
+        this.showToast('请输入本技能最大释放次数');
+        return;
+      }
+      this.skillForm.maxCastGlobal = 0;
+      this.skillForm.maxCastAllMeans = 0;
+      this.skillForm.maxCastRole = 0;
+      var isEdit = !!this.skillForm.id;
+      var bindWeapon = !!this.skillBindWeaponItemId;
+      this.skillSaving = true;
+      var self = this;
+      AdminApi.activeSkillUpdate(this.skillForm)
+        .then(function () { return self.resolveSkillIdAfterSave(!isEdit); })
+        .then(function (skillId) {
+          return self.syncSkillChildren(skillId, isEdit).then(function () { return skillId; });
+        })
+        .then(function (skillId) {
+          if (bindWeapon) return self.bindWeaponNormalSkill(skillId);
+        })
+        .then(function () {
+          self.showToast(bindWeapon ? '普攻已保存并绑定到武器' : '保存成功', 'success');
+          self.closeSkillDrawer();
+          self.loadActiveSkills();
+        })
+        .catch(function (err) { self.showToast(err.message || String(err)); })
+        .finally(function () { self.skillSaving = false; });
+    },
+    removeActiveSkill(sk) {
+      if (!confirm('确认删除技能「' + (sk.name || sk.id) + '」？将同时删除其充能与效果配置。')) return;
+      AdminApi.activeSkillRemove(sk.id)
+        .then(() => {
+          this.showToast('已删除', 'success');
+          this.loadActiveSkills();
+        })
+        .catch((err) => this.showToast(err.message));
+    },
+
+    /* ---------- 快捷充能组 / 效果组 ---------- */
+    openChargeGroupDrawer(g) {
+      this.chargeGroupForm = g ? Object.assign(emptySkillChargeGroup(), g) : emptySkillChargeGroup();
+      this.chargeGroupDrawerShow = true;
+    },
+    saveChargeGroup() {
+      if (!this.chargeGroupForm.name) { this.showToast('请输入充能组名称'); return; }
+      this.chargeGroupSaving = true;
+      AdminApi.skillChargeGroupUpdate(this.chargeGroupForm)
+        .then(() => {
+          this.showToast('保存成功', 'success');
+          this.chargeGroupDrawerShow = false;
+          this.loadChargeGroups();
+        })
+        .catch((err) => this.showToast(err.message))
+        .finally(() => { this.chargeGroupSaving = false; });
+    },
+    removeChargeGroup(g) {
+      if (!confirm('确认删除充能组「' + (g.name || g.id) + '」？')) return;
+      AdminApi.skillChargeGroupRemove(g.id)
+        .then(() => {
+          this.showToast('已删除', 'success');
+          this.loadChargeGroups();
+        })
+        .catch((err) => this.showToast(err.message));
+    },
+    openEffectGroupDrawer(g) {
+      this.effectGroupForm = g ? Object.assign(emptySkillEffectGroup(), g) : emptySkillEffectGroup();
+      if (!this.effectGroupForm.targetType) this.effectGroupForm.targetType = 'FIRST';
+      if (!this.effectGroupForm.effectType) this.effectGroupForm.effectType = 'DAMAGE';
+      if (!this.effectGroupForm.attrKey) this.effectGroupForm.attrKey = 'ATK';
+      if (!this.effectGroupForm.attrDir) this.effectGroupForm.attrDir = 'INCREASE';
+      if (this.effectGroupForm.hitSegments == null) this.effectGroupForm.hitSegments = 1;
+      this.effectGroupFormulaTokens = parseFormulaTokens(this.effectGroupForm.formulaJson);
+      this.effectGroupDragFrom = -1;
+      this.effectGroupDrawerShow = true;
+    },
+    saveEffectGroup() {
+      if (!this.effectGroupForm.name) { this.showToast('请输入效果组名称'); return; }
+      if (!this.effectGroupForm.targetType) { this.showToast('请选择目标'); return; }
+      if (!this.effectGroupForm.effectType) { this.showToast('请选择效果类型'); return; }
+      var et = this.effectGroupForm.effectType;
+      if (et === 'DAMAGE' || et === 'HEAL' || et === 'ATTR_MODIFY') {
+        if (!this.effectGroupForm.hitSegments || this.effectGroupForm.hitSegments < 1) {
+          this.showToast('段数至少为 1');
+          return;
+        }
+        if (et === 'ATTR_MODIFY') {
+          if (!this.effectGroupForm.attrKey) { this.showToast('请选择修改属性'); return; }
+          if (!this.effectGroupForm.attrDir) { this.showToast('请选择增加/减少'); return; }
+        } else {
+          this.effectGroupForm.attrKey = null;
+          this.effectGroupForm.attrDir = null;
+        }
+        this.effectGroupForm.formulaJson = serializeFormulaTokens(this.effectGroupFormulaTokens);
+      } else {
+        this.effectGroupForm.formulaJson = '[]';
+        this.effectGroupForm.hitSegments = 0;
+        this.effectGroupForm.attrKey = null;
+        this.effectGroupForm.attrDir = null;
+      }
+      this.effectGroupSaving = true;
+      AdminApi.skillEffectGroupUpdate(this.effectGroupForm)
+        .then(() => {
+          this.showToast('保存成功', 'success');
+          this.effectGroupDrawerShow = false;
+          this.loadEffectGroups();
+        })
+        .catch((err) => this.showToast(err.message))
+        .finally(() => { this.effectGroupSaving = false; });
+    },
+    removeEffectGroup(g) {
+      if (!confirm('确认删除效果组「' + (g.name || g.id) + '」？')) return;
+      AdminApi.skillEffectGroupRemove(g.id)
+        .then(() => {
+          this.showToast('已删除', 'success');
+          this.loadEffectGroups();
+        })
+        .catch((err) => this.showToast(err.message));
+    },
+
+    /* ---------- 关卡树 ---------- */
+    loadStageTree() {
+      AdminApi.stageTree()
+        .then((res) => { this.stageTree = res.data || []; })
+        .catch((err) => this.showToast(err.message));
+    },
+    resetStagePick(level) {
+      if (level === 'root') {
+        this.selectedTypeId = '';
+        this.selectedChapterId = '';
+        this.selectedLevelId = '';
+        this.levelMonsters = [];
+        this.addMonsterId = '';
+        return;
+      }
+      if (level === 'type') {
+        this.selectedChapterId = '';
+        this.selectedLevelId = '';
+        this.levelMonsters = [];
+        this.addMonsterId = '';
+        return;
+      }
+      if (level === 'chapter') {
+        this.selectedLevelId = '';
+        this.levelMonsters = [];
+        this.addMonsterId = '';
+      }
+    },
+    pickType(t) {
+      this.selectedTypeId = t.id;
+      this.selectedChapterId = '';
+      this.selectedLevelId = '';
+      this.levelMonsters = [];
+      this.addMonsterId = '';
+    },
+    pickChapter(ch) {
+      this.selectedChapterId = ch.id;
+      this.selectedLevelId = '';
+      this.levelMonsters = [];
+      this.addMonsterId = '';
+    },
+    pickLevel(lv) {
+      this.selectedLevelId = lv.id;
+      this.addMonsterId = '';
+      this.loadLevelMonsters();
+    },
+
+    openTypeDrawer(item) {
+      this.typeForm = item ? Object.assign(emptyType(), item) : emptyType();
+      this.typeDrawerShow = true;
+    },
+    saveType() {
+      if (!this.typeForm.name) { this.showToast('请输入分类名称'); return; }
+      this.stageSaving = true;
+      AdminApi.stageTypeUpdate(this.typeForm)
+        .then(() => {
+          this.showToast('保存成功', 'success');
+          this.typeDrawerShow = false;
+          this.loadStageTree();
+        })
+        .catch((err) => this.showToast(err.message))
+        .finally(() => { this.stageSaving = false; });
+    },
+    removeType() {
+      if (!this.currentType) return;
+      if (!confirm('确认删除分类「' + this.currentType.name + '」及其下属关卡？')) return;
+      AdminApi.stageTypeRemove(this.selectedTypeId)
+        .then(() => {
+          this.showToast('已删除', 'success');
+          this.resetStagePick('root');
+          this.loadStageTree();
+        })
+        .catch((err) => this.showToast(err.message));
+    },
+
+    openChapterDrawer(item) {
+      if (!this.selectedTypeId) { this.showToast('请先选择分类'); return; }
+      if (item) {
+        this.chapterForm = Object.assign(emptyChapter(), item, { typeId: this.selectedTypeId });
+      } else {
+        this.chapterForm = Object.assign(emptyChapter(), { typeId: this.selectedTypeId });
+      }
+      this.chapterDrawerShow = true;
+    },
+    saveChapter() {
+      if (!this.chapterForm.name) { this.showToast('请输入大关名称'); return; }
+      this.chapterForm.typeId = this.selectedTypeId;
+      this.stageSaving = true;
+      AdminApi.stageChapterUpdate(this.chapterForm)
+        .then(() => {
+          this.showToast('保存成功', 'success');
+          this.chapterDrawerShow = false;
+          this.loadStageTree();
+        })
+        .catch((err) => this.showToast(err.message))
+        .finally(() => { this.stageSaving = false; });
+    },
+    removeChapter() {
+      if (!this.currentChapter) return;
+      if (!confirm('确认删除大关「' + this.currentChapter.name + '」及其下属小关？')) return;
+      AdminApi.stageChapterRemove(this.selectedChapterId)
+        .then(() => {
+          this.showToast('已删除', 'success');
+          this.resetStagePick('type');
+          this.loadStageTree();
+        })
+        .catch((err) => this.showToast(err.message));
+    },
+
+    openLevelDrawer(item) {
+      if (!this.selectedChapterId) { this.showToast('请先选择大关'); return; }
+      if (item) {
+        this.levelForm = Object.assign(emptyLevel(), item, { chapterId: this.selectedChapterId });
+      } else {
+        this.levelForm = Object.assign(emptyLevel(), { chapterId: this.selectedChapterId });
+      }
+      this.levelDrawerShow = true;
+    },
+    saveLevel() {
+      if (!this.levelForm.name) { this.showToast('请输入小关名称'); return; }
+      this.levelForm.chapterId = this.selectedChapterId;
+      this.stageSaving = true;
+      AdminApi.stageLevelUpdate(this.levelForm)
+        .then(() => {
+          this.showToast('保存成功', 'success');
+          this.levelDrawerShow = false;
+          this.loadStageTree();
+        })
+        .catch((err) => this.showToast(err.message))
+        .finally(() => { this.stageSaving = false; });
+    },
+    removeLevel() {
+      if (!this.currentLevel) return;
+      if (!confirm('确认删除小关「' + this.currentLevel.name + '」及其怪物布置？')) return;
+      AdminApi.stageLevelRemove(this.selectedLevelId)
+        .then(() => {
+          this.showToast('已删除', 'success');
+          this.resetStagePick('chapter');
+          this.loadStageTree();
+        })
+        .catch((err) => this.showToast(err.message));
+    },
+
+    /* ---------- 小关怪物布置 ---------- */
+    loadLevelMonsters() {
+      if (!this.selectedLevelId) return;
+      AdminApi.stageLevelMonsterList(this.selectedLevelId)
+        .then((res) => {
+          this.levelMonsters = (res.data || []).map((wm) => Object.assign({}, wm, {
+            gridH: wm.gridH || 1,
+            gridW: wm.gridW || 1,
+            posCol: wm.posCol == null ? 0 : wm.posCol,
+            posRow: wm.posRow == null ? 0 : wm.posRow
+          }));
+        })
+        .catch((err) => this.showToast(err.message));
+    },
+    addMonsterToLevel() {
+      if (!this.selectedLevelId) return;
+      if (!this.addMonsterId) { this.showToast('请选择怪物'); return; }
+      this.wmActing = true;
+      AdminApi.stageLevelMonsterAdd(this.selectedLevelId, this.addMonsterId)
+        .then(() => {
+          this.showToast('已添加', 'success');
+          this.addMonsterId = '';
+          this.loadLevelMonsters();
+        })
+        .catch((err) => this.showToast(err.message))
+        .finally(() => { this.wmActing = false; });
+    },
+    removeLevelMonster(wm) {
+      if (!confirm('移除「' + (wm.monsterName || wm.monsterId) + '」？')) return;
+      this.wmActing = true;
+      AdminApi.stageLevelMonsterRemove(wm.id)
+        .then(() => {
+          this.showToast('已移除', 'success');
+          this.loadLevelMonsters();
+        })
+        .catch((err) => this.showToast(err.message))
+        .finally(() => { this.wmActing = false; });
+    },
+    wmUnitStyle(wm) {
+      if (wm.posCol == null || wm.posRow == null) {
+        return { display: 'none' };
+      }
+      var col = wm.posCol + 1;
+      var row = wm.posRow + 1;
+      var w = wm.gridW || 1;
+      var h = wm.gridH || 1;
+      if (this.wmDrag && this.wmDrag.id === wm.id && this.wmHover) {
+        col = this.wmHover.col + 1;
+        row = this.wmHover.row + 1;
+      }
+      return {
+        gridColumn: col + ' / span ' + w,
+        gridRow: row + ' / span ' + h
+      };
+    },
+    wmUnitClass(wm) {
+      var rank = (wm.rarity || 'NORMAL').toLowerCase();
+      return [
+        'rank-' + rank,
+        { dragging: this.wmDrag && this.wmDrag.id === wm.id }
+      ];
+    },
+    isWmCellHot(index) {
+      if (!this.wmHover || !this.wmDrag) return false;
+      var col = index % COLS;
+      var row = Math.floor(index / COLS);
+      var w = this.wmDrag.w || 1;
+      var h = this.wmDrag.h || 1;
+      return col >= this.wmHover.col && col < this.wmHover.col + w
+        && row >= this.wmHover.row && row < this.wmHover.row + h;
+    },
+    updateWmHover(clientX, clientY) {
+      var el = this.$refs.wmBoard;
+      if (Array.isArray(el)) el = el[0];
+      if (!el || !this.wmDrag) return;
+      var rect = el.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+      var w = this.wmDrag.w || 1;
+      var h = this.wmDrag.h || 1;
+      var col = Math.floor((clientX - rect.left) / rect.width * COLS);
+      var row = Math.floor((clientY - rect.top) / rect.height * ROWS);
+      col = Math.max(0, Math.min(COLS - w, col));
+      row = Math.max(0, Math.min(ROWS - h, row));
+      this.wmHover = { col: col, row: row };
+    },
+    onWmPointerDown(e, wm) {
+      if (this.wmActing) return;
+      if (e.button != null && e.button !== 0) return;
+      var el = e.currentTarget;
+      if (el && el.setPointerCapture) {
+        try { el.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+      }
+      this.wmDrag = {
+        id: wm.id,
+        pointerId: e.pointerId,
+        w: wm.gridW || 1,
+        h: wm.gridH || 1,
+        name: wm.monsterName || wm.monsterId
+      };
+      this.wmGhost = { show: true, x: e.clientX, y: e.clientY, name: this.wmDrag.name };
+      this.updateWmHover(e.clientX, e.clientY);
+    },
+    onWmPointerMove(e) {
+      if (!this.wmDrag) return;
+      if (this.wmDrag.pointerId != null && e.pointerId !== this.wmDrag.pointerId) return;
+      this.wmGhost = { show: true, x: e.clientX, y: e.clientY, name: this.wmDrag.name };
+      this.updateWmHover(e.clientX, e.clientY);
+    },
+    onWmPointerUp(e) {
+      if (!this.wmDrag) return;
+      if (this.wmDrag.pointerId != null && e.pointerId !== this.wmDrag.pointerId) return;
+      var hover = this.wmHover;
+      var drag = this.wmDrag;
+      this.wmDrag = null;
+      this.wmGhost = { show: false, x: 0, y: 0, name: '' };
+      this.wmHover = null;
+      if (!hover) return;
+      var wm = this.levelMonsters.find(function (m) { return m.id === drag.id; });
+      if (!wm) return;
+      if (wm.posCol === hover.col && wm.posRow === hover.row) return;
+      this.commitWmSlot(wm, hover.col, hover.row);
+    },
+    commitWmSlot(wm, col, row) {
+      var self = this;
+      var prevCol = wm.posCol;
+      var prevRow = wm.posRow;
+      wm.posCol = col;
+      wm.posRow = row;
+      self.wmActing = true;
+      AdminApi.stageLevelMonsterUpdate({
+        id: wm.id,
+        levelId: self.selectedLevelId,
+        monsterId: wm.monsterId,
+        posCol: col,
+        posRow: row,
+        sort: wm.sort || 0
+      })
+        .then(function () {
+          self.showToast('站位已更新', 'success');
+        })
+        .catch(function (err) {
+          wm.posCol = prevCol;
+          wm.posRow = prevRow;
+          self.showToast(err.message);
+        })
+        .finally(function () { self.wmActing = false; });
+    }
+  }
+}).mount('#app');
+</script>
+</body>
+</html>

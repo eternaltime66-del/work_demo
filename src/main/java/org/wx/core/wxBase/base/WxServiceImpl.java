@@ -129,7 +129,53 @@ public abstract class WxServiceImpl<M extends BaseMapper<T>, T extends WxBaseEnt
 
     @Override
     public boolean save(T entity) {
+        fillBizIdIfAbsent(entity);
         return super.save(entity);
+    }
+
+    @Override
+    public boolean saveBatch(Collection<T> entityList, int batchSize) {
+        if (entityList != null) {
+            for (T entity : entityList) {
+                fillBizIdIfAbsent(entity);
+            }
+        }
+        return super.saveBatch(entityList, batchSize);
+    }
+
+    private void fillBizIdIfAbsent(T entity) {
+        if (entity == null) {
+            return;
+        }
+        try {
+            java.lang.reflect.Field idField = findIdField(entity.getClass());
+            if (idField == null) {
+                return;
+            }
+            idField.setAccessible(true);
+            Object id = idField.get(entity);
+            if (id != null && StringUtils.hasText(String.valueOf(id))) {
+                return;
+            }
+            String nextId = org.wx.core.wxBase.unit.BizIdUtil.tryNext(entity.getClass());
+            if (nextId != null && idField.getType() == String.class) {
+                idField.set(entity, nextId);
+            }
+        } catch (Exception ignored) {
+            // 无前缀或无法写入时交给 MetaObjectHandler / DB
+        }
+    }
+
+    private java.lang.reflect.Field findIdField(Class<?> clazz) {
+        Class<?> c = clazz;
+        while (c != null && c != Object.class) {
+            try {
+                return c.getDeclaredField("id");
+            } catch (NoSuchFieldException e) {
+                c = c.getSuperclass();
+            }
+        }
+        return null;
     }
 
     @Override

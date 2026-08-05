@@ -1,0 +1,181 @@
+package org.wx.core.wxBusiness.game.service;
+
+import jakarta.annotation.Resource;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.wx.core.wxBase.annotation.RedisLock;
+import org.wx.core.wxBase.base.Wx;
+import org.wx.core.wxBase.factory.ErrorFactory;
+import org.wx.core.wxBusiness.game.entity.Item;
+import org.wx.core.wxBusiness.game.entity.Recipe;
+import org.wx.core.wxBusiness.game.entity.RecipeMaterial;
+import org.wx.core.wxBusiness.game.entity.vo.CraftMaterialVo;
+import org.wx.core.wxBusiness.game.entity.vo.CraftRecipeVo;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+@Service
+public class CraftService {
+
+    @Resource
+    private RecipeService recipeService;
+    @Resource
+    private RecipeMaterialService recipeMaterialService;
+    @Resource
+    private ItemService itemService;
+    @Resource
+    private WarehouseService warehouseService;
+    @Resource
+    private BattleBagService battleBagService;
+    @Resource
+    private ItemDropSourceService itemDropSourceService;
+    @Resource
+    private ItemDetailService itemDetailService;
+
+    public List<CraftRecipeVo> listRecipes(String uid) {
+        List<Recipe> recipes = recipeService.listEnabledWithMaterials();
+        Map<String, Integer> owned = warehouseService.countItems(uid);
+        Map<String, String> outputToRecipe = buildOutputRecipeIndex(recipes);
+        List<CraftRecipeVo> list = new ArrayList<>();
+        for (Recipe recipe : recipes) {
+            list.add(buildVo(recipe, owned, outputToRecipe, false));
+        }
+        return list;
+    }
+
+    public CraftRecipeVo getRecipe(String uid, String recipeId) {
+        Recipe recipe = getEnabled(recipeId);
+        recipeService.fillOutputName(recipe);
+        recipe.setMaterials(recipeMaterialService.listByRecipeId(recipe.getId()));
+        Map<String, String> outputToRecipe = buildOutputRecipeIndex(recipeService.listEnabledWithMaterials());
+        return buildVo(recipe, warehouseService.countItems(uid), outputToRecipe, true);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    @RedisLock(key = "uid")
+    public CraftRecipeVo craft(String uid, String recipeId) {
+        ErrorFactory.throwError(Wx.isEmpty(uid), "未登录");
+        Recipe recipe = getEnabled(recipeId);
+        List<RecipeMaterial> materials = recipeMaterialService.listByRecipeId(recipeId);
+        ErrorFactory.throwError(materials == null || materials.isEmpty(), "配方材料未配置");
+
+        Map<String, Integer> owned = warehouseService.countItems(uid);
+        for (RecipeMaterial material : materials) {
+            int need = material.getQuantity() == null ? 0 : material.getQuantity();
+            int have = owned.getOrDefault(material.getItemId(), 0);
+            Item item = itemService.getById(material.getItemId());
+            String name = item != null ? item.getName() : material.getItemId();
+            ErrorFactory.throwError(have < need, name + " 不足，需要 " + need + "，当前 " + have);
+        }
+        for (RecipeMaterial material : materials) {
+            int need = material.getQuantity() == null ? 0 : material.getQuantity();
+            if (need > 0) {
+                warehouseService.consumeItem(uid, material.getItemId(), need);
+            }
+        }
+        int outQty = recipe.getOutputQty() == null || recipe.getOutputQty() < 1 ? 1 : recipe.getOutputQty();
+        // 合成产物进战斗背包（材料仍从仓库扣除）
+        battleBagService.addItem(uid, recipe.getOutputItemId(), outQty);
+        return getRecipe(uid, recipeId);
+    }
+
+    private Recipe getEnabled(String recipeId) {
+        Recipe recipe = recipeService.getById(recipeId);
+        ErrorFactory.notNull(recipe, "配方不存在");
+        ErrorFactory.throwError(!Boolean.TRUE.equals(recipe.getEnable()), "配方未启用");
+        return recipe;
+    }
+
+    private Map<String, String> buildOutputRecipeIndex(List<Recipe> recipes) {
+        Map<String, String> map = new HashMap<>();
+        for (Recipe r : recipes) {
+            if (r != null && !Wx.isEmpty(r.getOutputItemId())) {
+                map.putIfAbsent(r.getOutputItemId(), r.getId());
+            }
+        }
+        return map;
+    }
+
+    private CraftRecipeVo buildVo(Recipe recipe, Map<String, Integer> owned, Map<String, String> outputToRecipe, boolean withItemDetail) {
+        CraftRecipeVo vo = new CraftRecipeVo();
+        vo.setId(recipe.getId());
+        vo.setRemark(recipe.getRemark());
+        vo.setResultItemId(recipe.getOutputItemId());
+        vo.setResultQty(recipe.getOutputQty() == null || recipe.getOutputQty() < 1 ? 1 : recipe.getOutputQty());
+
+        Item result = itemService.getById(recipe.getOutputItemId());
+        if (result != null) {
+            vo.setName(result.getName());
+            vo.setResultItemName(result.getName());
+            vo.setResultItemIcon(result.getIcon());
+            if (result.getItemType() != null) {
+                vo.setResultItemType(result.getItemType().name());
+            }
+        } else {
+            vo.setName(!Wx.isEmpty(recipe.getName()) ? recipe.getName() : recipe.getId());
+            vo.setResultItemName(vo.getName());
+        }
+        if (!Wx.isEmpty(recipe.getName())) {
+            vo.setName(recipe.getName());
+        }
+        if (withItemDetail) {
+            vo.setResultItem(itemDetailService.build(result));
+        }
+
+        List<CraftMaterialVo> materials = new ArrayList<>();
+        List<CraftMaterialVo> missing = new ArrayList<>();
+        boolean canCraft = true;
+        List<RecipeMaterial> mats = recipe.getMaterials();
+        if (mats == null) {
+            mats = recipeMaterialService.listByRecipeId(recipe.getId());
+        }
+        for (RecipeMaterial material : mats) {
+            CraftMaterialVo mv = new CraftMaterialVo();
+            mv.setItemId(material.getItemId());
+            int need = material.getQuantity() == null ? 0 : material.getQuantity();
+            int have = owned.getOrDefault(material.getItemId(), 0);
+            mv.setRequiredQty(need);
+            mv.setOwnedQty(have);
+            int miss = Math.max(0, need - have);
+            mv.setMissingQty(miss);
+            mv.setEnough(miss <= 0);
+            Item item = itemService.getById(material.getItemId());
+            if (item != null) {
+                mv.setItemName(item.getName());
+                mv.setIcon(item.getIcon());
+            } else {
+                mv.setItemName(material.getItemName() != null ? material.getItemName() : material.getItemId());
+            }
+            fillSource(mv, outputToRecipe);
+            materials.add(mv);
+            if (miss > 0) {
+                missing.add(mv);
+                canCraft = false;
+            }
+        }
+        vo.setMaterials(materials);
+        vo.setMissingMaterials(missing);
+        vo.setCanCraft(canCraft);
+        return vo;
+    }
+
+    private void fillSource(CraftMaterialVo mv, Map<String, String> outputToRecipe) {
+        if (itemDropSourceService.hasDropSource(mv.getItemId())) {
+            mv.setSourceType("BATTLE");
+            mv.setSourceLabel("去获取");
+            return;
+        }
+        String recipeId = outputToRecipe.get(mv.getItemId());
+        if (!Wx.isEmpty(recipeId)) {
+            mv.setSourceType("CRAFT");
+            mv.setSourceLabel("去合成");
+            mv.setSourceRecipeId(recipeId);
+            return;
+        }
+        mv.setSourceType("NONE");
+        mv.setSourceLabel("敬请期待");
+    }
+}

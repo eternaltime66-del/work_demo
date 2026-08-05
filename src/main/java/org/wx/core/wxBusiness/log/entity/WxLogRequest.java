@@ -3,9 +3,9 @@ package org.wx.core.wxBusiness.log.entity;
 import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
+import org.wx.core.wxBase.annotation.BizIdPrefix;
 import org.wx.core.wxBase.base.WxBaseEntity;
-import java.math.BigDecimal;
-import java.time.LocalDate;
+
 import java.time.LocalDateTime;
 
 /**
@@ -16,12 +16,13 @@ import java.time.LocalDateTime;
 @Data
 @EqualsAndHashCode(callSuper = true)
 @TableName("wx_log_request")
+@BizIdPrefix("LR")
 public class WxLogRequest extends WxBaseEntity<WxLogRequest> {
 
     /**
      * 请求日志ID
      */
-    @TableId(type = IdType.AUTO)
+    @TableId(type = IdType.INPUT)
     private String id;
 
     /**

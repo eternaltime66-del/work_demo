@@ -1,0 +1,2228 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>游戏首页</title>
+  <link rel="stylesheet" href="/css/auth.css">
+  <link rel="stylesheet" href="/css/home.css">
+  <link rel="stylesheet" href="/css/prep.css">
+  <link rel="stylesheet" href="/css/warehouse.css">
+  <link rel="stylesheet" href="/css/craft.css">
+  <script src="/js/dev-live.js"></script>
+  <script src="/js/vue.global.prod.js"></script>
+</head>
+<body>
+<div id="app" class="page home-page">
+  <div class="bg-glow bg-glow-1"></div>
+  <div class="bg-glow bg-glow-2"></div>
+
+  <div class="home-header">
+    <h1>{{ tabTitle }}</h1>
+    <button type="button" @click="logout">退出</button>
+  </div>
+
+  <div v-if="tab === 'craft'" class="craft-topbar">
+    <div class="craft-type-select" :class="{ open: craftTypeOpen }" @click.stop>
+      <button type="button" class="craft-type-trigger" @click="craftTypeOpen = !craftTypeOpen">
+        <span>{{ craftTypeLabel }}</span>
+        <em class="craft-type-caret">▾</em>
+      </button>
+      <div v-if="craftTypeOpen" class="craft-type-menu">
+        <button
+          v-for="opt in craftTypeOptions"
+          :key="opt.value"
+          type="button"
+          class="craft-type-option"
+          :class="{ active: craftFilter === opt.value }"
+          @click="pickCraftType(opt.value)"
+        >{{ opt.label }}</button>
+      </div>
+    </div>
+    <input
+      class="craft-filter-input"
+      v-model.trim="craftKeyword"
+      type="search"
+      placeholder="输入名称筛选"
+    >
+  </div>
+
+  <div class="home-main" :class="{ 'home-main-prep': tab === 'prep', 'home-main-craft': tab === 'craft' }">
+    <!-- 首页 -->
+    <div v-show="tab === 'home'" class="home-scene">
+      <div v-if="loading" class="loading-text">加载中...</div>
+      <div v-else-if="hero" class="hero-actor" @click="openHeroDetail">
+        <div class="hero-body">
+          <div class="hero-head"></div>
+        </div>
+        <div class="hero-label">{{ hero.name || '主角' }}</div>
+        <div class="hero-tip">点击查看详情</div>
+      </div>
+      <div v-else class="loading-text">暂无角色，请重新登录领取主角</div>
+    </div>
+
+    <!-- 备战 -->
+    <div v-show="tab === 'prep'" class="tab-panel prep-panel">
+      <div class="prep-top">
+        <div class="prep-section-head">
+          <div class="prep-head-left">
+            <h3>{{ warehouseOpen ? '仓库' : '角色人偶' }}</h3>
+            <span class="prep-meta" v-if="warehouseOpen && warehouse">
+              {{ warehouse.usedSlots }}/{{ warehouse.maxSlots }} 格
+            </span>
+            <span v-if="!warehouseOpen && prepDisplayRole" class="prep-hero-name-inline">{{ prepDisplayRole.name || '主角' }}</span>
+            <button
+              v-if="!warehouseOpen && prepDisplayRole"
+              type="button"
+              class="prep-role-detail-btn"
+              @click="openPrepRoleDetail"
+            >角色详情</button>
+          </div>
+          <div class="prep-toolbar">
+            <button v-if="!warehouseOpen" type="button" @click="openWarehouse">打开仓库</button>
+            <button v-else type="button" @click="closeWarehouse">关闭仓库</button>
+            <template v-if="warehouseOpen">
+              <button
+                type="button"
+                :class="{ active: batchMode === 'toBag' }"
+                :disabled="prepActing"
+                @click="toggleBatchMode('toBag')"
+              >批量移入背包</button>
+              <button
+                v-if="batchMode === 'toBag'"
+                type="button"
+                :disabled="prepActing || !canConfirmBatch"
+                @click="confirmBatch"
+              >确认转移</button>
+              <button v-if="batchMode === 'toBag'" type="button" @click="cancelBatch">取消</button>
+            </template>
+          </div>
+        </div>
+        <div
+          class="prep-scroll"
+          :class="{ 'prep-scroll-hero': !warehouseOpen, 'prep-drop-zone': isWhDropZone }"
+          @dragover.prevent="onWhZoneDragOver"
+          @drop.prevent="onWhZoneDrop"
+        >
+          <template v-if="warehouseOpen">
+            <div v-if="!warehouseFilledSlots.length" class="prep-empty-tip">
+              <span v-if="isWhDropZone">松手放入仓库</span>
+              <span v-else>仓库为空</span>
+            </div>
+            <div class="prep-item-grid" v-else>
+              <div
+                v-for="slot in warehouseFilledSlots"
+                :key="slot.slotNo"
+                class="prep-item-wrap"
+              >
+                <div
+                  class="prep-item"
+                  :class="prepSlotClasses(slot)"
+                  :draggable="!batchMode"
+                  @dragstart="onDragStart($event, 'WAREHOUSE', slot.slotNo, slot)"
+                  @dragover.prevent="onDragOver($event, 'WAREHOUSE', slot.slotNo, slot)"
+                  @dragenter.prevent="onDragEnter('WAREHOUSE', slot.slotNo)"
+                  @dragleave="onDragLeaveEl"
+                  @drop.prevent="onDrop($event, 'WAREHOUSE', slot.slotNo, slot)"
+                  @dragend="onDragEnd"
+                  @click="onWarehouseClick(slot)"
+                >
+                  <img v-if="itemIconIsImage(slot.icon)" class="prep-item-img" :src="slot.icon" :alt="slot.itemName">
+                  <span v-else class="prep-item-icon">{{ slot.icon || '📦' }}</span>
+                  <span class="prep-item-qty">{{ slot.quantity }}</span>
+                </div>
+                <div class="prep-item-name">{{ slot.itemName }}</div>
+              </div>
+            </div>
+          </template>
+          <template v-else>
+            <div class="prep-hero-card" v-if="prepDisplayRole">
+              <div class="prep-equip-body">
+                <div class="prep-equip-panel prep-equip-panel-top">
+                  <div class="prep-equip-row prep-equip-row-center">
+                    <div
+                      class="prep-equip-slot"
+                      :class="{ filled: slotFilled('HELMET') }"
+                      @click="onEquipSlotClick('HELMET')"
+                    >
+                      <span class="prep-equip-slot-label">头盔</span>
+                      <img v-if="slotDisplayIcon('HELMET').type === 'img'" class="prep-equip-slot-img" :src="slotDisplayIcon('HELMET').src" alt="">
+                      <span v-else-if="slotDisplayIcon('HELMET').type === 'emoji'" class="prep-equip-slot-emoji">{{ slotDisplayIcon('HELMET').text }}</span>
+                      <span v-else class="prep-equip-slot-empty">空</span>
+                      <span v-if="slotItemName('HELMET')" class="prep-equip-slot-name">{{ slotItemName('HELMET') }}</span>
+                    </div>
+                  </div>
+                  <div class="prep-equip-row">
+                    <div
+                      class="prep-equip-slot"
+                      :class="{ filled: slotFilled('WEAPON') }"
+                      @click="onEquipSlotClick('WEAPON')"
+                    >
+                      <span class="prep-equip-slot-label">武器</span>
+                      <img v-if="slotDisplayIcon('WEAPON').type === 'img'" class="prep-equip-slot-img" :src="slotDisplayIcon('WEAPON').src" alt="">
+                      <span v-else-if="slotDisplayIcon('WEAPON').type === 'emoji'" class="prep-equip-slot-emoji">{{ slotDisplayIcon('WEAPON').text }}</span>
+                      <span v-else class="prep-equip-slot-empty">空</span>
+                      <span v-if="slotItemName('WEAPON')" class="prep-equip-slot-name">{{ slotItemName('WEAPON') }}</span>
+                    </div>
+                    <div
+                      class="prep-equip-slot"
+                      :class="{ filled: slotFilled('ARMOR') }"
+                      @click="onEquipSlotClick('ARMOR')"
+                    >
+                      <span class="prep-equip-slot-label">护甲</span>
+                      <img v-if="slotDisplayIcon('ARMOR').type === 'img'" class="prep-equip-slot-img" :src="slotDisplayIcon('ARMOR').src" alt="">
+                      <span v-else-if="slotDisplayIcon('ARMOR').type === 'emoji'" class="prep-equip-slot-emoji">{{ slotDisplayIcon('ARMOR').text }}</span>
+                      <span v-else class="prep-equip-slot-empty">空</span>
+                      <span v-if="slotItemName('ARMOR')" class="prep-equip-slot-name">{{ slotItemName('ARMOR') }}</span>
+                    </div>
+                  </div>
+                  <div class="prep-equip-row">
+                    <div
+                      class="prep-equip-slot"
+                      :class="{ filled: slotFilled('GLOVES') }"
+                      @click="onEquipSlotClick('GLOVES')"
+                    >
+                      <span class="prep-equip-slot-label">护手</span>
+                      <img v-if="slotDisplayIcon('GLOVES').type === 'img'" class="prep-equip-slot-img" :src="slotDisplayIcon('GLOVES').src" alt="">
+                      <span v-else-if="slotDisplayIcon('GLOVES').type === 'emoji'" class="prep-equip-slot-emoji">{{ slotDisplayIcon('GLOVES').text }}</span>
+                      <span v-else class="prep-equip-slot-empty">空</span>
+                      <span v-if="slotItemName('GLOVES')" class="prep-equip-slot-name">{{ slotItemName('GLOVES') }}</span>
+                    </div>
+                    <div
+                      class="prep-equip-slot"
+                      :class="{ filled: slotFilled('LEGS') }"
+                      @click="onEquipSlotClick('LEGS')"
+                    >
+                      <span class="prep-equip-slot-label">护腿</span>
+                      <img v-if="slotDisplayIcon('LEGS').type === 'img'" class="prep-equip-slot-img" :src="slotDisplayIcon('LEGS').src" alt="">
+                      <span v-else-if="slotDisplayIcon('LEGS').type === 'emoji'" class="prep-equip-slot-emoji">{{ slotDisplayIcon('LEGS').text }}</span>
+                      <span v-else class="prep-equip-slot-empty">空</span>
+                      <span v-if="slotItemName('LEGS')" class="prep-equip-slot-name">{{ slotItemName('LEGS') }}</span>
+                    </div>
+                  </div>
+                  <div class="prep-equip-row prep-equip-row-triple">
+                    <div
+                      v-for="acc in accessorySlots"
+                      :key="acc.slot"
+                      class="prep-equip-slot prep-equip-slot-sm"
+                      :class="{ filled: slotFilled(acc.slot) }"
+                      @click="onEquipSlotClick(acc.slot)"
+                    >
+                      <span class="prep-equip-slot-label">{{ acc.label }}</span>
+                      <img v-if="slotDisplayIcon(acc.slot).type === 'img'" class="prep-equip-slot-img" :src="slotDisplayIcon(acc.slot).src" alt="">
+                      <span v-else-if="slotDisplayIcon(acc.slot).type === 'emoji'" class="prep-equip-slot-emoji">{{ slotDisplayIcon(acc.slot).text }}</span>
+                      <span v-else class="prep-equip-slot-empty">空</span>
+                      <span v-if="slotItemName(acc.slot)" class="prep-equip-slot-name">{{ slotItemName(acc.slot) }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="prep-hero-stats">
+                <div class="prep-stat-brief">
+                  <div class="prep-stat-chip">
+                    <span class="prep-stat-chip-label">攻击</span>
+                    <span class="prep-stat-chip-value">{{ roleDisplayAtk(prepDisplayRole) }}</span>
+                  </div>
+                  <div class="prep-stat-chip">
+                    <span class="prep-stat-chip-label">防御</span>
+                    <span class="prep-stat-chip-value">{{ roleDisplayDef(prepDisplayRole) }}</span>
+                  </div>
+                  <div class="prep-stat-chip">
+                    <span class="prep-stat-chip-label">生命</span>
+                    <span class="prep-stat-chip-value">{{ roleDisplayHp(prepDisplayRole) }}</span>
+                  </div>
+                  <div class="prep-stat-chip">
+                    <span class="prep-stat-chip-label">攻速</span>
+                    <span class="prep-stat-chip-value">{{ roleDisplayAtkSpeed(prepDisplayRole) }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div v-else class="prep-empty-tip">暂无角色</div>
+          </template>
+        </div>
+      </div>
+
+      <div class="prep-bottom">
+        <div class="prep-section-head">
+          <div class="prep-head-left">
+            <h3>战斗背包</h3>
+            <span class="prep-meta">无格子上限</span>
+          </div>
+          <div class="prep-toolbar">
+            <button
+              type="button"
+              :class="{ active: batchMode === 'toWarehouse' }"
+              :disabled="prepActing"
+              @click="toggleBatchMode('toWarehouse')"
+            >批量移入仓库</button>
+            <button
+              v-if="batchMode === 'toWarehouse'"
+              type="button"
+              :disabled="prepActing || !canConfirmBatch"
+              @click="confirmBatch"
+            >确认转移</button>
+            <button v-if="batchMode === 'toWarehouse'" type="button" @click="cancelBatch">取消</button>
+          </div>
+        </div>
+        <div
+          class="prep-scroll prep-bag-zone"
+          :class="{ 'prep-drop-zone': isBagDropZone }"
+          @dragover.prevent="onBagZoneDragOver"
+          @dragenter.prevent="onDragEnter('BAG', 'zone')"
+          @dragleave="onDragLeaveEl"
+          @drop.prevent="onBagZoneDrop"
+        >
+          <div v-if="!bagItems.length" class="prep-empty-tip">
+            <span v-if="isBagDropZone">松手放入背包</span>
+            <span v-else>背包为空，从仓库拖入或批量转移物品</span>
+          </div>
+          <div v-else class="prep-item-grid">
+            <div
+              v-for="item in bagItems"
+              :key="item.id"
+              class="prep-item-wrap"
+            >
+              <div
+                class="prep-item"
+                :class="prepBagClasses(item)"
+                :draggable="!batchMode"
+                @dragstart="onDragStart($event, 'BAG', item.id, item)"
+                @dragover.prevent="onDragOver($event, 'BAG', item.id, item)"
+                @dragenter.prevent="onDragEnter('BAG', item.id)"
+                @dragleave="onDragLeaveEl"
+                @drop.prevent="onDrop($event, 'BAG', item.id, item)"
+                @dragend="onDragEnd"
+                @click="onBagClick(item)"
+              >
+                <img v-if="itemIconIsImage(item.icon)" class="prep-item-img" :src="item.icon" :alt="item.itemName">
+                <span v-else class="prep-item-icon">{{ item.icon || '📦' }}</span>
+                <span class="prep-item-qty">{{ item.quantity }}</span>
+              </div>
+              <div class="prep-item-name">{{ item.itemName }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 布局 -->
+    <div v-show="tab === 'layout'" class="tab-panel">
+      <div class="panel-tip">己方战场 · 横6 竖5 · 拖角色到格子放置 · 主角 2×2</div>
+      <div
+        class="battle-board"
+        ref="layoutBoard"
+        :style="boardStyle"
+      >
+        <div
+          v-for="cell in cells"
+          :key="'p-' + cell.r + '-' + cell.c"
+          class="battle-cell"
+          :class="{ active: isAnchor(cell.c, cell.r, draftLayouts), hover: isLayoutCellHot(cell.c, cell.r) }"
+          :style="cellStyle(cell.c, cell.r)"
+        ></div>
+        <div
+          v-for="item in draftLayouts"
+          :key="item.roleId"
+          class="battle-unit player-unit"
+          :class="{ main: item.mainRole, dragging: layoutDrag && layoutDrag.roleId === item.roleId }"
+          :style="layoutUnitStyle(item)"
+          @pointerdown.prevent="onLayoutUnitDown($event, item)"
+          @click.stop="selectPlaced(item)"
+        >
+          <span>{{ shortName(item.roleName) }}</span>
+          <em>{{ item.gridH }}×{{ item.gridW }}</em>
+        </div>
+      </div>
+
+      <div class="roster-title">可选角色 · 按住拖到战场</div>
+      <div class="roster-list">
+        <button
+          v-for="role in roles"
+          :key="role.id"
+          type="button"
+          class="roster-item"
+          :class="{ selected: selectedRoleId === role.id, onField: isOnField(role.id), dragging: layoutDrag && layoutDrag.roleId === role.id }"
+          @pointerdown.prevent="onLayoutRosterDown($event, role)"
+          @click="selectRole(role)"
+        >
+          <strong>{{ role.name || '角色' }}</strong>
+          <span>{{ role.mainRole ? '主角' : '角色' }} · {{ role.gridH || 1 }}×{{ role.gridW || 1 }}{{ isOnField(role.id) ? ' · 已上场' : '' }}</span>
+        </button>
+      </div>
+
+      <div class="panel-actions">
+        <button type="button" class="btn-ghost" @click="removeSelected" :disabled="!selectedRoleId">卸下</button>
+        <button type="button" class="btn-primary" @click="saveLayout" :disabled="layoutSaving">
+          {{ layoutSaving ? '保存中...' : '保存布局' }}
+        </button>
+      </div>
+    </div>
+
+    <div
+      v-if="layoutGhost.show"
+      class="layout-finger-ghost"
+      :style="{ left: layoutGhost.x + 'px', top: layoutGhost.y + 'px' }"
+    >{{ layoutGhost.name }}</div>
+
+    <!-- 合成台 -->
+    <div v-show="tab === 'craft'" class="tab-panel craft-panel">
+      <div v-if="craftLoading" class="loading-text">加载中...</div>
+      <div v-else-if="!filteredCraftRecipes.length" class="prep-empty-tip">暂无匹配配方</div>
+      <div v-else class="craft-list">
+        <div v-for="recipe in filteredCraftRecipes" :key="recipe.id" class="craft-row">
+          <div class="craft-row-main">
+            <img v-if="itemIconIsImage(recipe.resultItemIcon)" class="craft-row-icon" :src="recipe.resultItemIcon" alt="">
+            <span v-else class="craft-row-emoji">{{ recipe.resultItemIcon || '📦' }}</span>
+            <div class="craft-row-text">
+              <div class="craft-row-name">{{ recipe.resultItemName || recipe.name }}</div>
+              <div class="craft-row-sub">×{{ recipe.resultQty || 1 }} · {{ itemTypeLabel(recipe.resultItemType) }}</div>
+            </div>
+          </div>
+          <span class="craft-stock" :class="recipe.canCraft ? 'ok' : 'no'">{{ recipe.canCraft ? '材料充足' : '材料不足' }}</span>
+          <button type="button" class="craft-btn ghost" @click="openCraftDetail(recipe)">详情</button>
+          <button
+            v-if="recipe.canCraft"
+            type="button"
+            class="craft-btn primary"
+            :disabled="craftActing"
+            @click="executeCraft(recipe)"
+          >合成</button>
+          <button
+            v-else
+            type="button"
+            class="craft-btn warn"
+            @click="openCraftDetail(recipe, true)"
+          >去获取</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 出击：大关竖列表 -->
+    <div v-show="tab === 'deploy'" class="tab-panel deploy-panel">
+      <div v-if="deployLoading" class="empty-hint">加载关卡中...</div>
+      <div v-else class="sortie-panel">
+        <div class="stage-panel-head">
+          <h2>选关出击</h2>
+          <span class="muted">点大关进入小关</span>
+        </div>
+
+        <div v-if="!flatChapters.length" class="empty-hint">暂无大关</div>
+        <div v-else class="chapter-list">
+          <template v-for="group in chapterGroups" :key="group.typeId">
+            <div v-if="chapterGroups.length > 1" class="chapter-group-title">{{ group.typeName }}</div>
+            <button
+              v-for="ch in group.chapters"
+              :key="ch.id"
+              type="button"
+              class="chapter-row"
+              @click="openLevelSheet(ch, group.typeId)"
+            >
+              <div class="chapter-row-main">
+                <strong>{{ ch.name }}</strong>
+                <span>{{ (ch.levels || []).length }} 个小关</span>
+              </div>
+              <span class="chapter-row-arrow">›</span>
+            </button>
+          </template>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 小关列表弹窗 -->
+  <div v-if="levelSheetOpen" class="deploy-sheet-mask" @click.self="closeLevelSheet">
+    <div class="deploy-sheet">
+      <div class="deploy-sheet-head">
+        <div>
+          <h3>{{ sheetChapter ? sheetChapter.name : '小关' }}</h3>
+          <p class="muted">选择小关查看阵容</p>
+        </div>
+        <button type="button" class="deploy-sheet-close" @click="closeLevelSheet">关闭</button>
+      </div>
+      <div class="deploy-sheet-body">
+        <div v-if="!sheetLevels.length" class="empty-hint">该大关暂无小关</div>
+        <button
+          v-for="lv in sheetLevels"
+          :key="lv.id"
+          type="button"
+          class="level-row"
+          @click="openPreviewSheet(lv)"
+        >
+          <div class="level-row-code">{{ lv.code || lv.name }}</div>
+          <div class="level-row-meta">
+            <span>{{ lv.name }}</span>
+            <em>{{ levelMonsterCount(lv.id) }}</em>
+          </div>
+          <span class="chapter-row-arrow">›</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 预览 + 出击弹窗 -->
+  <div v-if="previewSheetOpen" class="deploy-sheet-mask is-preview" @click.self="closePreviewSheet">
+    <div class="deploy-sheet deploy-sheet-preview">
+      <div class="deploy-sheet-head">
+        <div>
+          <h3>{{ selectedLevel ? (selectedLevel.code || selectedLevel.name) : '关卡预览' }}</h3>
+          <p class="muted">{{ sheetChapter ? sheetChapter.name : '' }} · 敌方阵容</p>
+        </div>
+        <button type="button" class="deploy-sheet-close" @click="closePreviewSheet">返回</button>
+      </div>
+      <div class="deploy-sheet-body">
+        <div class="deploy-preview">
+          <div class="deploy-preview-head">
+            <span>敌方阵容预览</span>
+            <span class="muted">横6 · 竖5</span>
+          </div>
+          <div v-if="monsterLoading" class="empty-hint">读取怪物...</div>
+          <div v-else-if="!levelMonsters.length" class="empty-hint">该关卡暂无怪物配置</div>
+          <div v-else class="battle-board enemy-board deploy-board" :style="boardStyle">
+            <div
+              v-for="cell in cells"
+              :key="'e-' + cell.r + '-' + cell.c"
+              class="battle-cell"
+              :style="cellStyle(cell.c, cell.r)"
+            ></div>
+            <div
+              v-for="m in levelMonsters"
+              :key="m.id"
+              class="battle-unit enemy-unit"
+              :class="rarityClass(m.rarity)"
+              :style="unitStyle(m)"
+            >
+              <span>{{ shortName(m.monsterName) }}</span>
+              <em>{{ rarityLabel(m.rarity) }}</em>
+            </div>
+          </div>
+          <div class="enemy-tags" v-if="levelMonsters.length">
+            <span
+              v-for="m in levelMonsters"
+              :key="'tag-' + m.id"
+              class="enemy-tag"
+              :class="rarityClass(m.rarity)"
+            >{{ m.monsterName }} · {{ rarityLabel(m.rarity) }}</span>
+          </div>
+        </div>
+        <button
+          type="button"
+          class="battle-start-btn"
+          :disabled="!selectedLevelId || monsterLoading"
+          @click="startBattle"
+        >进入战斗</button>
+      </div>
+    </div>
+  </div>
+
+  <nav class="home-tabbar">
+    <button type="button" :class="{ active: tab === 'home' }" @click="goTab('home')">首页</button>
+    <button type="button" :class="{ active: tab === 'prep' }" @click="openPrep">备战</button>
+    <button type="button" :class="{ active: tab === 'layout' }" @click="openLayout">布局</button>
+    <button type="button" :class="{ active: tab === 'craft' }" @click="openCraft">合成</button>
+    <button type="button" :class="{ active: tab === 'deploy' }" @click="openDeploy">出击</button>
+  </nav>
+
+  <!-- 合成详情 -->
+  <div v-if="craftDetail" class="craft-detail-mask" @click.self="closeCraftDetail">
+    <div class="craft-detail-panel">
+      <div class="craft-detail-head">
+        <h3>合成详情</h3>
+        <button type="button" class="craft-detail-close" @click="closeCraftDetail">关闭</button>
+      </div>
+      <div class="craft-detail-body">
+        <div class="craft-detail-result">
+          <img v-if="itemIconIsImage(craftDetail.resultItemIcon)" class="craft-detail-result-img" :src="craftDetail.resultItemIcon" alt="">
+          <span v-else class="craft-detail-result-emoji">{{ craftDetail.resultItemIcon || '📦' }}</span>
+          <div>
+            <div class="craft-detail-result-name">{{ craftDetail.resultItemName || craftDetail.name }}</div>
+            <div class="craft-detail-result-meta">
+              产出 ×{{ craftDetail.resultQty || 1 }}
+              <template v-if="craftDetail.resultItemType"> · {{ itemTypeLabel(craftDetail.resultItemType) }}</template>
+            </div>
+            <div class="craft-detail-result-remark" v-if="craftDetail.remark">{{ craftDetail.remark }}</div>
+          </div>
+        </div>
+
+        <div class="craft-detail-section" v-if="craftDetail.resultItem">
+          <div class="section-title">物品详情</div>
+          <div class="craft-item-stats">
+            <div class="craft-stat-row" v-if="craftDetail.resultItem.code">
+              <span>编码</span><span>{{ craftDetail.resultItem.code }}</span>
+            </div>
+            <div class="craft-stat-row" v-if="craftDetail.resultItem.maxStack != null">
+              <span>堆叠上限</span><span>{{ craftDetail.resultItem.maxStack }}</span>
+            </div>
+            <div class="craft-stat-row" v-if="craftDetail.resultItem.weight != null">
+              <span>重量</span><span>{{ craftDetail.resultItem.weight }}</span>
+            </div>
+            <div class="craft-stat-row" v-if="craftDetail.resultItem.grade != null">
+              <span>品级</span><span class="hl">{{ craftDetail.resultItem.grade }}</span>
+            </div>
+            <div class="craft-stat-row" v-if="craftDetail.resultItem.baseAtk != null">
+              <span>基础攻击</span><span class="hl">{{ craftDetail.resultItem.baseAtk }}</span>
+            </div>
+            <div class="craft-stat-row" v-if="craftDetail.resultItem.hp != null">
+              <span>生命</span><span class="hl">{{ craftDetail.resultItem.hp }}</span>
+            </div>
+            <div class="craft-stat-row" v-if="craftDetail.resultItem.defense != null">
+              <span>防御</span><span class="hl">{{ craftDetail.resultItem.defense }}</span>
+            </div>
+            <div class="craft-stat-row" v-if="craftDetail.resultItem.atkSpeedUpRatio != null && Number(craftDetail.resultItem.atkSpeedUpRatio) !== 0">
+              <span>增加攻速</span><span class="hl">{{ craftDetail.resultItem.atkSpeedUpRatio }}%</span>
+            </div>
+            <div class="craft-stat-row" v-if="craftDetail.resultItem.atkSpeedDownRatio != null && Number(craftDetail.resultItem.atkSpeedDownRatio) !== 0">
+              <span>减少攻速</span><span class="hl">{{ craftDetail.resultItem.atkSpeedDownRatio }}%</span>
+            </div>
+            <div class="craft-stat-row" v-if="craftDetail.resultItem.normalSkillName || craftDetail.resultItem.normalSkillId">
+              <span>普攻技能</span>
+              <button
+                type="button"
+                class="skill-link"
+                :disabled="!craftDetail.resultItem.normalSkillId"
+                @click="openSkillDetail(craftDetail.resultItem.normalSkillId)"
+              >{{ craftDetail.resultItem.normalSkillName || craftDetail.resultItem.normalSkillId }}</button>
+            </div>
+            <div class="craft-stat-row" v-if="craftDetail.resultItem.chargeSkillSlotCount != null && craftDetail.resultItem.chargeSkillSlotCount > 0">
+              <span>充能技能槽</span><span class="hl">{{ craftDetail.resultItem.chargeSkillSlotCount }}</span>
+            </div>
+            <div class="craft-stat-row" v-if="craftDetail.resultItem.playerCanEditSkillSlot">
+              <span>技能槽可编辑</span><span class="hl">是</span>
+            </div>
+            <div class="craft-stat-row craft-stat-row-skills" v-if="craftDetail.resultItem.defaultSkills && craftDetail.resultItem.defaultSkills.length">
+              <span>默认技能</span>
+              <div class="skill-link-list">
+                <button
+                  v-for="sk in craftDetail.resultItem.defaultSkills"
+                  :key="sk.id || sk.name"
+                  type="button"
+                  class="skill-link"
+                  :disabled="!sk.id"
+                  @click="openSkillDetail(sk.id)"
+                >{{ sk.name || sk.id }}</button>
+              </div>
+            </div>
+            <div class="craft-stat-row" v-else-if="craftDetail.resultItem.defaultSkillNames && craftDetail.resultItem.defaultSkillNames.length">
+              <span>默认技能</span><span class="hl">{{ craftDetail.resultItem.defaultSkillNames.join('、') }}</span>
+            </div>
+            <div class="craft-stat-row" v-if="craftDetail.resultItem.remark">
+              <span>备注</span><span>{{ craftDetail.resultItem.remark }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="craft-detail-section">
+          <div class="section-title">所需材料</div>
+          <div
+            v-for="mat in craftDetail.materials"
+            :key="mat.itemId"
+            class="craft-mat-row"
+            :class="{ enough: mat.enough, short: !mat.enough }"
+          >
+            <img v-if="itemIconIsImage(mat.icon)" class="craft-mat-img" :src="mat.icon" alt="">
+            <span v-else class="craft-mat-emoji">{{ mat.icon || '📦' }}</span>
+            <div class="craft-mat-info">
+              <div class="craft-mat-name">{{ mat.itemName }}</div>
+              <div class="craft-mat-qty">拥有 {{ mat.ownedQty }}/需要 {{ mat.requiredQty }}</div>
+            </div>
+            <button
+              type="button"
+              class="craft-btn ghost mini"
+              @click="onMaterialAction(mat)"
+            >{{ mat.sourceLabel || '查看' }}</button>
+          </div>
+        </div>
+
+        <div class="craft-detail-section" v-if="craftDropSources.length">
+          <div class="section-title">材料掉落 · {{ craftDropFocusName || '关卡' }}</div>
+          <div v-for="(d, i) in craftDropSources" :key="'drop-' + i" class="craft-drop-row">
+            <div class="craft-drop-main">
+              <div class="craft-drop-code">{{ d.displayCode || '—' }} {{ d.levelName || '' }}</div>
+              <div class="craft-drop-sub">{{ d.chapterName || '' }} · {{ d.monsterName }} · {{ formatDropRate(d.dropRate) }} · {{ d.minQty }}-{{ d.maxQty }}</div>
+            </div>
+            <button type="button" class="craft-btn warn mini" @click="goDeployForLevel(d.levelId)">去出击</button>
+          </div>
+        </div>
+      </div>
+      <div class="craft-detail-foot">
+        <button
+          type="button"
+          class="craft-run-btn"
+          :disabled="craftActing || !craftDetail.canCraft"
+          @click="executeCraft(craftDetail)"
+        >{{ craftDetail.canCraft ? '确认合成' : '材料不足' }}</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 备战物品详情 -->
+  <div v-if="prepItemDetail && prepItemView" class="item-detail-mask" @click.self="closePrepItemDetail">
+    <div class="item-detail-panel">
+      <div class="item-detail-head">
+        <button type="button" class="item-detail-close" @click="closePrepItemDetail">关闭</button>
+      </div>
+      <div class="item-detail-hero">
+        <img
+          v-if="itemIconIsImage(prepItemView.icon)"
+          class="item-detail-icon-img"
+          :src="prepItemView.icon"
+          :alt="prepItemView.name"
+        >
+        <span v-else class="item-detail-icon">{{ prepItemView.icon || '📦' }}</span>
+        <h3>{{ prepItemView.name || '物品' }}</h3>
+        <div class="item-detail-code" v-if="prepItemView.itemType">{{ itemTypeLabel(prepItemView.itemType) }}</div>
+      </div>
+      <div class="item-detail-stats">
+        <div class="item-stat-row" v-if="prepItemDetail.source === 'WAREHOUSE' || prepItemDetail.source === 'BAG'">
+          <span>数量</span>
+          <span class="highlight">{{ prepItemView.quantity || 0 }}</span>
+        </div>
+        <div class="item-stat-row" v-if="prepItemDetail.source === 'EQUIP'">
+          <span>装备槽</span>
+          <span class="highlight">{{ slotLabelMap[prepItemView.slot] || prepItemView.slot }}</span>
+        </div>
+        <div class="item-stat-row" v-if="prepItemView.code">
+          <span>编码</span>
+          <span>{{ prepItemView.code }}</span>
+        </div>
+        <div class="item-stat-row" v-if="prepItemView.maxStack != null">
+          <span>堆叠上限</span>
+          <span>{{ prepItemView.maxStack }}</span>
+        </div>
+        <div class="item-stat-row" v-if="prepItemView.weight != null">
+          <span>重量</span>
+          <span>{{ prepItemView.weight }}</span>
+        </div>
+        <div class="item-stat-row" v-if="prepItemView.grade != null">
+          <span>品级</span>
+          <span class="highlight">{{ prepItemView.grade }}</span>
+        </div>
+        <div class="item-stat-row" v-if="prepItemView.baseAtk != null">
+          <span>基础攻击</span>
+          <span class="highlight">{{ prepItemView.baseAtk }}</span>
+        </div>
+        <div class="item-stat-row" v-if="prepItemView.hp != null">
+          <span>生命</span>
+          <span class="highlight">{{ prepItemView.hp }}</span>
+        </div>
+        <div class="item-stat-row" v-if="prepItemView.defense != null">
+          <span>防御</span>
+          <span class="highlight">{{ prepItemView.defense }}</span>
+        </div>
+        <div class="item-stat-row" v-if="prepItemView.atkSpeedUpRatio != null && Number(prepItemView.atkSpeedUpRatio) !== 0">
+          <span>增加攻速</span>
+          <span class="highlight">{{ prepItemView.atkSpeedUpRatio }}%</span>
+        </div>
+        <div class="item-stat-row" v-if="prepItemView.atkSpeedDownRatio != null && Number(prepItemView.atkSpeedDownRatio) !== 0">
+          <span>减少攻速</span>
+          <span class="highlight">{{ prepItemView.atkSpeedDownRatio }}%</span>
+        </div>
+        <div class="item-stat-row" v-if="prepItemView.normalSkillName || prepItemView.normalSkillId">
+          <span>普攻技能</span>
+          <button
+            type="button"
+            class="skill-link"
+            :disabled="!prepItemView.normalSkillId"
+            @click="openSkillDetail(prepItemView.normalSkillId)"
+          >{{ prepItemView.normalSkillName || prepItemView.normalSkillId }}</button>
+        </div>
+        <div class="item-stat-row" v-if="prepItemView.chargeSkillSlotCount != null && prepItemView.chargeSkillSlotCount > 0">
+          <span>充能技能槽</span>
+          <span class="highlight">{{ prepItemView.chargeSkillSlotCount }}</span>
+        </div>
+        <div class="item-stat-row" v-if="prepItemView.playerCanEditSkillSlot">
+          <span>技能槽可编辑</span>
+          <span class="highlight">是</span>
+        </div>
+        <div class="item-stat-row item-stat-row-skills" v-if="prepItemView.defaultSkills && prepItemView.defaultSkills.length">
+          <span>默认技能</span>
+          <div class="skill-link-list">
+            <button
+              v-for="sk in prepItemView.defaultSkills"
+              :key="sk.id || sk.name"
+              type="button"
+              class="skill-link"
+              :disabled="!sk.id"
+              @click="openSkillDetail(sk.id)"
+            >{{ sk.name || sk.id }}</button>
+          </div>
+        </div>
+        <div class="item-stat-row" v-else-if="prepItemView.defaultSkillNames && prepItemView.defaultSkillNames.length">
+          <span>默认技能</span>
+          <span class="highlight">{{ prepItemView.defaultSkillNames.join('、') }}</span>
+        </div>
+        <div class="item-stat-row" v-if="prepItemView.remark">
+          <span>备注</span>
+          <span>{{ prepItemView.remark }}</span>
+        </div>
+      </div>
+      <div class="item-detail-actions">
+        <button
+          v-if="prepItemDetail.source === 'WAREHOUSE'"
+          type="button"
+          class="item-detail-transfer"
+          :disabled="prepActing"
+          @click="transferDetailToBag"
+        >转移到背包</button>
+        <button
+          v-for="opt in equipableSlotOptions"
+          :key="opt.slot"
+          type="button"
+          class="item-detail-transfer"
+          :disabled="prepActing"
+          @click="equipDetailSlot(opt.slot)"
+        >装备{{ opt.label }}</button>
+        <button
+          v-if="prepItemDetail.source === 'BAG'"
+          type="button"
+          class="item-detail-transfer wh"
+          :disabled="prepActing"
+          @click="transferDetailToWarehouse"
+        >转移到仓库</button>
+        <button
+          v-if="prepItemDetail.source === 'EQUIP'"
+          type="button"
+          class="item-detail-transfer wh"
+          :disabled="prepActing"
+          @click="unequipDetailSlot"
+        >卸下</button>
+      </div>
+    </div>
+  </div>
+
+  <div v-if="detailOpen && detailRole" class="hero-detail-mask" @click.self="closeHeroDetail">
+    <div class="hero-detail-panel">
+      <div class="hero-detail-head">
+        <h3>角色详情</h3>
+        <button type="button" class="hero-detail-close" @click="closeHeroDetail">关闭</button>
+      </div>
+      <div class="hero-detail-body">
+        <div class="hero-detail-hero">
+          <div class="hero-body hero-detail-figure">
+            <div class="hero-head"></div>
+          </div>
+          <div class="hero-detail-name">{{ detailRole.name || '主角' }}</div>
+          <div class="hero-detail-sub">{{ detailRole.mainRole ? '主角' : '角色' }} · 占地 {{ detailRole.gridH || 2 }}×{{ detailRole.gridW || 2 }}</div>
+        </div>
+
+        <div class="hero-detail-primary">
+          <div class="hero-stat-card stat-atk">
+            <span class="hero-stat-label">攻击</span>
+            <span class="hero-stat-value">{{ roleDisplayAtk(detailRole) }}</span>
+          </div>
+          <div class="hero-stat-card stat-hp">
+            <span class="hero-stat-label">生命</span>
+            <span class="hero-stat-value">{{ roleDisplayHp(detailRole) }}</span>
+          </div>
+          <div class="hero-stat-card stat-def">
+            <span class="hero-stat-label">防御</span>
+            <span class="hero-stat-value">{{ roleDisplayDef(detailRole) }}</span>
+          </div>
+          <div class="hero-stat-card stat-spd">
+            <span class="hero-stat-label">攻速</span>
+            <span class="hero-stat-value">{{ roleDisplayAtkSpeed(detailRole) }}</span>
+          </div>
+        </div>
+
+        <div class="hero-detail-section">
+          <div class="section-title">基础 / 额外 / 装备</div>
+          <div class="hero-detail-row"><span>基础攻击</span><span class="hero-detail-row-value">{{ detailRole.baseAtk || 0 }}</span></div>
+          <div class="hero-detail-row"><span>额外攻击</span><span class="hero-detail-row-value">{{ detailRole.extraAtk || 0 }}</span></div>
+          <div class="hero-detail-row"><span>装备攻击</span><span class="hero-detail-row-value">+{{ detailRole.equipBonusAtk || 0 }}</span></div>
+          <div class="hero-detail-row"><span>基础生命</span><span class="hero-detail-row-value">{{ detailRole.baseHp || 0 }}</span></div>
+          <div class="hero-detail-row"><span>额外生命</span><span class="hero-detail-row-value">{{ detailRole.extraHp || 0 }}</span></div>
+          <div class="hero-detail-row"><span>装备生命</span><span class="hero-detail-row-value">+{{ detailRole.equipBonusHp || 0 }}</span></div>
+          <div class="hero-detail-row"><span>基础防御</span><span class="hero-detail-row-value">{{ detailRole.baseDef || 0 }}</span></div>
+          <div class="hero-detail-row"><span>额外防御</span><span class="hero-detail-row-value">{{ detailRole.extraDef || 0 }}</span></div>
+          <div class="hero-detail-row"><span>装备防御</span><span class="hero-detail-row-value">+{{ detailRole.equipBonusDef || 0 }}</span></div>
+          <div class="hero-detail-row"><span>基础攻速</span><span class="hero-detail-row-value">{{ roleBaseAtkSpeed(detailRole) }}</span></div>
+          <div class="hero-detail-row"><span>最终攻速</span><span class="hero-detail-row-value">{{ roleDisplayAtkSpeed(detailRole) }}</span></div>
+          <div class="hero-detail-row"><span>基础行动值</span><span class="hero-detail-row-value">{{ detailRole.baseAction || 0 }}</span></div>
+          <div class="hero-detail-row"><span>最终行动值</span><span class="hero-detail-row-value">{{ roleDisplayAction(detailRole) }}</span></div>
+        </div>
+
+        <div class="hero-detail-section">
+          <div class="section-title">攻速参数</div>
+          <div class="hero-detail-row"><span>增加攻速</span><span class="hero-detail-row-value">{{ detailRole.atkSpeedUpRatio || 0 }}%</span></div>
+          <div class="hero-detail-row"><span>减少攻速</span><span class="hero-detail-row-value">{{ detailRole.atkSpeedDownRatio || 0 }}%</span></div>
+        </div>
+
+        <div class="hero-detail-section">
+          <div class="section-title">比例</div>
+          <div class="hero-detail-row"><span>造成伤害比例</span><span class="hero-detail-row-value">{{ detailRole.dealDmgRatio != null ? detailRole.dealDmgRatio : 100 }}%</span></div>
+          <div class="hero-detail-row"><span>受到伤害比例</span><span class="hero-detail-row-value">{{ detailRole.takenDmgRatio != null ? detailRole.takenDmgRatio : 100 }}%</span></div>
+          <div class="hero-detail-row"><span>吸血比例</span><span class="hero-detail-row-value">{{ detailRole.lifeStealRatio || 0 }}%</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div v-if="skillDetailOpen" class="skill-detail-mask" @click.self="closeSkillDetail">
+    <div class="skill-detail-panel">
+      <div class="skill-detail-head">
+        <h3>技能详情</h3>
+        <button type="button" class="item-detail-close" @click="closeSkillDetail">关闭</button>
+      </div>
+      <div v-if="skillDetailLoading" class="item-detail-loading">加载中…</div>
+      <template v-else-if="skillDetail">
+        <div class="skill-detail-hero">
+          <div class="skill-detail-name">{{ skillDetail.skill.name || '技能' }}</div>
+          <div class="skill-detail-sub">
+            {{ skillTypeLabel(skillDetail.skill.skillType) }}
+            <template v-if="skillDetail.skill.code"> · {{ skillDetail.skill.code }}</template>
+          </div>
+        </div>
+        <div class="item-detail-stats">
+          <div class="item-stat-row">
+            <span>所需充能</span>
+            <span class="highlight">{{ skillNeedChargeText(skillDetail.skill) }}</span>
+          </div>
+          <div class="item-stat-row" v-if="skillDetail.skill.maxCastSkill != null && skillDetail.skill.maxCastSkill > 0">
+            <span>本技能最大释放</span>
+            <span>{{ skillDetail.skill.maxCastSkill }}</span>
+          </div>
+          <div class="item-stat-row" v-if="skillDetail.skill.remark">
+            <span>备注</span>
+            <span>{{ skillDetail.skill.remark }}</span>
+          </div>
+        </div>
+        <div class="item-detail-section" v-if="skillDetail.charges && skillDetail.charges.length">
+          <div class="section-title">充能条件</div>
+          <div v-for="(c, idx) in skillDetail.charges" :key="c.id || idx" class="skill-detail-block">
+            <div class="skill-detail-block-title">{{ c.name || ('条件' + (idx + 1)) }}</div>
+            <div class="item-stat-row"><span>类型</span><span>{{ chargeConditionLabel(c.conditionType) }}</span></div>
+            <div class="item-stat-row" v-if="c.conditionType === 'ACTION_VALUE'">
+              <span>每经过行动值</span><span>{{ c.everyActionValue || 0 }} → +{{ c.chargeGain || 0 }}</span>
+            </div>
+            <template v-else-if="c.conditionType === 'SKILL_CHARGE'">
+              <div class="item-stat-row"><span>事件</span><span>{{ skillChargeEventLabel(c.skillChargeEvent) }}</span></div>
+              <div class="item-stat-row"><span>范围</span><span>{{ skillChargeMatchLabel(c.skillChargeMatch) }}</span></div>
+              <div class="item-stat-row" v-if="c.skillChargeMatch === 'ANY_TYPE'">
+                <span>技能类型</span><span>{{ skillTypeLabel(c.matchSkillType) }}</span>
+              </div>
+              <div class="item-stat-row"><span>增加充能</span><span class="highlight">+{{ c.chargeGain || 0 }}</span></div>
+            </template>
+          </div>
+        </div>
+        <div class="item-detail-section" v-if="skillDetail.effects && skillDetail.effects.length">
+          <div class="section-title">释放效果</div>
+          <div v-for="(e, idx) in skillDetail.effects" :key="e.id || idx" class="skill-detail-block">
+            <div class="skill-detail-block-title">{{ e.name || ('效果' + (idx + 1)) }}</div>
+            <div class="item-stat-row"><span>目标</span><span>{{ effectTargetLabel(e.targetType) }}</span></div>
+            <div class="item-stat-row"><span>效果</span><span>{{ effectTypeLabel(e.effectType) }}</span></div>
+            <div class="item-stat-row" v-if="e.effectType === 'ATTR_MODIFY'">
+              <span>属性</span><span>{{ attrModifyKeyLabel(e.attrKey) }} · {{ attrModifyDirLabel(e.attrDir) }}</span>
+            </div>
+            <div class="item-stat-row" v-if="e.hitSegments != null">
+              <span>段数</span><span>{{ e.hitSegments }}</span>
+            </div>
+            <div class="item-stat-row item-stat-row-formula" v-if="formatEffectFormula(e)">
+              <span>公式</span>
+              <span class="highlight formula-text">{{ formatEffectFormula(e) }}</span>
+            </div>
+            <div class="item-stat-row" v-if="e.remark">
+              <span>备注</span><span>{{ e.remark }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="item-detail-section" v-if="(!skillDetail.charges || !skillDetail.charges.length) && (!skillDetail.effects || !skillDetail.effects.length)">
+          <div class="muted" style="font-size:13px">暂无充能条件与效果配置</div>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <div v-if="toast.show" class="toast" :class="toast.type">{{ toast.text }}</div>
+</div>
+
+<script src="/js/config.js"></script>
+<script src="/js/api.js"></script>
+<script>
+const { createApp } = Vue;
+const COLS = 6;
+const ROWS = 5;
+const GAP = 6;
+const CELL = 54;
+
+createApp({
+  data() {
+    return {
+      tab: 'home',
+      loading: true,
+      hero: null,
+      roles: [],
+      detailOpen: false,
+      detailRoleData: null,
+      toast: { show: false, text: '', type: 'error' },
+      draftLayouts: [],
+      selectedRoleId: '',
+      layoutSaving: false,
+      layoutDrag: null,
+      layoutHover: null,
+      layoutGhost: { show: false, x: 0, y: 0, name: '' },
+      stageTree: [],
+      selectedTypeId: '',
+      selectedChapterId: '',
+      selectedLevelId: '',
+      selectedLevel: null,
+      sheetChapter: null,
+      sheetLevels: [],
+      levelSheetOpen: false,
+      previewSheetOpen: false,
+      levelMonsters: [],
+      monsterCountMap: {},
+      deployLoading: false,
+      monsterLoading: false,
+      warehouseOpen: false,
+      warehouse: null,
+      battleBag: null,
+      equipSlots: [],
+      bagItems: [],
+      prepActing: false,
+      batchMode: '',
+      batchWhSlots: [],
+      batchBagIds: [],
+      dragState: null,
+      prepItemDetail: null,
+      skillDetailOpen: false,
+      skillDetailLoading: false,
+      skillDetail: null,
+      prepMainRole: null,
+      craftRecipes: [],
+      craftLoading: false,
+      craftActing: false,
+      craftFilter: 'all',
+      craftTypeOpen: false,
+      craftKeyword: '',
+      craftDetail: null,
+      craftDropSources: [],
+      craftDropFocusName: '',
+      craftTypeOptions: [
+        { value: 'all', label: '全部类型' },
+        { value: 'WEAPON', label: '武器' },
+        { value: 'ARMOR', label: '护甲' },
+        { value: 'HELMET', label: '头盔' },
+        { value: 'GLOVES', label: '护手' },
+        { value: 'LEGS', label: '护腿' },
+        { value: 'ACCESSORY', label: '饰品' },
+        { value: 'MATERIAL', label: '材料' }
+      ],
+      accessorySlots: [
+        { slot: 'ACCESSORY_1', label: '饰品1' },
+        { slot: 'ACCESSORY_2', label: '饰品2' },
+        { slot: 'ACCESSORY_3', label: '饰品3' }
+      ],
+      itemTypeSlotMap: {
+        WEAPON: ['WEAPON'],
+        ARMOR: ['ARMOR'],
+        GLOVES: ['GLOVES'],
+        HELMET: ['HELMET'],
+        LEGS: ['LEGS'],
+        ACCESSORY: ['ACCESSORY_1', 'ACCESSORY_2', 'ACCESSORY_3']
+      },
+      slotLabelMap: {
+        WEAPON: '武器',
+        ARMOR: '护甲',
+        GLOVES: '护手',
+        LEGS: '护腿',
+        HELMET: '头盔',
+        ACCESSORY_1: '饰品1',
+        ACCESSORY_2: '饰品2',
+        ACCESSORY_3: '饰品3'
+      },
+      _dragDepth: 0
+    };
+  },
+  computed: {
+    tabTitle() {
+      return { home: '首页', prep: '备战', layout: '布局', craft: '合成台', deploy: '出击' }[this.tab] || '首页';
+    },
+    craftTypeLabel() {
+      var hit = (this.craftTypeOptions || []).find((o) => o.value === this.craftFilter);
+      return hit ? hit.label : '全部类型';
+    },
+    filteredCraftRecipes() {
+      var list = this.craftRecipes || [];
+      var kw = (this.craftKeyword || '').toLowerCase();
+      var filter = this.craftFilter || 'all';
+      return list.filter((r) => {
+        if (filter !== 'all' && (r.resultItemType || '') !== filter) return false;
+        if (!kw) return true;
+        var name = ((r.resultItemName || '') + ' ' + (r.name || '')).toLowerCase();
+        return name.indexOf(kw) >= 0;
+      });
+    },
+    prepDisplayRole() {
+      return this.prepMainRole || this.hero;
+    },
+    detailRole() {
+      var snap = this.detailRoleData;
+      if (!snap) return this.hero;
+      // 装备后 prep/hero 会刷新；详情优先用最新同 id 角色，避免属性不更新
+      var live = this.prepMainRole && this.prepMainRole.id === snap.id
+        ? this.prepMainRole
+        : (this.hero && this.hero.id === snap.id ? this.hero : null);
+      return live || snap;
+    },
+    /** 物品详情展示：合并装备槽 detail 与背包/仓库基础字段 */
+    prepItemView() {
+      if (!this.prepItemDetail || !this.prepItemDetail.data) return null;
+      var raw = this.prepItemDetail.data;
+      var detail = raw.detail || {};
+      return {
+        slot: raw.slot,
+        quantity: raw.quantity,
+        itemId: raw.itemId || detail.itemId,
+        name: raw.itemName || raw.name || detail.name,
+        icon: raw.icon || detail.icon,
+        itemType: raw.itemType || detail.itemType || raw.requiredType,
+        code: detail.code || raw.code,
+        maxStack: detail.maxStack != null ? detail.maxStack : raw.maxStack,
+        weight: detail.weight != null ? detail.weight : raw.weight,
+        grade: detail.grade != null ? detail.grade : raw.grade,
+        baseAtk: detail.baseAtk != null ? detail.baseAtk : raw.baseAtk,
+        hp: detail.hp != null ? detail.hp : raw.hp,
+        defense: detail.defense != null ? detail.defense : raw.defense,
+        atkSpeedUpRatio: detail.atkSpeedUpRatio != null ? detail.atkSpeedUpRatio : raw.atkSpeedUpRatio,
+        atkSpeedDownRatio: detail.atkSpeedDownRatio != null ? detail.atkSpeedDownRatio : raw.atkSpeedDownRatio,
+        normalSkillId: detail.normalSkillId || raw.normalSkillId,
+        normalSkillName: detail.normalSkillName || raw.normalSkillName,
+        chargeSkillSlotCount: detail.chargeSkillSlotCount != null ? detail.chargeSkillSlotCount : raw.chargeSkillSlotCount,
+        playerCanEditSkillSlot: detail.playerCanEditSkillSlot != null ? detail.playerCanEditSkillSlot : raw.playerCanEditSkillSlot,
+        defaultSkillNames: detail.defaultSkillNames || raw.defaultSkillNames || [],
+        defaultSkills: detail.defaultSkills || raw.defaultSkills || [],
+        remark: detail.remark || raw.remark
+      };
+    },
+    warehouseFilledSlots() {
+      if (!this.warehouse || !this.warehouse.slots) return [];
+      return this.warehouse.slots.filter((s) => s && s.itemId && (s.quantity == null || s.quantity > 0));
+    },
+    equipSlotMap() {
+      var map = {};
+      (this.equipSlots || []).forEach((slot) => { map[slot.slot] = slot; });
+      return map;
+    },
+    canConfirmBatch() {
+      if (this.batchMode === 'toBag') return this.batchWhSlots.length > 0;
+      if (this.batchMode === 'toWarehouse') return this.batchBagIds.length > 0;
+      return false;
+    },
+    isBagDropZone() {
+      return this.dragState && this.dragState.fromType === 'WAREHOUSE';
+    },
+    isWhDropZone() {
+      return this.dragState && this.dragState.fromType === 'BAG';
+    },
+    equipableSlotOptions() {
+      if (!this.prepItemDetail || this.prepItemDetail.source !== 'BAG') return [];
+      var type = this.prepItemDetail.data && this.prepItemDetail.data.itemType;
+      var slots = this.itemTypeSlotMap[type] || [];
+      var labelMap = this.slotLabelMap;
+      return slots.map((slot) => ({ slot: slot, label: labelMap[slot] || slot }));
+    },
+    cells() {
+      var list = [];
+      for (var r = 0; r < ROWS; r++) {
+        for (var c = 0; c < COLS; c++) {
+          list.push({ r: r, c: c });
+        }
+      }
+      return list;
+    },
+    boardStyle() {
+      var cell = this.previewSheetOpen ? 42 : CELL;
+      var gap = this.previewSheetOpen ? 4 : GAP;
+      return {
+        width: (COLS * cell + (COLS - 1) * gap) + 'px',
+        height: (ROWS * cell + (ROWS - 1) * gap) + 'px',
+        '--cell': cell + 'px',
+        '--gap': gap + 'px'
+      };
+    },
+    selectedRole() {
+      return this.roles.find((r) => r.id === this.selectedRoleId) || null;
+    },
+    chapterGroups() {
+      return (this.stageTree || []).map((t) => ({
+        typeId: t.id,
+        typeName: t.name,
+        chapters: t.chapters || []
+      })).filter((g) => g.chapters.length);
+    },
+    flatChapters() {
+      var list = [];
+      this.chapterGroups.forEach((g) => {
+        g.chapters.forEach((ch) => list.push(ch));
+      });
+      return list;
+    }
+  },
+  mounted() {
+    if (!GameApi.getToken()) {
+      location.href = APP_CONFIG.loginPage || '/login.html';
+      return;
+    }
+    this._onDocClick = () => { this.craftTypeOpen = false; };
+    document.addEventListener('click', this._onDocClick);
+    this.loadHero();
+    if (location.hash === '#deploy') {
+      this.openDeploy();
+    }
+  },
+  beforeUnmount() {
+    if (this._onDocClick) document.removeEventListener('click', this._onDocClick);
+    this.unbindLayoutDragListeners();
+  },
+  methods: {
+    showToast(text, type) {
+      this.toast = { show: true, text: text, type: type || 'error' };
+      setTimeout(() => { this.toast.show = false; }, 2200);
+    },
+    authCatch(err) {
+      this.showToast(err.message || '加载失败');
+      if (err.result && (err.result.code === '403' || String(err.message).indexOf('登录') >= 0)) {
+        GameApi.clearToken();
+        setTimeout(() => { location.href = APP_CONFIG.loginPage || '/login.html'; }, 800);
+      }
+    },
+    loadHero() {
+      this.loading = true;
+      GameApi.playerRoleList()
+        .then((res) => {
+          this.roles = (res.data || []).map((r) => {
+            if (r.mainRole) {
+              r.gridH = r.gridH || 2;
+              r.gridW = r.gridW || 2;
+            } else {
+              r.gridH = r.gridH || 1;
+              r.gridW = r.gridW || 1;
+            }
+            return r;
+          });
+          this.hero = this.roles.find((r) => r.mainRole) || this.roles[0] || null;
+        })
+        .catch((err) => this.authCatch(err))
+        .finally(() => { this.loading = false; });
+    },
+    openHeroDetail() {
+      if (!this.hero) return;
+      var self = this;
+      var id = this.hero.id;
+      this.detailRoleData = this.hero;
+      this.detailOpen = true;
+      // 拉取含装备加成的最新详情
+      GameApi.playerRoleInfo(id)
+        .then((res) => {
+          if (res.data) {
+            self.detailRoleData = res.data;
+            if (res.data.mainRole) self.hero = res.data;
+          }
+        })
+        .catch(() => {});
+    },
+    openPrepRoleDetail() {
+      var role = this.prepDisplayRole;
+      if (!role) return;
+      this.detailRoleData = role;
+      this.detailOpen = true;
+    },
+    closeHeroDetail() {
+      this.detailOpen = false;
+      this.detailRoleData = null;
+    },
+    logout() {
+      GameApi.clearToken();
+      location.href = APP_CONFIG.loginPage || '/login.html';
+    },
+    goTab(key) {
+      this.closeDeploySheets();
+      this.craftTypeOpen = false;
+      this.tab = key;
+    },
+    closeDeploySheets() {
+      this.levelSheetOpen = false;
+      this.previewSheetOpen = false;
+      this.levelMonsters = [];
+    },
+    openPrep() {
+      this.closeDeploySheets();
+      this.tab = 'prep';
+      this.loadPrep();
+    },
+    openLayout() {
+      this.closeDeploySheets();
+      this.tab = 'layout';
+      if (!this.roles.length) this.loadHero();
+      GameApi.playerLayoutList()
+        .then((res) => {
+          this.draftLayouts = (res.data || []).map((x) => Object.assign({}, x));
+          if (!this.selectedRoleId && this.hero) this.selectedRoleId = this.hero.id;
+        })
+        .catch((err) => this.authCatch(err));
+    },
+    openDeploy() {
+      this.closeDeploySheets();
+      this.tab = 'deploy';
+      if (this.stageTree.length) return;
+      this.deployLoading = true;
+      GameApi.stageTree()
+        .then((res) => { this.stageTree = res.data || []; })
+        .catch((err) => this.authCatch(err))
+        .finally(() => { this.deployLoading = false; });
+    },
+    openCraft() {
+      this.closeDeploySheets();
+      this.craftTypeOpen = false;
+      this.tab = 'craft';
+      this.loadCraft();
+    },
+    pickCraftType(value) {
+      this.craftFilter = value || 'all';
+      this.craftTypeOpen = false;
+    },
+    closeCraftTypeMenu() {
+      this.craftTypeOpen = false;
+    },
+    loadCraft() {
+      this.craftLoading = true;
+      GameApi.craftList()
+        .then((res) => { this.craftRecipes = res.data || []; })
+        .catch((err) => this.authCatch(err))
+        .finally(() => { this.craftLoading = false; });
+    },
+    openCraftDetail(recipe, focusMissing) {
+      if (!recipe || !recipe.id) return;
+      this.craftDropSources = [];
+      this.craftDropFocusName = '';
+      GameApi.craftDetail(recipe.id)
+        .then((res) => {
+          this.craftDetail = res.data || recipe;
+          if (focusMissing) {
+            var miss = (this.craftDetail.missingMaterials || [])[0]
+              || (this.craftDetail.materials || []).find((m) => !m.enough);
+            if (miss) this.onMaterialAction(miss);
+          }
+        })
+        .catch((err) => this.authCatch(err));
+    },
+    closeCraftDetail() {
+      this.craftDetail = null;
+      this.craftDropSources = [];
+      this.craftDropFocusName = '';
+    },
+    executeCraft(recipe) {
+      var id = recipe && recipe.id;
+      if (!id || this.craftActing) return;
+      this.craftActing = true;
+      var detailOpen = !!(this.craftDetail && this.craftDetail.id === id);
+      GameApi.craftExecute(id)
+        .then((res) => {
+          this.showToast('合成成功，已放入背包', 'success');
+          var updated = res.data;
+          if (updated) {
+            // 仅在详情已打开时刷新详情；列表点「合成」不应弹出详情
+            if (detailOpen) this.craftDetail = updated;
+            this.craftRecipes = (this.craftRecipes || []).map((r) => r.id === updated.id ? updated : r);
+          }
+          this.loadCraft();
+        })
+        .catch((err) => this.authCatch(err))
+        .finally(() => { this.craftActing = false; });
+    },
+    onMaterialAction(mat) {
+      if (!mat) return;
+      if (mat.sourceType === 'CRAFT' && mat.sourceRecipeId) {
+        this.openCraftDetail({ id: mat.sourceRecipeId });
+        return;
+      }
+      if (mat.sourceType === 'BATTLE' || !mat.enough) {
+        this.craftDropFocusName = mat.itemName || '';
+        GameApi.craftDropSources(mat.itemId)
+          .then((res) => {
+            this.craftDropSources = res.data || [];
+            if (!this.craftDropSources.length) {
+              this.showToast('暂无掉落关卡配置');
+            }
+          })
+          .catch((err) => this.authCatch(err));
+        return;
+      }
+      this.showToast(mat.sourceLabel || '敬请期待');
+    },
+    formatDropRate(rate) {
+      if (rate == null) return '—';
+      return Number(rate) + '%';
+    },
+    goDeployForLevel(levelId) {
+      if (!levelId) return;
+      localStorage.setItem(APP_CONFIG.selectedLevelKey || 'selectedLevelId', levelId);
+      this.closeCraftDetail();
+      this.craftTypeOpen = false;
+      this.tab = 'deploy';
+      var self = this;
+      var openTarget = function () {
+        var found = self.findStageLevel(levelId);
+        if (!found) {
+          self.showToast('未找到对应关卡');
+          return;
+        }
+        self.openLevelSheet(found.chapter, found.typeId);
+        self.openPreviewSheet(found.level);
+      };
+      if (this.stageTree.length) {
+        openTarget();
+        return;
+      }
+      this.deployLoading = true;
+      GameApi.stageTree()
+        .then((res) => {
+          this.stageTree = res.data || [];
+          openTarget();
+        })
+        .catch((err) => this.authCatch(err))
+        .finally(() => { this.deployLoading = false; });
+    },
+    /** 在关卡树中定位小关 */
+    findStageLevel(levelId) {
+      if (!levelId) return null;
+      var groups = this.chapterGroups || [];
+      for (var gi = 0; gi < groups.length; gi++) {
+        var g = groups[gi];
+        var chapters = g.chapters || [];
+        for (var ci = 0; ci < chapters.length; ci++) {
+          var ch = chapters[ci];
+          var levels = ch.levels || [];
+          for (var li = 0; li < levels.length; li++) {
+            if (levels[li] && levels[li].id === levelId) {
+              return { typeId: g.typeId, chapter: ch, level: levels[li] };
+            }
+          }
+        }
+      }
+      return null;
+    },
+    itemIconIsImage(icon) {
+      if (!icon) return false;
+      var s = String(icon);
+      return s.indexOf('http') === 0 || s.indexOf('/') === 0;
+    },
+    fmtAtkSpeed(action) {
+      var a = Number(action) || 0;
+      if (a <= 0) return '0.00';
+      return (100 / a).toFixed(2);
+    },
+    roleBaseAtkSpeed(role) {
+      if (!role) return '1.00';
+      if (role.baseAtkSpeed != null && Number(role.baseAtkSpeed) > 0) {
+        return Number(role.baseAtkSpeed).toFixed(2);
+      }
+      return this.fmtAtkSpeed(role.baseAction || 100);
+    },
+    roleDisplayAtkSpeed(role) {
+      if (!role) return '1.00';
+      if (role.displayAtkSpeed != null && Number(role.displayAtkSpeed) > 0) {
+        return Number(role.displayAtkSpeed).toFixed(2);
+      }
+      return this.fmtAtkSpeed(this.roleDisplayAction(role) || role.baseAction || 100);
+    },
+    roleDisplayAtk(role) {
+      if (!role) return 0;
+      if (role.displayAtk != null) return role.displayAtk;
+      return (role.baseAtk || 0) + (role.extraAtk || 0) + (role.equipBonusAtk || 0);
+    },
+    roleDisplayHp(role) {
+      if (!role) return 0;
+      if (role.displayHp != null) return role.displayHp;
+      return (role.baseHp || 0) + (role.extraHp || 0) + (role.equipBonusHp || 0);
+    },
+    roleDisplayDef(role) {
+      if (!role) return 0;
+      if (role.displayDef != null) return role.displayDef;
+      return (role.baseDef || 0) + (role.extraDef || 0) + (role.equipBonusDef || 0);
+    },
+    roleDisplayAction(role) {
+      if (!role) return 0;
+      if (role.displayAction != null) return role.displayAction;
+      return role.baseAction || 0;
+    },
+    openSkillDetail(skillId) {
+      if (!skillId) {
+        this.showToast('技能未配置');
+        return;
+      }
+      var self = this;
+      this.skillDetailOpen = true;
+      this.skillDetailLoading = true;
+      this.skillDetail = null;
+      GameApi.activeSkillDetail(skillId)
+        .then((res) => {
+          self.skillDetail = res.data || null;
+          if (!self.skillDetail || !self.skillDetail.skill) {
+            self.showToast('技能不存在');
+            self.closeSkillDetail();
+          }
+        })
+        .catch((err) => {
+          self.authCatch(err);
+          self.closeSkillDetail();
+        })
+        .finally(() => { self.skillDetailLoading = false; });
+    },
+    closeSkillDetail() {
+      this.skillDetailOpen = false;
+      this.skillDetailLoading = false;
+      this.skillDetail = null;
+    },
+    skillTypeLabel(type) {
+      return { NORMAL: '普攻', ULTIMATE: '大招', SMALL: '小技能' }[type] || type || '—';
+    },
+    skillNeedChargeText(sk) {
+      if (!sk) return '—';
+      if (sk.needChargeMode === 'SELF_BASE_ACTION') return '自己基础行动值';
+      return sk.needCharge != null ? String(sk.needCharge) : '0';
+    },
+    chargeConditionLabel(type) {
+      return {
+        ACTION_VALUE: '行动值充能',
+        SKILL_CHARGE: '技能充能'
+      }[type] || type || '—';
+    },
+    skillChargeEventLabel(v) {
+      return { CAST: '释放', RECEIVE: '受到' }[v] || v || '—';
+    },
+    skillChargeMatchLabel(v) {
+      return { ANY: '任意', ANY_TYPE: '任意类型', SPECIFIC: '指定一个' }[v] || v || '—';
+    },
+    effectTargetLabel(v) {
+      return {
+        SELF: '自己', FIRST: '首目标', FRONT_ROW: '前排', BACK_ROW: '后排',
+        RANDOM_ENEMY: '随机一个敌方', ENEMY_MAX_HP: '生命值最高敌方',
+        ENEMY_MIN_HP: '生命值最低敌方', ALLY_MIN_HP: '生命值最低己方',
+        ALL_ENEMY: '敌方全部', ALL_ALLY: '己方全部'
+      }[v] || v || '—';
+    },
+    effectTypeLabel(v) {
+      return { DAMAGE: '伤害', HEAL: '治疗', ATTR_MODIFY: '属性修改' }[v] || v || '—';
+    },
+    attrModifyKeyLabel(v) {
+      return { ATK: '攻击', MAX_HP: '最大生命', DEF: '防御' }[v] || v || '—';
+    },
+    attrModifyDirLabel(v) {
+      return { INCREASE: '增加', DECREASE: '减少' }[v] || v || '—';
+    },
+    formulaReadLabel(key) {
+      return {
+        MAX_HP: '最大生命', HP: '当前生命', ATK: '攻击力', DEF: '防御力',
+        ACTION: '行动值', ELAPSED_ACTION: '已经过行动值'
+      }[key] || key || '?';
+    },
+    formulaReadRoleLabel(role) {
+      return { SELF: '自己', EACH_TARGET: '目标' }[role] || '';
+    },
+    formulaOpLabel(op) {
+      return { '+': '+', '-': '−', '*': '×', '/': '÷', '(': '(', ')': ')' }[op] || op || '';
+    },
+    parseFormulaTokens(raw) {
+      if (!raw) return [];
+      try {
+        var arr = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        return Array.isArray(arr) ? arr : [];
+      } catch (e) {
+        return [];
+      }
+    },
+    /** 右侧展示：20 × 2 = 40；读不到数值时用 自己·攻击力 × 2 */
+    formatEffectFormula(effect) {
+      if (!effect) return '';
+      var tokens = this.parseFormulaTokens(effect.formulaJson);
+      if (!tokens.length) return '';
+      var parts = [];
+      var role = this.prepDisplayRole || this.hero;
+      var nums = [];
+      var canEval = true;
+      for (var i = 0; i < tokens.length; i++) {
+        var t = tokens[i];
+        if (!t) continue;
+        if (t.kind === 'OP') {
+          parts.push(this.formulaOpLabel(t.op));
+          nums.push({ kind: 'OP', op: t.op });
+          continue;
+        }
+        if (t.paramMode === 'LITERAL') {
+          var lit = t.value != null ? String(t.value) : '0';
+          parts.push(lit);
+          nums.push({ kind: 'NUM', value: Number(lit) || 0 });
+          continue;
+        }
+        var readKey = t.readKey || 'ATK';
+        var readRole = t.readRole || 'SELF';
+        var n = this.readFormulaStat(role, readKey);
+        if (n != null && readRole !== 'EACH_TARGET') {
+          parts.push(String(n));
+          nums.push({ kind: 'NUM', value: n });
+        } else {
+          canEval = false;
+          var label = this.formulaReadLabel(readKey);
+          var roleLabel = this.formulaReadRoleLabel(readRole);
+          parts.push(roleLabel ? (roleLabel + '·' + label) : label);
+          nums.push({ kind: 'NUM', value: NaN });
+        }
+      }
+      var expr = parts.join(' ');
+      if (!canEval) return expr;
+      var result = this.evalFormulaNums(nums);
+      if (result == null || !isFinite(result)) return expr;
+      return expr + ' = ' + Math.round(result);
+    },
+    readFormulaStat(role, key) {
+      if (!role) return null;
+      switch (key) {
+        case 'MAX_HP': return this.roleDisplayHp(role);
+        case 'HP': return this.roleDisplayHp(role);
+        case 'ATK': return this.roleDisplayAtk(role);
+        case 'DEF': return this.roleDisplayDef(role);
+        case 'ACTION': return this.roleDisplayAction(role);
+        case 'ELAPSED_ACTION': return 0;
+        default: return null;
+      }
+    },
+    evalFormulaNums(tokens) {
+      // 简易中缀：支持 + - * / ( )
+      var output = [];
+      var ops = [];
+      var prec = { '+': 1, '-': 1, '*': 2, '/': 2 };
+      for (var i = 0; i < tokens.length; i++) {
+        var t = tokens[i];
+        if (t.kind === 'NUM') {
+          if (!isFinite(t.value)) return null;
+          output.push(t.value);
+          continue;
+        }
+        var op = t.op;
+        if (op === '(') { ops.push(op); continue; }
+        if (op === ')') {
+          while (ops.length && ops[ops.length - 1] !== '(') output.push(ops.pop());
+          if (ops.length) ops.pop();
+          continue;
+        }
+        while (ops.length && ops[ops.length - 1] !== '(' && (prec[ops[ops.length - 1]] || 0) >= (prec[op] || 0)) {
+          output.push(ops.pop());
+        }
+        ops.push(op);
+      }
+      while (ops.length) output.push(ops.pop());
+      var stack = [];
+      for (var j = 0; j < output.length; j++) {
+        var x = output[j];
+        if (typeof x === 'number') { stack.push(x); continue; }
+        var b = stack.pop();
+        var a = stack.pop();
+        if (a == null || b == null) return null;
+        if (x === '+') stack.push(a + b);
+        else if (x === '-') stack.push(a - b);
+        else if (x === '*') stack.push(a * b);
+        else if (x === '/') stack.push(b === 0 ? 0 : a / b);
+        else return null;
+      }
+      return stack.length === 1 ? stack[0] : null;
+    },
+    itemTypeLabel(type) {
+      return {
+        MATERIAL: '材料',
+        WEAPON: '武器',
+        ARMOR: '护甲',
+        GLOVES: '护手',
+        HELMET: '头盔',
+        ACCESSORY: '饰品',
+        LEGS: '护腿'
+      }[type] || type || '';
+    },
+    loadPrep() {
+      var self = this;
+      return GameApi.prepSummary()
+        .then((res) => {
+          var data = res.data || {};
+          self.prepMainRole = data.mainRole || null;
+          if (data.mainRole) self.hero = data.mainRole;
+          self.warehouse = data.warehouse || null;
+          self.battleBag = data.battleBag || null;
+          self.bagItems = (data.battleBag && data.battleBag.items) || [];
+          self.equipSlots = (data.battleBag && data.battleBag.equipSlots) || [];
+          if (self.detailOpen && self.detailRoleData && data.mainRole
+              && self.detailRoleData.id === data.mainRole.id) {
+            self.detailRoleData = data.mainRole;
+          }
+        })
+        .catch((err) => self.authCatch(err));
+    },
+    openWarehouse() {
+      this.warehouseOpen = true;
+    },
+    closeWarehouse() {
+      this.warehouseOpen = false;
+      this.cancelBatch();
+    },
+    slotFilled(slot) {
+      var s = this.slotItem(slot);
+      return !!(s && !s.empty && s.itemId);
+    },
+    slotItem(slot) {
+      return this.equipSlotMap[slot] || null;
+    },
+    slotItemName(slot) {
+      var s = this.slotItem(slot);
+      return s && s.itemName ? s.itemName : '';
+    },
+    slotDisplayIcon(slot) {
+      var s = this.slotItem(slot);
+      if (!s || s.empty || !s.itemId) return { type: 'empty' };
+      var icon = s.icon;
+      if (this.itemIconIsImage(icon)) return { type: 'img', src: icon };
+      if (icon && String(icon).trim()) return { type: 'emoji', text: icon };
+      return { type: 'empty' };
+    },
+    onEquipSlotClick(slot) {
+      if (!this.slotFilled(slot) || this.prepActing) return;
+      var s = this.slotItem(slot);
+      if (!s) return;
+      this.prepItemDetail = { source: 'EQUIP', data: Object.assign({}, s) };
+    },
+    onWarehouseClick(slot) {
+      if (!slot || !slot.itemId) return;
+      if (this.batchMode === 'toBag') {
+        var idx = this.batchWhSlots.indexOf(slot.slotNo);
+        if (idx >= 0) this.batchWhSlots.splice(idx, 1);
+        else this.batchWhSlots.push(slot.slotNo);
+        return;
+      }
+      this.prepItemDetail = { source: 'WAREHOUSE', data: Object.assign({}, slot) };
+    },
+    onBagClick(item) {
+      if (!item) return;
+      if (this.batchMode === 'toWarehouse') {
+        var idx = this.batchBagIds.indexOf(item.id);
+        if (idx >= 0) this.batchBagIds.splice(idx, 1);
+        else this.batchBagIds.push(item.id);
+        return;
+      }
+      this.prepItemDetail = { source: 'BAG', data: Object.assign({}, item) };
+    },
+    closePrepItemDetail() {
+      this.prepItemDetail = null;
+    },
+    transferDetailToBag() {
+      if (!this.prepItemDetail || this.prepItemDetail.source !== 'WAREHOUSE' || this.prepActing) return;
+      var slotNo = this.prepItemDetail.data.slotNo;
+      var self = this;
+      this.doTransfer('WAREHOUSE', String(slotNo), 'BAG', '0')
+        .then(() => { self.closePrepItemDetail(); });
+    },
+    transferDetailToWarehouse() {
+      if (!this.prepItemDetail || this.prepItemDetail.source !== 'BAG' || this.prepActing) return;
+      var bagId = this.prepItemDetail.data.id;
+      var self = this;
+      this.doTransfer('BAG', bagId, 'WAREHOUSE', '0')
+        .then(() => { self.closePrepItemDetail(); });
+    },
+    equipDetailSlot(slot) {
+      if (!this.prepItemDetail || this.prepItemDetail.source !== 'BAG' || this.prepActing) return;
+      var itemId = this.prepItemDetail.data.itemId;
+      var self = this;
+      self.prepActing = true;
+      GameApi.prepEquip(slot, itemId)
+        .then(() => {
+          self.showToast('已装备', 'success');
+          self.closePrepItemDetail();
+          return self.loadPrep();
+        })
+        .catch((err) => self.authCatch(err))
+        .finally(() => { self.prepActing = false; });
+    },
+    unequipDetailSlot() {
+      if (!this.prepItemDetail || this.prepItemDetail.source !== 'EQUIP' || this.prepActing) return;
+      var slot = this.prepItemDetail.data.slot;
+      var self = this;
+      self.prepActing = true;
+      GameApi.prepUnequip(slot)
+        .then(() => {
+          self.showToast('已卸下', 'success');
+          self.closePrepItemDetail();
+          return self.loadPrep();
+        })
+        .catch((err) => self.authCatch(err))
+        .finally(() => { self.prepActing = false; });
+    },
+    toggleBatchMode(mode) {
+      if (this.batchMode === mode) {
+        this.cancelBatch();
+        return;
+      }
+      this.batchMode = mode;
+      this.batchWhSlots = [];
+      this.batchBagIds = [];
+      if (mode === 'toBag') this.warehouseOpen = true;
+    },
+    cancelBatch() {
+      this.batchMode = '';
+      this.batchWhSlots = [];
+      this.batchBagIds = [];
+    },
+    confirmBatch() {
+      var self = this;
+      if (!this.canConfirmBatch || this.prepActing) return;
+      this.prepActing = true;
+      var req;
+      if (this.batchMode === 'toBag') {
+        req = GameApi.prepWarehouseToBag(this.batchWhSlots);
+      } else {
+        req = GameApi.prepBagToWarehouse(this.batchBagIds);
+      }
+      req.then(() => {
+        self.showToast('转移成功', 'success');
+        self.cancelBatch();
+        return self.loadPrep();
+      }).catch((err) => {
+        self.authCatch(err);
+      }).finally(() => {
+        self.prepActing = false;
+      });
+    },
+    prepSlotClasses(slot) {
+      var cls = {};
+      if (this.batchMode === 'toBag' && this.batchWhSlots.indexOf(slot.slotNo) >= 0) {
+        cls.selected = true;
+      }
+      if (this.dragState && this.dragState.overKey === 'WAREHOUSE:' + slot.slotNo) {
+        cls['drag-over'] = true;
+      }
+      return cls;
+    },
+    prepBagClasses(item) {
+      var cls = {};
+      if (this.batchMode === 'toWarehouse' && this.batchBagIds.indexOf(item.id) >= 0) {
+        cls.selected = true;
+      }
+      if (this.dragState && this.dragState.overKey === 'BAG:' + item.id) {
+        cls['drag-over'] = true;
+      }
+      return cls;
+    },
+    onDragStart(e, type, key, item) {
+      if (this.batchMode) {
+        e.preventDefault();
+        return;
+      }
+      this.dragState = { fromType: type, fromKey: String(key), item: item, overKey: '' };
+      this._dragDepth = 0;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', type + ':' + key);
+      if (type === 'BAG' && !this.warehouseOpen) {
+        this.openWarehouse();
+      }
+    },
+    onDragEnd() {
+      if (!this.prepActing) {
+        this.dragState = null;
+        this._dragDepth = 0;
+      }
+    },
+    onDragEnter(type, key) {
+      this._dragDepth++;
+      this.onDragOver(null, type, key, null);
+    },
+    onDragLeaveEl() {
+      this._dragDepth--;
+      if (this._dragDepth <= 0) {
+        this._dragDepth = 0;
+        if (this.dragState) this.dragState.overKey = '';
+      }
+    },
+    onDragOver(e, type, key, item) {
+      if (!this.dragState || this.batchMode) return;
+      var from = this.dragState;
+      if (from.fromType === 'WAREHOUSE' && type === 'BAG') {
+        from.overKey = 'BAG:' + key;
+        return;
+      }
+      if (from.fromType === 'BAG' && type === 'WAREHOUSE') {
+        from.overKey = 'WAREHOUSE:' + key;
+        return;
+      }
+      if (from.fromType === 'BAG' && type === 'BAG' && String(key) !== from.fromKey) {
+        if (item && from.item && item.itemId === from.item.itemId) {
+          from.overKey = 'BAG:' + key;
+        }
+      }
+    },
+    onBagZoneDragOver() {
+      if (!this.dragState || this.batchMode) return;
+      if (this.dragState.fromType === 'WAREHOUSE') {
+        this.dragState.overKey = 'BAG:zone';
+      }
+    },
+    onWhZoneDragOver() {
+      if (!this.dragState || this.batchMode) return;
+      if (this.dragState.fromType === 'BAG') {
+        this.dragState.overKey = 'WAREHOUSE:zone';
+      }
+    },
+    doTransfer(fromType, fromKey, toType, toKey) {
+      var self = this;
+      self.prepActing = true;
+      return GameApi.prepTransfer(fromType, fromKey, toType, toKey, null)
+        .then(() => {
+          self.showToast('转移成功', 'success');
+          return self.loadPrep();
+        })
+        .catch((err) => self.authCatch(err))
+        .finally(() => {
+          self.prepActing = false;
+          self.dragState = null;
+          self._dragDepth = 0;
+        });
+    },
+    onBagZoneDrop() {
+      if (!this.dragState || this.batchMode) return;
+      if (this.dragState.fromType !== 'WAREHOUSE') return;
+      var payload = this.dragState;
+      this.doTransfer(payload.fromType, payload.fromKey, 'BAG', '0');
+    },
+    onWhZoneDrop() {
+      if (!this.dragState || this.batchMode) return;
+      if (this.dragState.fromType !== 'BAG') return;
+      var payload = this.dragState;
+      this.doTransfer(payload.fromType, payload.fromKey, 'WAREHOUSE', '0');
+    },
+    onDrop(e, toType, toKey, item) {
+      if (this.dragState) this.dragState.overKey = '';
+      this._dragDepth = 0;
+      if (!this.dragState || this.batchMode) return;
+      var payload = this.dragState;
+      if (payload.fromType === toType && payload.fromKey === String(toKey)) return;
+      if (payload.fromType === 'BAG' && toType === 'BAG') {
+        var target = this.bagItems.find((b) => b.id === toKey);
+        if (!target || !payload.item || target.itemId !== payload.item.itemId) {
+          return;
+        }
+      }
+      this.doTransfer(payload.fromType, payload.fromKey, toType, String(toKey));
+    },
+    openLevelSheet(chapter, typeId) {
+      this.sheetChapter = chapter;
+      this.sheetLevels = chapter.levels || [];
+      this.selectedTypeId = typeId || '';
+      this.selectedChapterId = chapter.id;
+      this.previewSheetOpen = false;
+      this.levelMonsters = [];
+      this.levelSheetOpen = true;
+    },
+    closeLevelSheet() {
+      this.levelSheetOpen = false;
+      this.previewSheetOpen = false;
+      this.levelMonsters = [];
+    },
+    openPreviewSheet(lv) {
+      if (!lv) return;
+      this.selectedLevel = lv;
+      this.selectedLevelId = lv.id;
+      localStorage.setItem(APP_CONFIG.selectedLevelKey || 'selectedLevelId', lv.id);
+      this.previewSheetOpen = true;
+      this.loadLevelMonsters();
+    },
+    closePreviewSheet() {
+      this.previewSheetOpen = false;
+      this.levelMonsters = [];
+    },
+    levelMonsterCount(levelId) {
+      var n = this.monsterCountMap[levelId];
+      if (n == null) return '点选预览';
+      return n + ' 只怪';
+    },
+    shortName(name) {
+      if (!name) return '?';
+      return name.length > 4 ? name.slice(0, 4) : name;
+    },
+    rarityLabel(r) {
+      return { NORMAL: '普通', RARE: '稀有', EPIC: '史诗', BOSS: 'BOSS', SPECIAL: '特殊' }[r] || r || '';
+    },
+    rarityClass(r) {
+      return {
+        NORMAL: 'rarity-normal',
+        RARE: 'rarity-rare',
+        EPIC: 'rarity-epic',
+        BOSS: 'rarity-boss',
+        SPECIAL: 'rarity-special'
+      }[r] || 'rarity-normal';
+    },
+    cellSize() {
+      return this.previewSheetOpen ? 42 : CELL;
+    },
+    gapSize() {
+      return this.previewSheetOpen ? 4 : GAP;
+    },
+    cellStyle(c, r) {
+      var cell = this.cellSize();
+      var gap = this.gapSize();
+      return {
+        left: (c * (cell + gap)) + 'px',
+        top: (r * (cell + gap)) + 'px',
+        width: cell + 'px',
+        height: cell + 'px'
+      };
+    },
+    unitStyle(item) {
+      var cell = this.cellSize();
+      var gap = this.gapSize();
+      var h = item.gridH || 1;
+      var w = item.gridW || 1;
+      var c = item.posCol || 0;
+      var r = item.posRow || 0;
+      return {
+        left: (c * (cell + gap)) + 'px',
+        top: (r * (cell + gap)) + 'px',
+        width: (w * cell + (w - 1) * gap) + 'px',
+        height: (h * cell + (h - 1) * gap) + 'px'
+      };
+    },
+    layoutUnitStyle(item) {
+      var style = this.unitStyle(item);
+      if (this.layoutDrag && this.layoutDrag.roleId === item.roleId && this.layoutHover) {
+        var cell = this.cellSize();
+        var gap = this.gapSize();
+        var h = item.gridH || 1;
+        var w = item.gridW || 1;
+        style.left = (this.layoutHover.col * (cell + gap)) + 'px';
+        style.top = (this.layoutHover.row * (cell + gap)) + 'px';
+        style.width = (w * cell + (w - 1) * gap) + 'px';
+        style.height = (h * cell + (h - 1) * gap) + 'px';
+      }
+      return style;
+    },
+    isOnField(roleId) {
+      return this.draftLayouts.some((x) => x.roleId === roleId);
+    },
+    isAnchor(c, r, list) {
+      return (list || []).some((x) => x.posCol === c && x.posRow === r);
+    },
+    occupied(exceptRoleId) {
+      var board = [];
+      for (var r = 0; r < ROWS; r++) {
+        board[r] = [];
+        for (var c = 0; c < COLS; c++) board[r][c] = false;
+      }
+      this.draftLayouts.forEach((item) => {
+        if (exceptRoleId && item.roleId === exceptRoleId) return;
+        var h = item.gridH || 1;
+        var w = item.gridW || 1;
+        for (var rr = item.posRow; rr < item.posRow + h; rr++) {
+          for (var cc = item.posCol; cc < item.posCol + w; cc++) {
+            if (rr >= 0 && rr < ROWS && cc >= 0 && cc < COLS) board[rr][cc] = true;
+          }
+        }
+      });
+      return board;
+    },
+    canPlaceAt(role, col, row, exceptRoleId) {
+      if (!role) return false;
+      var h = role.gridH || 1;
+      var w = role.gridW || 1;
+      if (col < 0 || row < 0 || col + w > COLS || row + h > ROWS) return false;
+      var board = this.occupied(exceptRoleId);
+      for (var r = row; r < row + h; r++) {
+        for (var c = col; c < col + w; c++) {
+          if (board[r][c]) return false;
+        }
+      }
+      return true;
+    },
+    isLayoutCellHot(c, r) {
+      if (!this.layoutDrag || !this.layoutHover) return false;
+      var w = this.layoutDrag.gridW || 1;
+      var h = this.layoutDrag.gridH || 1;
+      return c >= this.layoutHover.col && c < this.layoutHover.col + w
+        && r >= this.layoutHover.row && r < this.layoutHover.row + h
+        && this.layoutHover.valid;
+    },
+    selectRole(role) {
+      this.selectedRoleId = role.id;
+    },
+    selectPlaced(item) {
+      this.selectedRoleId = item.roleId;
+    },
+    bindLayoutDragListeners() {
+      if (this._layoutMoveBound) return;
+      this._layoutMoveBound = (ev) => this.onLayoutPointerMove(ev);
+      this._layoutUpBound = (ev) => this.onLayoutPointerUp(ev);
+      window.addEventListener('pointermove', this._layoutMoveBound, { passive: false });
+      window.addEventListener('pointerup', this._layoutUpBound);
+      window.addEventListener('pointercancel', this._layoutUpBound);
+    },
+    unbindLayoutDragListeners() {
+      if (!this._layoutMoveBound) return;
+      window.removeEventListener('pointermove', this._layoutMoveBound);
+      window.removeEventListener('pointerup', this._layoutUpBound);
+      window.removeEventListener('pointercancel', this._layoutUpBound);
+      this._layoutMoveBound = null;
+      this._layoutUpBound = null;
+    },
+    beginLayoutDrag(e, roleLike) {
+      if (e.button != null && e.button !== 0) return;
+      this.selectedRoleId = roleLike.id || roleLike.roleId;
+      this.layoutDrag = {
+        roleId: roleLike.id || roleLike.roleId,
+        roleName: roleLike.name || roleLike.roleName,
+        mainRole: roleLike.mainRole,
+        gridH: roleLike.gridH || 1,
+        gridW: roleLike.gridW || 1,
+        pointerId: e.pointerId,
+        fromBoard: !!roleLike.roleId
+      };
+      this.layoutGhost = {
+        show: true,
+        x: e.clientX,
+        y: e.clientY,
+        name: this.layoutDrag.roleName || '角色'
+      };
+      this.bindLayoutDragListeners();
+      this.updateLayoutHover(e.clientX, e.clientY);
+    },
+    onLayoutRosterDown(e, role) {
+      this.beginLayoutDrag(e, role);
+    },
+    onLayoutUnitDown(e, item) {
+      var role = this.roles.find((r) => r.id === item.roleId) || {
+        id: item.roleId,
+        name: item.roleName,
+        mainRole: item.mainRole,
+        gridH: item.gridH,
+        gridW: item.gridW
+      };
+      this.beginLayoutDrag(e, Object.assign({}, role, { roleId: item.roleId }));
+    },
+    updateLayoutHover(clientX, clientY) {
+      var el = this.$refs.layoutBoard;
+      if (Array.isArray(el)) el = el[0];
+      if (!el || !this.layoutDrag) {
+        this.layoutHover = null;
+        return;
+      }
+      var rect = el.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) {
+        this.layoutHover = null;
+        return;
+      }
+      if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) {
+        this.layoutHover = null;
+        return;
+      }
+      var pad = 10;
+      var innerW = rect.width - pad * 2;
+      var innerH = rect.height - pad * 2;
+      if (innerW <= 0 || innerH <= 0) {
+        this.layoutHover = null;
+        return;
+      }
+      var w = this.layoutDrag.gridW || 1;
+      var h = this.layoutDrag.gridH || 1;
+      var col = Math.floor((clientX - rect.left - pad) / innerW * COLS);
+      var row = Math.floor((clientY - rect.top - pad) / innerH * ROWS);
+      col = Math.max(0, Math.min(COLS - w, col));
+      row = Math.max(0, Math.min(ROWS - h, row));
+      var role = { gridH: h, gridW: w };
+      var valid = this.canPlaceAt(role, col, row, this.layoutDrag.roleId);
+      this.layoutHover = { col: col, row: row, valid: valid };
+    },
+    onLayoutPointerMove(e) {
+      if (!this.layoutDrag) return;
+      if (this.layoutDrag.pointerId != null && e.pointerId !== this.layoutDrag.pointerId) return;
+      e.preventDefault();
+      this.layoutGhost = {
+        show: true,
+        x: e.clientX,
+        y: e.clientY,
+        name: this.layoutDrag.roleName || '角色'
+      };
+      this.updateLayoutHover(e.clientX, e.clientY);
+    },
+    onLayoutPointerUp(e) {
+      if (!this.layoutDrag) return;
+      if (this.layoutDrag.pointerId != null && e.pointerId !== this.layoutDrag.pointerId) return;
+      var drag = this.layoutDrag;
+      var hover = this.layoutHover;
+      this.layoutDrag = null;
+      this.layoutGhost = { show: false, x: 0, y: 0, name: '' };
+      this.layoutHover = null;
+      this.unbindLayoutDragListeners();
+      if (!hover) return;
+      if (!hover.valid) {
+        this.showToast('无法放置：越界或重叠');
+        return;
+      }
+      var role = this.roles.find((r) => r.id === drag.roleId);
+      if (!role) return;
+      this.placeRoleAt(role, hover.col, hover.row);
+    },
+    placeRoleAt(role, c, r) {
+      if (!this.canPlaceAt(role, c, r, role.id)) {
+        this.showToast('无法放置：越界或重叠');
+        return;
+      }
+      var next = this.draftLayouts.filter((x) => x.roleId !== role.id);
+      next.push({
+        roleId: role.id,
+        roleName: role.name,
+        mainRole: role.mainRole,
+        gridH: role.gridH,
+        gridW: role.gridW,
+        posCol: c,
+        posRow: r
+      });
+      this.draftLayouts = next;
+      this.selectedRoleId = role.id;
+    },
+    removeSelected() {
+      if (!this.selectedRoleId) return;
+      this.draftLayouts = this.draftLayouts.filter((x) => x.roleId !== this.selectedRoleId);
+    },
+    saveLayout() {
+      this.layoutSaving = true;
+      var payload = this.draftLayouts.map((x) => ({
+        roleId: x.roleId,
+        posCol: x.posCol,
+        posRow: x.posRow
+      }));
+      GameApi.playerLayoutSave(payload)
+        .then((res) => {
+          this.draftLayouts = (res.data || []).map((x) => Object.assign({}, x));
+          this.showToast('布局已保存', 'success');
+        })
+        .catch((err) => this.authCatch(err))
+        .finally(() => { this.layoutSaving = false; });
+    },
+    loadLevelMonsters() {
+      this.levelMonsters = [];
+      if (!this.selectedLevelId) return;
+      this.monsterLoading = true;
+      GameApi.stageLevelMonsterList(this.selectedLevelId)
+        .then((res) => {
+          this.levelMonsters = res.data || [];
+          this.monsterCountMap[this.selectedLevelId] = this.levelMonsters.length;
+        })
+        .catch((err) => this.authCatch(err))
+        .finally(() => { this.monsterLoading = false; });
+    },
+    startBattle() {
+      if (!this.selectedLevelId) {
+        this.showToast('请先选择关卡');
+        return;
+      }
+      localStorage.setItem(APP_CONFIG.selectedLevelKey || 'selectedLevelId', this.selectedLevelId);
+      location.href = (APP_CONFIG.battlePage || '/battle.html')
+        + '?levelId=' + encodeURIComponent(this.selectedLevelId);
+    }
+  }
+}).mount('#app');
+</script>
+</body>
+</html>

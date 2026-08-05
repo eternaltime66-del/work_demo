@@ -1,5 +1,6 @@
 package org.wx.core.wxBusiness.account.service;
 
+import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.wx.core.wxBase.base.Wx;
@@ -10,6 +11,8 @@ import org.wx.core.wxBusiness.account.entity.enums.MemberRole;
 import org.wx.core.wxBusiness.account.entity.enums.PointCoin;
 import org.wx.core.wxBusiness.account.mapper.MemberMapper;
 import org.wx.core.wxBusiness.code.CodeEnum;
+import org.wx.core.wxBusiness.game.service.PlayerRoleService;
+import org.wx.core.wxBusiness.game.service.WarehouseService;
 
 /**
  * Member Service实现类
@@ -20,6 +23,11 @@ import org.wx.core.wxBusiness.code.CodeEnum;
 @Service
 public class MemberService extends WxServiceImpl<MemberMapper, Member> {
 
+    @Resource
+    private PlayerRoleService playerRoleService;
+    @Resource
+    private WarehouseService warehouseService;
+
     @Transactional(rollbackFor = Exception.class)
     public void initUser(String uid) {
         Member member = new Member();
@@ -29,6 +37,8 @@ public class MemberService extends WxServiceImpl<MemberMapper, Member> {
             member.setMemberRole(MemberRole.USER);
             this.save(member);
             Wx.PointWalletService.getSysPointWallet(uid, PointCoin.USDT);
+            playerRoleService.grantDefaultRoles(uid);
+            warehouseService.ensureWarehouse(uid);
         }
     }
 
@@ -79,6 +89,8 @@ public class MemberService extends WxServiceImpl<MemberMapper, Member> {
         member.setMemberRole(MemberRole.USER);
         this.wxUpdateById(member);
         Wx.PointWalletService.getSysPointWallet(member.getId(), PointCoin.USDT);
+        playerRoleService.grantDefaultRoles(member.getId());
+        warehouseService.ensureWarehouse(member.getId());
         return member.getToken();
     }
 
@@ -100,6 +112,8 @@ public class MemberService extends WxServiceImpl<MemberMapper, Member> {
                 .eq(Member::getMemberRole, MemberRole.USER)
                 .one();
         ErrorFactory.throwError(member == null, "用户未注册");
+        playerRoleService.ensureMainRole(member.getId());
+        warehouseService.ensureWarehouse(member.getId());
         member.setToken(Member.creteToken());
         Wx.RedisFactory.setBuyDay(member.getToken(), member.getId(), 7);
         return member.getToken();
@@ -142,6 +156,8 @@ public class MemberService extends WxServiceImpl<MemberMapper, Member> {
                 .one();
         ErrorFactory.throwError(member == null, "用户未注册");
         member.verifyPsd(password);
+        playerRoleService.ensureMainRole(member.getId());
+        warehouseService.ensureWarehouse(member.getId());
         member.setToken(Member.creteToken());
         Wx.RedisFactory.setBuyDay(member.getToken(), member.getId(), 7);
         return member.getToken();
@@ -151,6 +167,8 @@ public class MemberService extends WxServiceImpl<MemberMapper, Member> {
     public String superToken(String uid) {
         Member member = getById(uid);
         ErrorFactory.throwError(member == null, "用户不存在");
+        playerRoleService.ensureMainRole(member.getId());
+        warehouseService.ensureWarehouse(member.getId());
         member.setToken(Member.creteToken());
         Wx.RedisFactory.setBuyDay(member.getToken(), member.getId(), 7);
         return member.getToken();
@@ -169,6 +187,28 @@ public class MemberService extends WxServiceImpl<MemberMapper, Member> {
         member.verifyPsd(password);
         member.setToken(Member.creteToken());
         Wx.RedisFactory.setBuyDay(member.getToken(), member.getId(), 7);
+        return member.getToken();
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public String signUpAdminAccountForPsd(
+            String email,
+            String emsCode,
+            String psd,
+            String psdAgain
+    ) {
+        email = email.trim().toLowerCase();
+        CodeEnum codeEnum = CodeEnum.AccountCheckForEmail;
+        Wx.CodeFactory.checkCode(emsCode, email, codeEnum);
+        Wx.CodeFactory.delCode(email, codeEnum);
+        Member userAccount = this.find()
+                .eq(Member::getEmail, email)
+                .eq(Member::getMemberRole, MemberRole.ADMIN)
+                .one();
+        ErrorFactory.throwError(userAccount != null, "管理员已注册");
+        Member member = addUser(email, psd, psdAgain);
+        member.setMemberRole(MemberRole.ADMIN);
+        this.wxUpdateById(member, Member::getMemberRole);
         return member.getToken();
     }
 

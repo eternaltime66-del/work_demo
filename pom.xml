@@ -48,6 +48,14 @@
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
 
+        <!-- 开发热更新：Java 重启 + 静态资源 LiveReload -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-devtools</artifactId>
+            <scope>runtime</scope>
+            <optional>true</optional>
+        </dependency>
+
         <!-- ===================== Servlet适配（Spring Boot 3.x用Jakarta替代javax） ===================== -->
         <dependency>
             <groupId>jakarta.servlet</groupId>
@@ -226,8 +234,11 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
-                <!-- 打包优化：排除不必要依赖，减小包体积 -->
                 <configuration>
+                    <!-- devtools 自动重启需要独立进程 -->
+                    <fork>true</fork>
+                    <addResources>true</addResources>
+                    <excludeDevtools>false</excludeDevtools>
                     <excludes>
                         <exclude>
                             <groupId>org.projectlombok</groupId>

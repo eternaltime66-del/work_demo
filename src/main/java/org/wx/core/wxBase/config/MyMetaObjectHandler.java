@@ -3,35 +3,45 @@ package org.wx.core.wxBase.config;
 import com.baomidou.mybatisplus.core.handlers.MetaObjectHandler;
 import org.apache.ibatis.reflection.MetaObject;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
+import org.wx.core.wxBase.unit.BizIdUtil;
+
 import java.util.Date;
 
 /**
  * MyBatis-Plus 字段自动填充处理器
- * 自动填充 createTime、updateTime、del 字段
+ * 自动填充 id（前缀_8位数字）、createTime、updateTime
  */
-@Component // 必须加这个注解，否则Spring无法扫描到
+@Component
 public class MyMetaObjectHandler implements MetaObjectHandler {
 
-    /**
-     * 插入操作时自动填充
-     */
     @Override
     public void insertFill(MetaObject metaObject) {
-        // 填充创建时间（仅当字段值为null时填充）
+        fillBizId(metaObject);
         this.strictInsertFill(metaObject, "createTime", Date.class, new Date());
-        // 填充更新时间
         this.strictInsertFill(metaObject, "updateTime", Date.class, new Date());
     }
 
-    /**
-     * 更新操作时自动填充
-     */
     @Override
     public void updateFill(MetaObject metaObject) {
-        // 填充更新时间（仅当字段值为null时填充）
         this.strictUpdateFill(metaObject, "updateTime", Date.class, new Date());
-        
-        // 强制填充（可选）：
-        // this.setFieldValByName("updateTime", new Date(), metaObject);
+    }
+
+    private void fillBizId(MetaObject metaObject) {
+        if (!metaObject.hasGetter("id") || !metaObject.hasSetter("id")) {
+            return;
+        }
+        Object id = metaObject.getValue("id");
+        if (id != null && StringUtils.hasText(String.valueOf(id))) {
+            return;
+        }
+        Object entity = metaObject.getOriginalObject();
+        if (entity == null) {
+            return;
+        }
+        String nextId = BizIdUtil.tryNext(entity.getClass());
+        if (nextId != null) {
+            metaObject.setValue("id", nextId);
+        }
     }
 }

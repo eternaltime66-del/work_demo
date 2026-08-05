@@ -3,7 +3,6 @@ package org.wx.core.wxBusiness.account.service;
 import org.springframework.transaction.annotation.Transactional;
 import org.wx.core.wxBase.annotation.RedisLock;
 import org.wx.core.wxBase.base.WxServiceImpl;
-import org.wx.core.wxBase.unit.WordUnit;
 import org.wx.core.wxBusiness.account.entity.PointWallet;
 import org.wx.core.wxBusiness.account.entity.enums.PointCoin;
 import org.wx.core.wxBusiness.account.mapper.PointWalletMapper;
@@ -49,7 +48,6 @@ public class PointWalletService extends WxServiceImpl<PointWalletMapper, PointWa
         pointWallet.setUid(uid);
         pointWallet.setCoin(coin);
         pointWallet.setBalance(new BigDecimal("0"));
-        pointWallet.setId(WordUnit.nowId(4, 1));
         this.save(pointWallet);
         return pointWallet;
     }
