@@ -9,19 +9,26 @@ import org.wx.core.wxBase.base.WxServiceImpl;
 import org.wx.core.wxBase.factory.ErrorFactory;
 import org.wx.core.wxBusiness.game.entity.ActiveSkill;
 import org.wx.core.wxBusiness.game.entity.Item;
+import org.wx.core.wxBusiness.game.entity.ItemDefaultPassive;
 import org.wx.core.wxBusiness.game.entity.ItemDefaultSkill;
 import org.wx.core.wxBusiness.game.entity.ItemWeapon;
+import org.wx.core.wxBusiness.game.entity.PassiveSkill;
 import org.wx.core.wxBusiness.game.entity.PlayerEquip;
 import org.wx.core.wxBusiness.game.entity.enums.ActiveSkillType;
 import org.wx.core.wxBusiness.game.entity.enums.EquipSlot;
+import org.wx.core.wxBusiness.game.entity.enums.ItemType;
+import org.wx.core.wxBusiness.game.entity.enums.PassiveSkillType;
 import org.wx.core.wxBusiness.game.entity.vo.CraftItemDetailVo;
 import org.wx.core.wxBusiness.game.entity.vo.EquipSlotVo;
 import org.wx.core.wxBusiness.game.mapper.PlayerEquipMapper;
 
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class PlayerEquipService extends WxServiceImpl<PlayerEquipMapper, PlayerEquip> {
@@ -38,6 +45,10 @@ public class PlayerEquipService extends WxServiceImpl<PlayerEquipMapper, PlayerE
     private ItemDetailService itemDetailService;
     @Resource
     private ItemDefaultSkillService itemDefaultSkillService;
+    @Resource
+    private ItemDefaultPassiveService itemDefaultPassiveService;
+    @Resource
+    private PassiveSkillService passiveSkillService;
 
     public PlayerEquip getOrInit(String uid) {
         ErrorFactory.throwError(Wx.isEmpty(uid), "uid不能为空");
@@ -118,6 +129,98 @@ public class PlayerEquipService extends WxServiceImpl<PlayerEquipMapper, PlayerE
         return list;
     }
 
+    /**
+     * 当前穿戴装备上的默认锚点被动（去重），含完整条件与战斗效果。
+     */
+    public List<PassiveSkill> resolveEquippedAnchorPassives(String uid) {
+        return resolveEquippedCombatPassives(uid, PassiveSkillType.IN_ANCHOR);
+    }
+
+    /**
+     * 当前穿戴装备上的默认周期被动（去重），含完整条件与战斗效果。
+     */
+    public List<PassiveSkill> resolveEquippedPeriodicPassives(String uid) {
+        return resolveEquippedCombatPassives(uid, PassiveSkillType.IN_PERIODIC);
+    }
+
+    /**
+     * 当前穿戴装备上的默认战斗外被动（基础+高级，去重），含效果与条件。
+     */
+    public List<PassiveSkill> resolveEquippedOutPassives(String uid) {
+        List<PassiveSkill> list = new ArrayList<>();
+        list.addAll(resolveEquippedCombatPassives(uid, PassiveSkillType.OUT_BASIC));
+        list.addAll(resolveEquippedCombatPassives(uid, PassiveSkillType.OUT_ADVANCED));
+        return list;
+    }
+
+    private List<PassiveSkill> resolveEquippedCombatPassives(String uid, PassiveSkillType type) {
+        List<PassiveSkill> list = new ArrayList<>();
+        if (Wx.isEmpty(uid) || type == null) {
+            return list;
+        }
+        PlayerEquip equip = this.find().eq(PlayerEquip::getUid, uid).one();
+        if (equip == null) {
+            return list;
+        }
+        Map<String, PassiveSkill> uniq = new LinkedHashMap<>();
+        for (EquipSlot slot : EquipSlot.values()) {
+            String itemId = slot.getItemId(equip);
+            if (Wx.isEmpty(itemId)) {
+                continue;
+            }
+            List<ItemDefaultPassive> defaults = itemDefaultPassiveService.listByItemId(itemId, type);
+            if (defaults == null) {
+                continue;
+            }
+            for (ItemDefaultPassive row : defaults) {
+                if (row == null || Wx.isEmpty(row.getPassiveSkillId()) || uniq.containsKey(row.getPassiveSkillId())) {
+                    continue;
+                }
+                PassiveSkill detail = passiveSkillService.getDetail(row.getPassiveSkillId());
+                if (detail == null || Boolean.FALSE.equals(detail.getEnable())) {
+                    continue;
+                }
+                if (detail.getPassiveType() != type) {
+                    continue;
+                }
+                uniq.put(detail.getId(), detail);
+            }
+        }
+        list.addAll(uniq.values());
+        return list;
+    }
+
+    /** 当前已装备物品 id */
+    public Set<String> resolveEquippedItemIds(String uid) {
+        Set<String> ids = new LinkedHashSet<>();
+        if (Wx.isEmpty(uid)) {
+            return ids;
+        }
+        PlayerEquip equip = this.find().eq(PlayerEquip::getUid, uid).one();
+        if (equip == null) {
+            return ids;
+        }
+        for (EquipSlot slot : EquipSlot.values()) {
+            String itemId = slot.getItemId(equip);
+            if (!Wx.isEmpty(itemId)) {
+                ids.add(itemId);
+            }
+        }
+        return ids;
+    }
+
+    /** 当前已装备物品类型 */
+    public Set<ItemType> resolveEquippedItemTypes(String uid) {
+        Set<ItemType> types = EnumSet.noneOf(ItemType.class);
+        for (String itemId : resolveEquippedItemIds(uid)) {
+            Item item = itemService.getById(itemId);
+            if (item != null && item.getItemType() != null) {
+                types.add(item.getItemType());
+            }
+        }
+        return types;
+    }
+
     public List<EquipSlotVo> buildSlotOverview(PlayerEquip equip) {
         List<EquipSlotVo> list = new ArrayList<>();
         for (EquipSlot slot : EquipSlot.values()) {
@@ -130,7 +233,7 @@ public class PlayerEquipService extends WxServiceImpl<PlayerEquipMapper, PlayerE
                 if (item != null) {
                     name = item.getName();
                     icon = item.getIcon();
-                    detail = itemDetailService.build(item);
+                    detail = itemDetailService.buildRich(item);
                 }
             }
             EquipSlotVo vo = EquipSlotVo.of(slot, itemId, name, icon);

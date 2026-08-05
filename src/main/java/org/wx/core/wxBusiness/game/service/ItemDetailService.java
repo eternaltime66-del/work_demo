@@ -3,25 +3,34 @@ package org.wx.core.wxBusiness.game.service;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
 import org.wx.core.wxBase.base.Wx;
+import org.wx.core.wxBusiness.game.battle.GameDescUnit;
 import org.wx.core.wxBusiness.game.entity.ActiveSkill;
 import org.wx.core.wxBusiness.game.entity.Item;
 import org.wx.core.wxBusiness.game.entity.ItemAccessory;
 import org.wx.core.wxBusiness.game.entity.ItemArmor;
+import org.wx.core.wxBusiness.game.entity.ItemDefaultPassive;
 import org.wx.core.wxBusiness.game.entity.ItemDefaultSkill;
 import org.wx.core.wxBusiness.game.entity.ItemGloves;
 import org.wx.core.wxBusiness.game.entity.ItemHelmet;
 import org.wx.core.wxBusiness.game.entity.ItemLegs;
 import org.wx.core.wxBusiness.game.entity.ItemMaterial;
 import org.wx.core.wxBusiness.game.entity.ItemWeapon;
+import org.wx.core.wxBusiness.game.entity.PassiveSkill;
+import org.wx.core.wxBusiness.game.entity.SkillCharge;
+import org.wx.core.wxBusiness.game.entity.SkillEffect;
 import org.wx.core.wxBusiness.game.entity.enums.ItemType;
+import org.wx.core.wxBusiness.game.entity.enums.PassiveSkillType;
 import org.wx.core.wxBusiness.game.entity.vo.CraftItemDetailVo;
+import org.wx.core.wxBusiness.game.entity.vo.PassiveDescVo;
+import org.wx.core.wxBusiness.game.entity.vo.SkillDescVo;
 import org.wx.core.wxBusiness.game.entity.vo.SkillLinkVo;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Function;
 
 /**
- * 组装物品详情（属性 / 技能等），供合成、装备槽等展示
+ * 组装物品详情（属性 / 技能等），供合成、装备槽、后台详情展示
  */
 @Service
 public class ItemDetailService {
@@ -45,13 +54,40 @@ public class ItemDetailService {
     @Resource
     private ItemDefaultSkillService itemDefaultSkillService;
     @Resource
+    private ItemDefaultPassiveService itemDefaultPassiveService;
+    @Resource
     private ActiveSkillService activeSkillService;
+    @Resource
+    private SkillChargeService skillChargeService;
+    @Resource
+    private SkillEffectService skillEffectService;
+    @Resource
+    private PassiveSkillService passiveSkillService;
 
     public CraftItemDetailVo buildByItemId(String itemId) {
         if (Wx.isEmpty(itemId)) {
             return null;
         }
         return build(itemService.getById(itemId));
+    }
+
+    /** 含技能/被动人性化文案（玩家装备详情 / 后台详情） */
+    public CraftItemDetailVo buildRichByItemId(String itemId) {
+        CraftItemDetailVo d = buildByItemId(itemId);
+        if (d == null) {
+            return null;
+        }
+        fillRichDescs(d);
+        return d;
+    }
+
+    public CraftItemDetailVo buildRich(Item item) {
+        CraftItemDetailVo d = build(item);
+        if (d == null) {
+            return null;
+        }
+        fillRichDescs(d);
+        return d;
     }
 
     public CraftItemDetailVo build(Item item) {
@@ -64,11 +100,25 @@ public class ItemDetailService {
         d.setName(item.getName());
         d.setIcon(item.getIcon());
         d.setItemType(item.getItemType() != null ? item.getItemType().name() : null);
+        d.setItemTypeLabel(item.getItemType() != null ? item.getItemType().label() : null);
         d.setMaxStack(item.getMaxStack());
         d.setWeight(item.getWeight());
         d.setRemark(item.getRemark());
         d.setChargeSkillSlotCount(item.getChargeSkillSlotCount());
-        d.setPlayerCanEditSkillSlot(item.getPlayerCanEditSkillSlot());
+        d.setPlayerDefaultEditChargeSkillSlotCount(item.getPlayerDefaultEditChargeSkillSlotCount());
+        d.setPlayerMaxEditChargeSkillSlotCount(item.getPlayerMaxEditChargeSkillSlotCount());
+        d.setBasicPassiveSlotCount(item.getBasicPassiveSlotCount());
+        d.setPlayerDefaultEditBasicPassiveSlotCount(item.getPlayerDefaultEditBasicPassiveSlotCount());
+        d.setPlayerMaxEditBasicPassiveSlotCount(item.getPlayerMaxEditBasicPassiveSlotCount());
+        d.setAdvancedPassiveSlotCount(item.getAdvancedPassiveSlotCount());
+        d.setPlayerDefaultEditAdvancedPassiveSlotCount(item.getPlayerDefaultEditAdvancedPassiveSlotCount());
+        d.setPlayerMaxEditAdvancedPassiveSlotCount(item.getPlayerMaxEditAdvancedPassiveSlotCount());
+        d.setAnchorPassiveSlotCount(item.getAnchorPassiveSlotCount());
+        d.setPlayerDefaultEditAnchorPassiveSlotCount(item.getPlayerDefaultEditAnchorPassiveSlotCount());
+        d.setPlayerMaxEditAnchorPassiveSlotCount(item.getPlayerMaxEditAnchorPassiveSlotCount());
+        d.setPeriodicPassiveSlotCount(item.getPeriodicPassiveSlotCount());
+        d.setPlayerDefaultEditPeriodicPassiveSlotCount(item.getPlayerDefaultEditPeriodicPassiveSlotCount());
+        d.setPlayerMaxEditPeriodicPassiveSlotCount(item.getPlayerMaxEditPeriodicPassiveSlotCount());
 
         ItemType type = item.getItemType();
         if (type == null) {
@@ -81,6 +131,7 @@ public class ItemDetailService {
                     d.setBaseAtk(ext.getBaseAtk());
                     d.setAtkSpeedUpRatio(ext.getAtkSpeedUpRatio());
                     d.setAtkSpeedDownRatio(ext.getAtkSpeedDownRatio());
+                    d.setAtkSpeedText(GameDescUnit.atkSpeedText(ext.getAtkSpeedUpRatio(), ext.getAtkSpeedDownRatio()));
                     d.setNormalSkillId(ext.getNormalSkillId());
                     if (!Wx.isEmpty(ext.getNormalSkillId())) {
                         ActiveSkill skill = activeSkillService.getById(ext.getNormalSkillId());
@@ -99,6 +150,7 @@ public class ItemDetailService {
                 if (ext != null) {
                     d.setAtkSpeedUpRatio(ext.getAtkSpeedUpRatio());
                     d.setAtkSpeedDownRatio(ext.getAtkSpeedDownRatio());
+                    d.setAtkSpeedText(GameDescUnit.atkSpeedText(ext.getAtkSpeedUpRatio(), ext.getAtkSpeedDownRatio()));
                 }
             }
             case MATERIAL -> {
@@ -127,6 +179,81 @@ public class ItemDetailService {
             d.setDefaultSkills(links);
         }
         return d;
+    }
+
+    private void fillRichDescs(CraftItemDetailVo d) {
+        Function<String, String> skillNameFn = id -> {
+            ActiveSkill sk = activeSkillService.getById(id);
+            return sk != null ? sk.getName() : null;
+        };
+        Function<String, String> itemNameFn = id -> {
+            Item it = itemService.getById(id);
+            return it != null ? it.getName() : null;
+        };
+
+        if (!Wx.isEmpty(d.getNormalSkillId())) {
+            d.setNormalSkillDesc(buildSkillDesc(d.getNormalSkillId(), skillNameFn));
+        }
+
+        List<SkillDescVo> skillDescs = new ArrayList<>();
+        if (d.getDefaultSkills() != null) {
+            for (SkillLinkVo link : d.getDefaultSkills()) {
+                if (link == null || Wx.isEmpty(link.getId())) {
+                    continue;
+                }
+                SkillDescVo desc = buildSkillDesc(link.getId(), skillNameFn);
+                if (desc != null && desc.getId() != null) {
+                    skillDescs.add(desc);
+                }
+            }
+        }
+        d.setDefaultSkillDescs(skillDescs);
+
+        d.setDefaultBasicPassiveDescs(buildPassiveDescs(d.getItemId(), PassiveSkillType.OUT_BASIC, itemNameFn, skillNameFn));
+        d.setDefaultAdvancedPassiveDescs(buildPassiveDescs(d.getItemId(), PassiveSkillType.OUT_ADVANCED, itemNameFn, skillNameFn));
+        d.setDefaultAnchorPassiveDescs(buildPassiveDescs(d.getItemId(), PassiveSkillType.IN_ANCHOR, itemNameFn, skillNameFn));
+        d.setDefaultPeriodicPassiveDescs(buildPassiveDescs(d.getItemId(), PassiveSkillType.IN_PERIODIC, itemNameFn, skillNameFn));
+    }
+
+    private SkillDescVo buildSkillDesc(String skillId, Function<String, String> skillNameFn) {
+        ActiveSkill skill = activeSkillService.getById(skillId);
+        if (skill == null) {
+            return null;
+        }
+        List<SkillCharge> charges = skillChargeService.listBySkillId(skillId);
+        List<SkillEffect> effects = skillEffectService.listBySkillId(skillId);
+        return GameDescUnit.describeActiveSkill(skill, charges, effects, skillNameFn);
+    }
+
+    private List<PassiveDescVo> buildPassiveDescs(
+            String itemId,
+            PassiveSkillType type,
+            Function<String, String> itemNameFn,
+            Function<String, String> skillNameFn
+    ) {
+        List<PassiveDescVo> list = new ArrayList<>();
+        if (Wx.isEmpty(itemId)) {
+            return list;
+        }
+        List<ItemDefaultPassive> rows = itemDefaultPassiveService.listByItemId(itemId, type);
+        if (rows == null) {
+            return list;
+        }
+        for (ItemDefaultPassive row : rows) {
+            if (row == null || Wx.isEmpty(row.getPassiveSkillId())) {
+                continue;
+            }
+            try {
+                PassiveSkill detail = passiveSkillService.getDetail(row.getPassiveSkillId());
+                if (detail == null) {
+                    continue;
+                }
+                list.add(GameDescUnit.describePassive(detail, itemNameFn, skillNameFn));
+            } catch (Exception ignored) {
+                // 单条被动描述失败不影响整件装备详情
+            }
+        }
+        return list;
     }
 
     private void fillArmorLike(CraftItemDetailVo d, ItemArmor ext) {

@@ -568,12 +568,17 @@
             <div class="craft-stat-row" v-if="craftDetail.resultItem.defense != null">
               <span>防御</span><span class="hl">{{ craftDetail.resultItem.defense }}</span>
             </div>
-            <div class="craft-stat-row" v-if="craftDetail.resultItem.atkSpeedUpRatio != null && Number(craftDetail.resultItem.atkSpeedUpRatio) !== 0">
-              <span>增加攻速</span><span class="hl">{{ craftDetail.resultItem.atkSpeedUpRatio }}%</span>
+            <div class="craft-stat-row" v-if="craftDetail.resultItem.atkSpeedText">
+              <span>攻速</span><span class="hl">{{ craftDetail.resultItem.atkSpeedText }}</span>
             </div>
-            <div class="craft-stat-row" v-if="craftDetail.resultItem.atkSpeedDownRatio != null && Number(craftDetail.resultItem.atkSpeedDownRatio) !== 0">
-              <span>减少攻速</span><span class="hl">{{ craftDetail.resultItem.atkSpeedDownRatio }}%</span>
-            </div>
+            <template v-else>
+              <div class="craft-stat-row" v-if="craftDetail.resultItem.atkSpeedUpRatio != null && Number(craftDetail.resultItem.atkSpeedUpRatio) !== 0">
+                <span>增加攻速</span><span class="hl">{{ craftDetail.resultItem.atkSpeedUpRatio }}%</span>
+              </div>
+              <div class="craft-stat-row" v-if="craftDetail.resultItem.atkSpeedDownRatio != null && Number(craftDetail.resultItem.atkSpeedDownRatio) !== 0">
+                <span>减少攻速</span><span class="hl">{{ craftDetail.resultItem.atkSpeedDownRatio }}%</span>
+              </div>
+            </template>
             <div class="craft-stat-row" v-if="craftDetail.resultItem.normalSkillName || craftDetail.resultItem.normalSkillId">
               <span>普攻技能</span>
               <button
@@ -583,11 +588,26 @@
                 @click="openSkillDetail(craftDetail.resultItem.normalSkillId)"
               >{{ craftDetail.resultItem.normalSkillName || craftDetail.resultItem.normalSkillId }}</button>
             </div>
+            <div class="item-detail-desc" v-if="craftDetail.resultItem.normalSkillDesc && craftDetail.resultItem.normalSkillDesc.summary">
+              <pre class="item-desc-summary">{{ craftDetail.resultItem.normalSkillDesc.summary }}</pre>
+            </div>
             <div class="craft-stat-row" v-if="craftDetail.resultItem.chargeSkillSlotCount != null && craftDetail.resultItem.chargeSkillSlotCount > 0">
               <span>充能技能槽</span><span class="hl">{{ craftDetail.resultItem.chargeSkillSlotCount }}</span>
             </div>
-            <div class="craft-stat-row" v-if="craftDetail.resultItem.playerCanEditSkillSlot">
-              <span>技能槽可编辑</span><span class="hl">是</span>
+            <div class="craft-stat-row" v-if="craftDetail.resultItem.playerMaxEditChargeSkillSlotCount > 0">
+              <span>可编辑充能技能槽</span><span class="hl">{{ craftDetail.resultItem.playerMaxEditChargeSkillSlotCount }}</span>
+            </div>
+            <div class="craft-stat-row" v-if="craftDetail.resultItem.basicPassiveSlotCount > 0">
+              <span>基础被动槽</span><span class="hl">{{ craftDetail.resultItem.basicPassiveSlotCount }}</span>
+            </div>
+            <div class="craft-stat-row" v-if="craftDetail.resultItem.advancedPassiveSlotCount > 0">
+              <span>高级被动槽</span><span class="hl">{{ craftDetail.resultItem.advancedPassiveSlotCount }}</span>
+            </div>
+            <div class="craft-stat-row" v-if="craftDetail.resultItem.anchorPassiveSlotCount > 0">
+              <span>锚点被动槽</span><span class="hl">{{ craftDetail.resultItem.anchorPassiveSlotCount }}</span>
+            </div>
+            <div class="craft-stat-row" v-if="craftDetail.resultItem.periodicPassiveSlotCount > 0">
+              <span>周期被动槽</span><span class="hl">{{ craftDetail.resultItem.periodicPassiveSlotCount }}</span>
             </div>
             <div class="craft-stat-row craft-stat-row-skills" v-if="craftDetail.resultItem.defaultSkills && craftDetail.resultItem.defaultSkills.length">
               <span>默认技能</span>
@@ -604,6 +624,46 @@
             </div>
             <div class="craft-stat-row" v-else-if="craftDetail.resultItem.defaultSkillNames && craftDetail.resultItem.defaultSkillNames.length">
               <span>默认技能</span><span class="hl">{{ craftDetail.resultItem.defaultSkillNames.join('、') }}</span>
+            </div>
+            <div
+              v-for="(sk, idx) in (craftDetail.resultItem.defaultSkillDescs || [])"
+              :key="'csd-' + idx"
+              class="item-detail-desc"
+            >
+              <div class="item-desc-slot">默认充能技能 {{ idx + 1 }}</div>
+              <pre class="item-desc-summary">{{ sk.summary }}</pre>
+            </div>
+            <div
+              v-for="(ps, idx) in (craftDetail.resultItem.defaultBasicPassiveDescs || [])"
+              :key="'cbd-' + idx"
+              class="item-detail-desc"
+            >
+              <div class="item-desc-slot">默认基础被动 {{ idx + 1 }}</div>
+              <pre class="item-desc-summary">{{ ps.summary }}</pre>
+            </div>
+            <div
+              v-for="(ps, idx) in (craftDetail.resultItem.defaultAdvancedPassiveDescs || [])"
+              :key="'cad-' + idx"
+              class="item-detail-desc"
+            >
+              <div class="item-desc-slot">默认高级被动 {{ idx + 1 }}</div>
+              <pre class="item-desc-summary">{{ ps.summary }}</pre>
+            </div>
+            <div
+              v-for="(ps, idx) in (craftDetail.resultItem.defaultAnchorPassiveDescs || [])"
+              :key="'cnd-' + idx"
+              class="item-detail-desc"
+            >
+              <div class="item-desc-slot">默认锚点被动 {{ idx + 1 }}</div>
+              <pre class="item-desc-summary">{{ ps.summary }}</pre>
+            </div>
+            <div
+              v-for="(ps, idx) in (craftDetail.resultItem.defaultPeriodicPassiveDescs || [])"
+              :key="'cpd-' + idx"
+              class="item-detail-desc"
+            >
+              <div class="item-desc-slot">默认周期被动 {{ idx + 1 }}</div>
+              <pre class="item-desc-summary">{{ ps.summary }}</pre>
             </div>
             <div class="craft-stat-row" v-if="craftDetail.resultItem.remark">
               <span>备注</span><span>{{ craftDetail.resultItem.remark }}</span>
@@ -693,68 +753,141 @@
           <span>重量</span>
           <span>{{ prepItemView.weight }}</span>
         </div>
-        <div class="item-stat-row" v-if="prepItemView.grade != null">
-          <span>品级</span>
-          <span class="highlight">{{ prepItemView.grade }}</span>
-        </div>
-        <div class="item-stat-row" v-if="prepItemView.baseAtk != null">
-          <span>基础攻击</span>
-          <span class="highlight">{{ prepItemView.baseAtk }}</span>
-        </div>
-        <div class="item-stat-row" v-if="prepItemView.hp != null">
-          <span>生命</span>
-          <span class="highlight">{{ prepItemView.hp }}</span>
-        </div>
-        <div class="item-stat-row" v-if="prepItemView.defense != null">
-          <span>防御</span>
-          <span class="highlight">{{ prepItemView.defense }}</span>
-        </div>
-        <div class="item-stat-row" v-if="prepItemView.atkSpeedUpRatio != null && Number(prepItemView.atkSpeedUpRatio) !== 0">
-          <span>增加攻速</span>
-          <span class="highlight">{{ prepItemView.atkSpeedUpRatio }}%</span>
-        </div>
-        <div class="item-stat-row" v-if="prepItemView.atkSpeedDownRatio != null && Number(prepItemView.atkSpeedDownRatio) !== 0">
-          <span>减少攻速</span>
-          <span class="highlight">{{ prepItemView.atkSpeedDownRatio }}%</span>
-        </div>
-        <div class="item-stat-row" v-if="prepItemView.normalSkillName || prepItemView.normalSkillId">
-          <span>普攻技能</span>
-          <button
-            type="button"
-            class="skill-link"
-            :disabled="!prepItemView.normalSkillId"
-            @click="openSkillDetail(prepItemView.normalSkillId)"
-          >{{ prepItemView.normalSkillName || prepItemView.normalSkillId }}</button>
-        </div>
-        <div class="item-stat-row" v-if="prepItemView.chargeSkillSlotCount != null && prepItemView.chargeSkillSlotCount > 0">
-          <span>充能技能槽</span>
-          <span class="highlight">{{ prepItemView.chargeSkillSlotCount }}</span>
-        </div>
-        <div class="item-stat-row" v-if="prepItemView.playerCanEditSkillSlot">
-          <span>技能槽可编辑</span>
-          <span class="highlight">是</span>
-        </div>
-        <div class="item-stat-row item-stat-row-skills" v-if="prepItemView.defaultSkills && prepItemView.defaultSkills.length">
-          <span>默认技能</span>
-          <div class="skill-link-list">
-            <button
-              v-for="sk in prepItemView.defaultSkills"
-              :key="sk.id || sk.name"
-              type="button"
-              class="skill-link"
-              :disabled="!sk.id"
-              @click="openSkillDetail(sk.id)"
-            >{{ sk.name || sk.id }}</button>
-          </div>
-        </div>
-        <div class="item-stat-row" v-else-if="prepItemView.defaultSkillNames && prepItemView.defaultSkillNames.length">
-          <span>默认技能</span>
-          <span class="highlight">{{ prepItemView.defaultSkillNames.join('、') }}</span>
-        </div>
         <div class="item-stat-row" v-if="prepItemView.remark">
           <span>备注</span>
           <span>{{ prepItemView.remark }}</span>
         </div>
+
+        <template v-if="prepItemView.itemType === 'WEAPON'">
+          <div class="item-detail-section-title">武器属性</div>
+          <div class="item-stat-row"><span>基础攻击</span><span class="highlight">{{ prepItemView.baseAtk ?? 0 }}</span></div>
+          <div class="item-stat-row" v-if="prepItemView.atkSpeedText"><span>攻速</span><span class="highlight">{{ prepItemView.atkSpeedText }}</span></div>
+          <template v-else>
+            <div class="item-stat-row" v-if="Number(prepItemView.atkSpeedUpRatio || 0) !== 0"><span>增加攻速</span><span class="highlight">{{ prepItemView.atkSpeedUpRatio }}%</span></div>
+            <div class="item-stat-row" v-if="Number(prepItemView.atkSpeedDownRatio || 0) !== 0"><span>减少攻速</span><span class="highlight">{{ prepItemView.atkSpeedDownRatio }}%</span></div>
+          </template>
+          <div class="item-stat-row">
+            <span>普攻技能</span>
+            <button type="button" class="skill-link" :disabled="!prepItemView.normalSkillId" @click="openSkillDetail(prepItemView.normalSkillId)">
+              {{ prepItemView.normalSkillName || prepItemView.normalSkillId || '未绑定' }}
+            </button>
+          </div>
+          <div class="item-detail-desc" v-if="prepItemView.normalSkillDesc && prepItemView.normalSkillDesc.summary">
+            <pre class="item-desc-summary">{{ prepItemView.normalSkillDesc.summary }}</pre>
+          </div>
+        </template>
+
+        <template v-if="['ARMOR','GLOVES','HELMET','LEGS'].indexOf(prepItemView.itemType) >= 0">
+          <div class="item-detail-section-title">防具属性</div>
+          <div class="item-stat-row"><span>生命</span><span class="highlight">{{ prepItemView.hp ?? 0 }}</span></div>
+          <div class="item-stat-row"><span>防御</span><span class="highlight">{{ prepItemView.defense ?? 0 }}</span></div>
+        </template>
+
+        <template v-if="prepItemView.itemType === 'ACCESSORY'">
+          <div class="item-detail-section-title">饰品属性</div>
+          <div class="item-stat-row" v-if="prepItemView.atkSpeedText"><span>攻速</span><span class="highlight">{{ prepItemView.atkSpeedText }}</span></div>
+          <div class="item-stat-row" v-if="Number(prepItemView.atkSpeedUpRatio || 0) !== 0"><span>增加攻速</span><span class="highlight">{{ prepItemView.atkSpeedUpRatio }}%</span></div>
+          <div class="item-stat-row" v-if="Number(prepItemView.atkSpeedDownRatio || 0) !== 0"><span>减少攻速</span><span class="highlight">{{ prepItemView.atkSpeedDownRatio }}%</span></div>
+          <div class="item-stat-row" v-if="!prepItemView.atkSpeedText && !Number(prepItemView.atkSpeedUpRatio || 0) && !Number(prepItemView.atkSpeedDownRatio || 0)">
+            <span>攻速</span><span class="highlight">无变化</span>
+          </div>
+        </template>
+
+        <template v-if="prepItemView.itemType === 'MATERIAL'">
+          <div class="item-detail-section-title">材料属性</div>
+          <div class="item-stat-row"><span>品级</span><span class="highlight">{{ prepItemView.grade ?? '—' }}</span></div>
+        </template>
+
+        <template v-if="prepItemView.itemType && prepItemView.itemType !== 'MATERIAL' && prepItemHasAnySlot">
+          <div class="item-detail-section-title">槽位</div>
+          <div class="item-stat-row" v-if="Number(prepItemView.chargeSkillSlotCount || 0) > 0">
+            <span>充能技能槽</span><span class="highlight">{{ prepItemView.chargeSkillSlotCount }}</span>
+          </div>
+          <div class="item-stat-row" v-if="Number(prepItemView.playerDefaultEditChargeSkillSlotCount || 0) > 0 || Number(prepItemView.playerMaxEditChargeSkillSlotCount || 0) > 0">
+            <span>可编辑充能槽</span>
+            <span class="highlight">默认 {{ prepItemView.playerDefaultEditChargeSkillSlotCount ?? 0 }} / 最大 {{ prepItemView.playerMaxEditChargeSkillSlotCount ?? 0 }}</span>
+          </div>
+          <div class="item-stat-row" v-if="Number(prepItemView.basicPassiveSlotCount || 0) > 0">
+            <span>基础被动槽</span><span class="highlight">{{ prepItemView.basicPassiveSlotCount }}</span>
+          </div>
+          <div class="item-stat-row" v-if="Number(prepItemView.advancedPassiveSlotCount || 0) > 0">
+            <span>高级被动槽</span><span class="highlight">{{ prepItemView.advancedPassiveSlotCount }}</span>
+          </div>
+          <div class="item-stat-row" v-if="Number(prepItemView.anchorPassiveSlotCount || 0) > 0">
+            <span>锚点被动槽</span><span class="highlight">{{ prepItemView.anchorPassiveSlotCount }}</span>
+          </div>
+          <div class="item-stat-row" v-if="Number(prepItemView.periodicPassiveSlotCount || 0) > 0">
+            <span>周期被动槽</span><span class="highlight">{{ prepItemView.periodicPassiveSlotCount }}</span>
+          </div>
+        </template>
+
+        <template v-if="prepItemView.itemType && prepItemView.itemType !== 'MATERIAL'">
+          <template v-if="Number(prepItemView.chargeSkillSlotCount || 0) > 0">
+            <div class="item-detail-section-title">默认充能技能</div>
+            <div class="item-stat-row item-stat-row-skills" v-if="prepItemView.defaultSkills && prepItemView.defaultSkills.length">
+              <span>技能</span>
+              <div class="skill-link-list">
+                <button
+                  v-for="sk in prepItemView.defaultSkills"
+                  :key="sk.id || sk.name"
+                  type="button"
+                  class="skill-link"
+                  :disabled="!sk.id"
+                  @click="openSkillDetail(sk.id)"
+                >{{ sk.name || sk.id }}</button>
+              </div>
+            </div>
+            <p v-else class="item-detail-empty">暂无默认充能技能</p>
+            <div v-for="(sk, idx) in (prepItemView.defaultSkillDescs || [])" :key="'psd-' + idx" class="item-detail-desc">
+              <div class="item-desc-slot">槽位 {{ idx + 1 }}</div>
+              <pre class="item-desc-summary">{{ sk.summary }}</pre>
+            </div>
+          </template>
+
+          <template v-if="Number(prepItemView.basicPassiveSlotCount || 0) > 0">
+            <div class="item-detail-section-title">默认基础被动</div>
+            <div v-if="prepItemView.defaultBasicPassiveDescs && prepItemView.defaultBasicPassiveDescs.length">
+              <div v-for="(ps, idx) in prepItemView.defaultBasicPassiveDescs" :key="'pbd-' + idx" class="item-detail-desc">
+                <div class="item-desc-slot">槽位 {{ idx + 1 }}</div>
+                <pre class="item-desc-summary">{{ ps.summary }}</pre>
+              </div>
+            </div>
+            <p v-else class="item-detail-empty">暂无默认基础被动</p>
+          </template>
+
+          <template v-if="Number(prepItemView.advancedPassiveSlotCount || 0) > 0">
+            <div class="item-detail-section-title">默认高级被动</div>
+            <div v-if="prepItemView.defaultAdvancedPassiveDescs && prepItemView.defaultAdvancedPassiveDescs.length">
+              <div v-for="(ps, idx) in prepItemView.defaultAdvancedPassiveDescs" :key="'pad-' + idx" class="item-detail-desc">
+                <div class="item-desc-slot">槽位 {{ idx + 1 }}</div>
+                <pre class="item-desc-summary">{{ ps.summary }}</pre>
+              </div>
+            </div>
+            <p v-else class="item-detail-empty">暂无默认高级被动</p>
+          </template>
+
+          <template v-if="Number(prepItemView.anchorPassiveSlotCount || 0) > 0">
+            <div class="item-detail-section-title">默认锚点被动</div>
+            <div v-if="prepItemView.defaultAnchorPassiveDescs && prepItemView.defaultAnchorPassiveDescs.length">
+              <div v-for="(ps, idx) in prepItemView.defaultAnchorPassiveDescs" :key="'pnd-' + idx" class="item-detail-desc">
+                <div class="item-desc-slot">槽位 {{ idx + 1 }}</div>
+                <pre class="item-desc-summary">{{ ps.summary }}</pre>
+              </div>
+            </div>
+            <p v-else class="item-detail-empty">暂无默认锚点被动</p>
+          </template>
+
+          <template v-if="Number(prepItemView.periodicPassiveSlotCount || 0) > 0">
+            <div class="item-detail-section-title">默认周期被动</div>
+            <div v-if="prepItemView.defaultPeriodicPassiveDescs && prepItemView.defaultPeriodicPassiveDescs.length">
+              <div v-for="(ps, idx) in prepItemView.defaultPeriodicPassiveDescs" :key="'ppd-' + idx" class="item-detail-desc">
+                <div class="item-desc-slot">槽位 {{ idx + 1 }}</div>
+                <pre class="item-desc-summary">{{ ps.summary }}</pre>
+              </div>
+            </div>
+            <p v-else class="item-detail-empty">暂无默认周期被动</p>
+          </template>
+        </template>
       </div>
       <div class="item-detail-actions">
         <button
@@ -1069,30 +1202,60 @@ createApp({
       if (!this.prepItemDetail || !this.prepItemDetail.data) return null;
       var raw = this.prepItemDetail.data;
       var detail = raw.detail || {};
+      function pick(key) {
+        return detail[key] != null ? detail[key] : raw[key];
+      }
       return {
         slot: raw.slot,
         quantity: raw.quantity,
         itemId: raw.itemId || detail.itemId,
         name: raw.itemName || raw.name || detail.name,
         icon: raw.icon || detail.icon,
-        itemType: raw.itemType || detail.itemType || raw.requiredType,
+        itemType: (function () {
+          var t = raw.itemType || detail.itemType || raw.requiredType;
+          return t && typeof t === 'object' ? (t.name || t) : t;
+        })(),
+        itemTypeLabel: detail.itemTypeLabel || raw.itemTypeLabel,
         code: detail.code || raw.code,
-        maxStack: detail.maxStack != null ? detail.maxStack : raw.maxStack,
-        weight: detail.weight != null ? detail.weight : raw.weight,
-        grade: detail.grade != null ? detail.grade : raw.grade,
-        baseAtk: detail.baseAtk != null ? detail.baseAtk : raw.baseAtk,
-        hp: detail.hp != null ? detail.hp : raw.hp,
-        defense: detail.defense != null ? detail.defense : raw.defense,
-        atkSpeedUpRatio: detail.atkSpeedUpRatio != null ? detail.atkSpeedUpRatio : raw.atkSpeedUpRatio,
-        atkSpeedDownRatio: detail.atkSpeedDownRatio != null ? detail.atkSpeedDownRatio : raw.atkSpeedDownRatio,
+        maxStack: pick('maxStack'),
+        weight: pick('weight'),
+        grade: pick('grade'),
+        baseAtk: pick('baseAtk'),
+        hp: pick('hp'),
+        defense: pick('defense'),
+        atkSpeedText: detail.atkSpeedText || raw.atkSpeedText,
+        atkSpeedUpRatio: pick('atkSpeedUpRatio'),
+        atkSpeedDownRatio: pick('atkSpeedDownRatio'),
         normalSkillId: detail.normalSkillId || raw.normalSkillId,
         normalSkillName: detail.normalSkillName || raw.normalSkillName,
-        chargeSkillSlotCount: detail.chargeSkillSlotCount != null ? detail.chargeSkillSlotCount : raw.chargeSkillSlotCount,
-        playerCanEditSkillSlot: detail.playerCanEditSkillSlot != null ? detail.playerCanEditSkillSlot : raw.playerCanEditSkillSlot,
+        normalSkillDesc: detail.normalSkillDesc || raw.normalSkillDesc,
+        chargeSkillSlotCount: pick('chargeSkillSlotCount'),
+        playerDefaultEditChargeSkillSlotCount: pick('playerDefaultEditChargeSkillSlotCount'),
+        playerMaxEditChargeSkillSlotCount: pick('playerMaxEditChargeSkillSlotCount'),
+        basicPassiveSlotCount: pick('basicPassiveSlotCount'),
+        advancedPassiveSlotCount: pick('advancedPassiveSlotCount'),
+        anchorPassiveSlotCount: pick('anchorPassiveSlotCount'),
+        periodicPassiveSlotCount: pick('periodicPassiveSlotCount'),
         defaultSkillNames: detail.defaultSkillNames || raw.defaultSkillNames || [],
         defaultSkills: detail.defaultSkills || raw.defaultSkills || [],
+        defaultSkillDescs: detail.defaultSkillDescs || raw.defaultSkillDescs || [],
+        defaultBasicPassiveDescs: detail.defaultBasicPassiveDescs || raw.defaultBasicPassiveDescs || [],
+        defaultAdvancedPassiveDescs: detail.defaultAdvancedPassiveDescs || raw.defaultAdvancedPassiveDescs || [],
+        defaultAnchorPassiveDescs: detail.defaultAnchorPassiveDescs || raw.defaultAnchorPassiveDescs || [],
+        defaultPeriodicPassiveDescs: detail.defaultPeriodicPassiveDescs || raw.defaultPeriodicPassiveDescs || [],
         remark: detail.remark || raw.remark
       };
+    },
+    prepItemHasAnySlot() {
+      var v = this.prepItemView;
+      if (!v) return false;
+      return Number(v.chargeSkillSlotCount || 0) > 0
+        || Number(v.playerDefaultEditChargeSkillSlotCount || 0) > 0
+        || Number(v.playerMaxEditChargeSkillSlotCount || 0) > 0
+        || Number(v.basicPassiveSlotCount || 0) > 0
+        || Number(v.advancedPassiveSlotCount || 0) > 0
+        || Number(v.anchorPassiveSlotCount || 0) > 0
+        || Number(v.periodicPassiveSlotCount || 0) > 0;
     },
     warehouseFilledSlots() {
       if (!this.warehouse || !this.warehouse.slots) return [];
@@ -1513,12 +1676,29 @@ createApp({
     },
     formulaReadLabel(key) {
       return {
-        MAX_HP: '最大生命', HP: '当前生命', ATK: '攻击力', DEF: '防御力',
-        ACTION: '行动值', ELAPSED_ACTION: '已经过行动值'
+        MAX_HP: '最大生命', HP: '当前生命', ATK: '攻击', DEF: '防御',
+        ACTION: '角色行动值', ELAPSED_ACTION: '已经过行动值'
       }[key] || key || '?';
     },
     formulaReadRoleLabel(role) {
-      return { SELF: '自己', EACH_TARGET: '目标' }[role] || '';
+      return { SELF: '自己', GLOBAL: '全局', EACH_TARGET: '每个目标' }[role] || '';
+    },
+    formulaReadTokenLabel(t) {
+      if (!t || t.paramMode !== 'READ') return '';
+      var role = this.formulaReadRoleLabel(t.readRole || 'SELF');
+      if ((t.readRole || 'SELF') === 'GLOBAL') return role + '·已经过行动值';
+      var cat = t.readCategory || 'ATTR';
+      if (cat === 'DAMAGE') {
+        var side = t.damageSide === 'RECEIVE' ? '受到' : '造成';
+        var metric = t.damageMetric === 'COUNT' ? '累计伤害次数' : '累计伤害量';
+        return role + '·伤害·' + side + '·' + metric;
+      }
+      if (cat === 'SKILL') {
+        var match = t.skillMatch === 'ANY_TYPE' ? '指定类型' : (t.skillMatch === 'SPECIFIC' ? '指定技能' : '任意');
+        var sm = t.skillMetric === 'RECEIVE' ? '受到次数' : '释放次数';
+        return role + '·技能·' + match + '·' + sm;
+      }
+      return role + '·' + this.formulaReadLabel(t.readKey || 'ATK');
     },
     formulaOpLabel(op) {
       return { '+': '+', '-': '−', '*': '×', '/': '÷', '(': '(', ')': ')' }[op] || op || '';
@@ -1555,18 +1735,23 @@ createApp({
           nums.push({ kind: 'NUM', value: Number(lit) || 0 });
           continue;
         }
-        var readKey = t.readKey || 'ATK';
         var readRole = t.readRole || 'SELF';
-        var n = this.readFormulaStat(role, readKey);
-        if (n != null && readRole !== 'EACH_TARGET') {
-          parts.push(String(n));
-          nums.push({ kind: 'NUM', value: n });
-        } else {
+        var cat = t.readCategory || 'ATTR';
+        if (readRole === 'EACH_TARGET' || readRole === 'GLOBAL' || cat === 'DAMAGE' || cat === 'SKILL') {
           canEval = false;
-          var label = this.formulaReadLabel(readKey);
-          var roleLabel = this.formulaReadRoleLabel(readRole);
-          parts.push(roleLabel ? (roleLabel + '·' + label) : label);
+          parts.push(this.formulaReadTokenLabel(t));
           nums.push({ kind: 'NUM', value: NaN });
+        } else {
+          var readKey = t.readKey || 'ATK';
+          var n = this.readFormulaStat(role, readKey);
+          if (n != null) {
+            parts.push(String(n));
+            nums.push({ kind: 'NUM', value: n });
+          } else {
+            canEval = false;
+            parts.push(this.formulaReadTokenLabel(t));
+            nums.push({ kind: 'NUM', value: NaN });
+          }
         }
       }
       var expr = parts.join(' ');

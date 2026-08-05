@@ -12,21 +12,17 @@ import java.util.Map;
 
 /**
  * 战斗演算用统计面板（读取侧）。
- * <p>
- * 维度说明：
- * <ul>
- *   <li>角色属性：每个角色 × {最大生命/当前生命/攻击/防御/行动值}</li>
- *   <li>已经过行动值：整场战斗一条累加值</li>
- *   <li>充能技能次数：每个角色 × {释放/受到} × {指定技能/指定类型/任意}</li>
- * </ul>
  */
 public class BattleStatBoard {
 
-    /** 本次战斗已经过行动值 */
     private int elapsedActionValue;
 
     private final Map<String, BattleUnitStats> unitStats = new LinkedHashMap<>();
     private final Map<BattleSkillCountKey, Integer> skillCounts = new LinkedHashMap<>();
+    private final Map<String, long[]> dealDamage = new LinkedHashMap<>();
+    private final Map<String, long[]> receiveDamage = new LinkedHashMap<>();
+    /** 主动技能伤害次数（被动产生不计）：deal / receive */
+    private final Map<String, long[]> activeSkillDamageCount = new LinkedHashMap<>();
 
     public int getElapsedActionValue() {
         return elapsedActionValue;
@@ -102,9 +98,6 @@ public class BattleStatBoard {
         setSkillCount(key, getSkillCount(key) + delta);
     }
 
-    /**
-     * 记录一次「释放」指定充能技能：同时累加 ANY / 类型 / 指定技能 三个维度
-     */
     public void recordCast(String roleId, String skillId, ActiveSkillType skillType) {
         addSkillCount(BattleSkillCountKey.ofAny(roleId, SkillCountDirection.CAST), 1);
         if (skillType != null) {
@@ -115,9 +108,6 @@ public class BattleStatBoard {
         }
     }
 
-    /**
-     * 记录一次「受到」指定充能技能
-     */
     public void recordReceive(String roleId, String skillId, ActiveSkillType skillType) {
         addSkillCount(BattleSkillCountKey.ofAny(roleId, SkillCountDirection.RECEIVE), 1);
         if (skillType != null) {
@@ -126,5 +116,79 @@ public class BattleStatBoard {
         if (skillId != null && !skillId.isBlank()) {
             addSkillCount(BattleSkillCountKey.ofSkill(roleId, SkillCountDirection.RECEIVE, skillId), 1);
         }
+    }
+
+    /** 记录伤害量与次数；fromActiveSkill=true 时额外累计主动技能伤害次数 */
+    public void recordDamage(String dealerId, String receiverId, int amount, boolean fromActiveSkill) {
+        if (amount <= 0) {
+            return;
+        }
+        bumpDamage(dealDamage, dealerId, amount);
+        bumpDamage(receiveDamage, receiverId, amount);
+        if (fromActiveSkill) {
+            bumpActiveCount(dealerId, true);
+            bumpActiveCount(receiverId, false);
+        }
+    }
+
+    public void recordDamage(String dealerId, String receiverId, int amount) {
+        recordDamage(dealerId, receiverId, amount, true);
+    }
+
+    public long getDealDamageAmount(String roleId) {
+        return damageAmount(dealDamage, roleId);
+    }
+
+    public long getDealDamageCount(String roleId) {
+        return damageCount(dealDamage, roleId);
+    }
+
+    public long getReceiveDamageAmount(String roleId) {
+        return damageAmount(receiveDamage, roleId);
+    }
+
+    public long getReceiveDamageCount(String roleId) {
+        return damageCount(receiveDamage, roleId);
+    }
+
+    public long getActiveDealDamageCount(String roleId) {
+        long[] arr = activeSkillDamageCount.get(roleId);
+        return arr == null ? 0 : arr[0];
+    }
+
+    public long getActiveReceiveDamageCount(String roleId) {
+        long[] arr = activeSkillDamageCount.get(roleId);
+        return arr == null ? 0 : arr[1];
+    }
+
+    private static void bumpDamage(Map<String, long[]> map, String roleId, int amount) {
+        if (roleId == null || roleId.isBlank()) {
+            return;
+        }
+        long[] arr = map.computeIfAbsent(roleId, k -> new long[2]);
+        arr[0] += amount;
+        arr[1] += 1;
+    }
+
+    private void bumpActiveCount(String roleId, boolean deal) {
+        if (roleId == null || roleId.isBlank()) {
+            return;
+        }
+        long[] arr = activeSkillDamageCount.computeIfAbsent(roleId, k -> new long[2]);
+        if (deal) {
+            arr[0] += 1;
+        } else {
+            arr[1] += 1;
+        }
+    }
+
+    private static long damageAmount(Map<String, long[]> map, String roleId) {
+        long[] arr = map.get(roleId);
+        return arr == null ? 0 : arr[0];
+    }
+
+    private static long damageCount(Map<String, long[]> map, String roleId) {
+        long[] arr = map.get(roleId);
+        return arr == null ? 0 : arr[1];
     }
 }

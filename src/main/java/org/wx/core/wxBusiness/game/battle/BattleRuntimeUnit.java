@@ -2,6 +2,7 @@ package org.wx.core.wxBusiness.game.battle;
 
 import lombok.Data;
 import org.wx.core.wxBusiness.game.entity.ActiveSkill;
+import org.wx.core.wxBusiness.game.entity.PassiveSkill;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -39,6 +40,20 @@ public class BattleRuntimeUnit {
     private final Map<String, Integer> castCountMap = new HashMap<>();
 
     private final List<ActiveSkill> skills = new ArrayList<>();
+
+    /** 开战已挂载的锚点被动（含条件与 combatEffects） */
+    private final List<PassiveSkill> anchorPassives = new ArrayList<>();
+
+    /** 开战已挂载的周期被动 */
+    private final List<PassiveSkill> periodicPassives = new ArrayList<>();
+
+    /** 周期被动本场触发次数：passiveId -> count */
+    private final Map<String, Integer> periodicTriggerCount = new HashMap<>();
+
+    /**
+     * 周期阶梯/边沿状态：passiveId -> candidateKey -> [lastStep, wasTrue(0/1)]
+     */
+    private final Map<String, Map<String, int[]>> periodicEdgeState = new HashMap<>();
 
     public boolean alive() {
         return hp > 0;

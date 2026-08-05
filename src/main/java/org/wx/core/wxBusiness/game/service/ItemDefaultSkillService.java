@@ -49,7 +49,7 @@ public class ItemDefaultSkillService extends WxServiceImpl<ItemDefaultSkillMappe
         ErrorFactory.notNull(item, "物品不存在");
 
         int slotCount = item.getChargeSkillSlotCount() != null ? item.getChargeSkillSlotCount() : 0;
-        ErrorFactory.throwError(slotCount <= 0, "请先设置充能技能槽数量");
+        ErrorFactory.throwError(slotCount <= 0, "请先设置默认充能技能槽数量");
 
         List<ItemDefaultSkill> rows = skills != null ? skills : List.of();
         // 允许空槽：未配置的槽不落库；有配置的槽按序号保存

@@ -27,6 +27,15 @@ public class RoleBaseStatService extends WxServiceImpl<RoleBaseStatMapper, RoleB
         if (entity.getLifeStealRatio() == null) {
             entity.setLifeStealRatio(BigDecimal.ZERO);
         }
+        if (entity.getFinalAtkRatio() == null) {
+            entity.setFinalAtkRatio(HUNDRED);
+        }
+        if (entity.getFinalHpRatio() == null) {
+            entity.setFinalHpRatio(HUNDRED);
+        }
+        if (entity.getFinalDefRatio() == null) {
+            entity.setFinalDefRatio(HUNDRED);
+        }
         if (entity.getAtkSpeedUpRatio() == null) {
             entity.setAtkSpeedUpRatio(BigDecimal.ZERO);
         }

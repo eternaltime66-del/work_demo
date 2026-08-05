@@ -12,8 +12,19 @@ CREATE TABLE IF NOT EXISTS app_item (
   sort int DEFAULT 0 COMMENT '排序',
   enable tinyint(1) DEFAULT 1 COMMENT '启用',
   remark varchar(255) DEFAULT NULL,
-  charge_skill_slot_count int DEFAULT 0 COMMENT '充能技能槽数量',
+  charge_skill_slot_count int DEFAULT 0 COMMENT '默认充能技能槽数量',
+  player_default_edit_charge_skill_slot_count int DEFAULT 0 COMMENT '玩家默认可编辑充能技能槽数量',
+  player_max_edit_charge_skill_slot_count int DEFAULT 0 COMMENT '玩家最大可编辑充能技能槽数量',
   player_can_edit_skill_slot tinyint(1) DEFAULT 0 COMMENT '玩家是否可编辑技能槽',
+  basic_passive_slot_count int DEFAULT 0 COMMENT '默认自带基础被动数量',
+  player_default_edit_basic_passive_slot_count int DEFAULT 0 COMMENT '默认可编辑基础被动数量',
+  player_max_edit_basic_passive_slot_count int DEFAULT 0 COMMENT '可编辑最大基础被动数量',
+  advanced_passive_slot_count int DEFAULT 0 COMMENT '默认自带高级属性被动数量',
+  player_default_edit_advanced_passive_slot_count int DEFAULT 0 COMMENT '默认可编辑高级属性被动数量',
+  player_max_edit_advanced_passive_slot_count int DEFAULT 0 COMMENT '可编辑最大高级属性被动数量',
+  anchor_passive_slot_count int DEFAULT 0 COMMENT '默认自带锚点被动数量',
+  player_default_edit_anchor_passive_slot_count int DEFAULT 0 COMMENT '默认可编辑锚点被动数量',
+  player_max_edit_anchor_passive_slot_count int DEFAULT 0 COMMENT '可编辑最大锚点被动数量',
   CREATE_TIME datetime DEFAULT NULL,
   UPDATE_TIME datetime DEFAULT NULL,
   PRIMARY KEY (id),
@@ -192,6 +203,21 @@ CREATE TABLE IF NOT EXISTS app_recipe_material (
   KEY idx_recipe (recipe_id),
   KEY idx_item (item_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='配方材料表';
+
+CREATE TABLE IF NOT EXISTS app_item_default_passive (
+  id varchar(64) NOT NULL COMMENT 'ID',
+  item_id varchar(64) NOT NULL COMMENT '物品主表id',
+  passive_skill_id varchar(64) NOT NULL COMMENT '被动技能id',
+  passive_type varchar(32) NOT NULL COMMENT 'OUT_BASIC/OUT_ADVANCED',
+  slot_no int DEFAULT 0 COMMENT '槽位序号从0开始',
+  sort int DEFAULT 0 COMMENT '排序',
+  CREATE_TIME datetime DEFAULT NULL,
+  UPDATE_TIME datetime DEFAULT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_item_type_slot (item_id, passive_type, slot_no),
+  KEY idx_item (item_id),
+  KEY idx_passive (passive_skill_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='装备默认被动技能';
 
 CREATE TABLE IF NOT EXISTS app_monster_drop (
   id varchar(64) NOT NULL COMMENT 'ID',

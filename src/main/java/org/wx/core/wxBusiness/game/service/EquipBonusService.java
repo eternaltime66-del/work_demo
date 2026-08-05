@@ -3,19 +3,31 @@ package org.wx.core.wxBusiness.game.service;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
 import org.wx.core.wxBase.base.Wx;
+import org.wx.core.wxBusiness.game.battle.PassiveConditionEvalUnit;
+import org.wx.core.wxBusiness.game.entity.ActiveSkill;
 import org.wx.core.wxBusiness.game.entity.Item;
 import org.wx.core.wxBusiness.game.entity.ItemArmor;
 import org.wx.core.wxBusiness.game.entity.ItemGloves;
 import org.wx.core.wxBusiness.game.entity.ItemHelmet;
 import org.wx.core.wxBusiness.game.entity.ItemLegs;
 import org.wx.core.wxBusiness.game.entity.ItemWeapon;
+import org.wx.core.wxBusiness.game.entity.PassiveEffect;
+import org.wx.core.wxBusiness.game.entity.PassiveSkill;
 import org.wx.core.wxBusiness.game.entity.PlayerEquip;
+import org.wx.core.wxBusiness.game.entity.enums.ActiveSkillType;
+import org.wx.core.wxBusiness.game.entity.enums.AttrModifyDirection;
 import org.wx.core.wxBusiness.game.entity.enums.EquipSlot;
 import org.wx.core.wxBusiness.game.entity.enums.ItemType;
+import org.wx.core.wxBusiness.game.entity.enums.PassiveEffectAttrKey;
 import org.wx.core.wxBusiness.game.entity.vo.EquipBonusVo;
 
+import java.math.BigDecimal;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
 /**
- * 汇总玩家当前装备的攻击/生命/防御加成
+ * 汇总玩家当前装备的攻击/生命/防御加成（扩展表平坦值 + 默认 OUT 被动）。
  */
 @Service
 public class EquipBonusService {
@@ -51,7 +63,85 @@ public class EquipBonusService {
             }
             addItemBonus(bonus, itemId);
         }
+        applyOutPassives(uid, bonus);
         return bonus;
+    }
+
+    private void applyOutPassives(String uid, EquipBonusVo bonus) {
+        List<PassiveSkill> outs = playerEquipService.resolveEquippedOutPassives(uid);
+        if (outs == null || outs.isEmpty()) {
+            return;
+        }
+        Set<String> equippedItemIds = playerEquipService.resolveEquippedItemIds(uid);
+        Set<ItemType> equippedItemTypes = playerEquipService.resolveEquippedItemTypes(uid);
+        Set<String> equippedSkillIds = new HashSet<>();
+        Set<ActiveSkillType> equippedSkillTypes = new HashSet<>();
+        ActiveSkill weaponNormal = playerEquipService.resolveWeaponNormalSkill(uid);
+        if (weaponNormal != null && weaponNormal.getId() != null) {
+            equippedSkillIds.add(weaponNormal.getId());
+            if (weaponNormal.getSkillType() != null) {
+                equippedSkillTypes.add(weaponNormal.getSkillType());
+            }
+        }
+        List<ActiveSkill> chargeSkills = playerEquipService.resolveEquippedDefaultSkills(uid);
+        if (chargeSkills != null) {
+            for (ActiveSkill s : chargeSkills) {
+                if (s == null || s.getId() == null) {
+                    continue;
+                }
+                equippedSkillIds.add(s.getId());
+                if (s.getSkillType() != null) {
+                    equippedSkillTypes.add(s.getSkillType());
+                }
+            }
+        }
+        for (PassiveSkill p : outs) {
+            if (!PassiveConditionEvalUnit.matchEquipConditions(
+                    p, equippedItemIds, equippedSkillIds, equippedItemTypes, equippedSkillTypes)) {
+                continue;
+            }
+            List<PassiveEffect> effects = p.getEffects();
+            if (effects == null) {
+                continue;
+            }
+            for (PassiveEffect e : effects) {
+                applyOutEffect(bonus, e);
+            }
+        }
+    }
+
+    private void applyOutEffect(EquipBonusVo bonus, PassiveEffect e) {
+        if (e == null || e.getAttrKey() == null || e.getValueNum() == null) {
+            return;
+        }
+        BigDecimal signed = signedValue(e.getAttrDir(), e.getValueNum());
+        PassiveEffectAttrKey key = e.getAttrKey();
+        switch (key) {
+            case ATK -> bonus.setAtk(bonus.getAtk() + signed.intValue());
+            case MAX_HP -> bonus.setHp(bonus.getHp() + signed.intValue());
+            case DEF -> bonus.setDefense(bonus.getDefense() + signed.intValue());
+            case FINAL_ATK -> bonus.setFinalAtkRatioAdd(nvlBd(bonus.getFinalAtkRatioAdd()).add(signed));
+            case FINAL_HP -> bonus.setFinalHpRatioAdd(nvlBd(bonus.getFinalHpRatioAdd()).add(signed));
+            case FINAL_DEF -> bonus.setFinalDefRatioAdd(nvlBd(bonus.getFinalDefRatioAdd()).add(signed));
+            case ATK_SPEED -> {
+                if (signed.compareTo(BigDecimal.ZERO) >= 0) {
+                    bonus.setAtkSpeedUpAdd(nvlBd(bonus.getAtkSpeedUpAdd()).add(signed));
+                } else {
+                    bonus.setAtkSpeedDownAdd(nvlBd(bonus.getAtkSpeedDownAdd()).add(signed.abs()));
+                }
+            }
+            default -> {
+                // 吸血 / 伤害比例等暂不进展示面板
+            }
+        }
+    }
+
+    private static BigDecimal signedValue(AttrModifyDirection dir, BigDecimal value) {
+        BigDecimal v = value == null ? BigDecimal.ZERO : value;
+        if (dir == AttrModifyDirection.DECREASE) {
+            return v.negate();
+        }
+        return v;
     }
 
     private void addItemBonus(EquipBonusVo bonus, String itemId) {
@@ -102,5 +192,9 @@ public class EquipBonusService {
 
     private int nvl(Integer v) {
         return v == null ? 0 : v;
+    }
+
+    private static BigDecimal nvlBd(BigDecimal v) {
+        return v == null ? BigDecimal.ZERO : v;
     }
 }

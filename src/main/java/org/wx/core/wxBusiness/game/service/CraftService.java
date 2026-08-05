@@ -122,7 +122,7 @@ public class CraftService {
             vo.setName(recipe.getName());
         }
         if (withItemDetail) {
-            vo.setResultItem(itemDetailService.build(result));
+            vo.setResultItem(itemDetailService.buildRich(result));
         }
 
         List<CraftMaterialVo> materials = new ArrayList<>();

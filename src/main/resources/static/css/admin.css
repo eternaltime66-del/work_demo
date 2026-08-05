@@ -229,6 +229,103 @@ body.admin-body .bg-glow {
   padding-left: 34px;
 }
 
+.sidebar-nav-sub-group.nested.deep {
+  margin: 2px 0 4px;
+  padding-left: 10px;
+}
+
+.sidebar-nav-sub-group.nested.deep > .sidebar-nav-sub-group-label {
+  padding-left: 22px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.32);
+}
+
+.sidebar-nav-sub-group.nested.deep .sidebar-nav-sub-item {
+  padding-left: 42px;
+}
+
+.passive-formula-block {
+  margin-bottom: 8px;
+}
+
+.passive-formula-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.passive-cond-toolbar {
+  display: grid;
+  grid-template-columns: auto 220px;
+  justify-content: start;
+  align-items: center;
+  column-gap: 8px;
+  margin-bottom: 12px;
+}
+
+.passive-cond-add-btn.btn-mini {
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  margin: 0 !important;
+  white-space: nowrap;
+  justify-self: start;
+}
+
+.passive-cond-type-wrap {
+  width: 220px;
+  min-width: 0;
+  max-width: 220px;
+}
+
+.passive-cond-type-wrap > .admin-select {
+  width: 100% !important;
+  max-width: 100% !important;
+  display: block !important;
+}
+
+.passive-effect-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px 16px;
+  margin-bottom: 12px;
+}
+
+.passive-effect-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 1.2fr) minmax(100px, 0.8fr) minmax(100px, 0.8fr) auto;
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 10px;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.passive-effect-row .field {
+  margin: 0;
+}
+
+.passive-effect-row .field > .admin-select {
+  width: 100%;
+}
+
+.passive-effect-remove {
+  margin-bottom: 2px;
+  white-space: nowrap;
+}
+
+.formula-token-summary {
+  font-size: 12px;
+  line-height: 1.35;
+  color: #e8e4ff;
+  max-width: 280px;
+  word-break: break-word;
+}
+
 .admin-breadcrumb {
   display: flex;
   align-items: center;
@@ -2680,11 +2777,16 @@ body.admin-body .bg-glow {
 .skill-effect-card-head {
   display: flex;
   align-items: center;
+  gap: 12px;
   margin-bottom: 8px;
 }
 .skill-effect-card-head strong {
   font-size: 13px;
   color: rgba(255, 255, 255, 0.85);
+}
+.skill-effect-card-head > .btn-mini {
+  margin-left: 4px;
+  flex-shrink: 0;
 }
 .skill-effect-target-row {
   display: flex;
@@ -2843,4 +2945,61 @@ body.admin-body .bg-glow {
   padding: 8px 10px;
   font-size: 13px;
   resize: vertical;
+}
+
+.equip-detail-drawer .drawer-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.equip-detail-section h4 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #ddd6fe;
+}
+
+.equip-detail-kv {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  padding: 4px 0;
+  font-size: 13px;
+}
+
+.equip-detail-kv > span {
+  flex: 0 0 120px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.equip-detail-kv > b {
+  flex: 1;
+  font-weight: 600;
+  color: #f5f7ff;
+  word-break: break-word;
+}
+
+.equip-desc-card {
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.equip-desc-slot {
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: rgba(196, 181, 253, 0.9);
+}
+
+.equip-desc-summary {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #eef2ff;
 }

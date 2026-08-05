@@ -12,6 +12,7 @@ import org.wx.core.wxBusiness.game.entity.PlayerRole;
 import org.wx.core.wxBusiness.game.entity.WarehouseItem;
 import org.wx.core.wxBusiness.game.entity.enums.EquipSlot;
 import org.wx.core.wxBusiness.game.battle.AtkSpeedCalcUnit;
+import org.wx.core.wxBusiness.game.battle.FinalStatCalcUnit;
 import org.wx.core.wxBusiness.game.entity.vo.BattleBagVo;
 import org.wx.core.wxBusiness.game.entity.vo.EquipBonusVo;
 import org.wx.core.wxBusiness.game.entity.vo.PrepSummaryVo;
@@ -63,10 +64,14 @@ public class PrepService {
         role.setEquipBonusAtk(bonus.getAtk());
         role.setEquipBonusHp(bonus.getHp());
         role.setEquipBonusDef(bonus.getDefense());
-        role.setDisplayAtk(baseAtk + bonus.getAtk());
-        role.setDisplayHp(Math.max(1, baseHp + bonus.getHp()));
-        role.setDisplayDef(baseDef + bonus.getDefense());
-        int displayAction = atkSpeedService.calcRoleAction(uid, role);
+        // 总属性 = (基础+额外+装备平坦/OUT基础) × (角色最终比例 + OUT高级最终比例)
+        role.setDisplayAtk(Math.max(0, FinalStatCalcUnit.apply(
+                baseAtk + bonus.getAtk(), bonus.mergeFinalAtkRatio(role.getFinalAtkRatio()))));
+        role.setDisplayHp(FinalStatCalcUnit.applyHp(
+                baseHp + bonus.getHp(), bonus.mergeFinalHpRatio(role.getFinalHpRatio())));
+        role.setDisplayDef(Math.max(0, FinalStatCalcUnit.apply(
+                baseDef + bonus.getDefense(), bonus.mergeFinalDefRatio(role.getFinalDefRatio()))));
+        int displayAction = atkSpeedService.calcRoleAction(uid, role, bonus);
         role.setDisplayAction(displayAction);
         role.setDisplayAtkSpeed(AtkSpeedCalcUnit.atkSpeedFromAction(displayAction));
         if (role.getBaseAtkSpeed() == null || role.getBaseAtkSpeed().signum() <= 0) {

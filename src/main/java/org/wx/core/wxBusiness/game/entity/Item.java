@@ -48,9 +48,48 @@ public class Item extends WxBaseEntity<Item> {
 
     private String remark;
 
-    /** 充能技能槽数量（装备用） */
+    /** 默认充能技能槽数量（装备用） */
     private Integer chargeSkillSlotCount;
 
-    /** 玩家是否可编辑技能槽（装备用） */
-    private Boolean playerCanEditSkillSlot;
+    /** 玩家默认可编辑充能技能槽数量 */
+    private Integer playerDefaultEditChargeSkillSlotCount;
+
+    /** 玩家最大可编辑充能技能槽数量 */
+    private Integer playerMaxEditChargeSkillSlotCount;
+
+    /** 默认自带基础被动数量 */
+    private Integer basicPassiveSlotCount;
+
+    /** 默认可编辑基础被动数量 */
+    private Integer playerDefaultEditBasicPassiveSlotCount;
+
+    /** 可编辑最大基础被动数量 */
+    private Integer playerMaxEditBasicPassiveSlotCount;
+
+    /** 默认自带高级属性被动数量 */
+    private Integer advancedPassiveSlotCount;
+
+    /** 默认可编辑高级属性被动数量 */
+    private Integer playerDefaultEditAdvancedPassiveSlotCount;
+
+    /** 可编辑最大高级属性被动数量 */
+    private Integer playerMaxEditAdvancedPassiveSlotCount;
+
+    /** 默认自带锚点被动数量 */
+    private Integer anchorPassiveSlotCount;
+
+    /** 默认可编辑锚点被动数量 */
+    private Integer playerDefaultEditAnchorPassiveSlotCount;
+
+    /** 可编辑最大锚点被动数量 */
+    private Integer playerMaxEditAnchorPassiveSlotCount;
+
+    /** 默认自带周期被动数量 */
+    private Integer periodicPassiveSlotCount;
+
+    /** 默认可编辑周期被动数量 */
+    private Integer playerDefaultEditPeriodicPassiveSlotCount;
+
+    /** 可编辑最大周期被动数量 */
+    private Integer playerMaxEditPeriodicPassiveSlotCount;
 }

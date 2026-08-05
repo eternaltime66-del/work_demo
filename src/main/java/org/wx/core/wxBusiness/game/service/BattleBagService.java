@@ -19,6 +19,8 @@ public class BattleBagService extends WxServiceImpl<BattleBagMapper, BattleBag> 
 
     @Resource
     private ItemService itemService;
+    @Resource
+    private ItemDetailService itemDetailService;
 
     public List<BattleBag> listByUid(String uid) {
         if (Wx.isEmpty(uid)) {
@@ -128,6 +130,7 @@ public class BattleBagService extends WxServiceImpl<BattleBagMapper, BattleBag> 
                 row.setItemType(item.getItemType());
                 row.setMaxStack(item.getMaxStack());
                 row.setWeight(item.getWeight());
+                row.setDetail(itemDetailService.buildRich(item));
             }
         }
     }

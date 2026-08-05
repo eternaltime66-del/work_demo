@@ -99,6 +99,9 @@ public class PlayerRoleService extends WxServiceImpl<PlayerRoleMapper, PlayerRol
         role.setDealDmgRatio(nvlRatio(conf.getDealDmgRatio(), HUNDRED));
         role.setTakenDmgRatio(nvlRatio(conf.getTakenDmgRatio(), HUNDRED));
         role.setLifeStealRatio(nvlRatio(conf.getLifeStealRatio(), BigDecimal.ZERO));
+        role.setFinalAtkRatio(nvlRatio(conf.getFinalAtkRatio(), HUNDRED));
+        role.setFinalHpRatio(nvlRatio(conf.getFinalHpRatio(), HUNDRED));
+        role.setFinalDefRatio(nvlRatio(conf.getFinalDefRatio(), HUNDRED));
         role.setAtkSpeedUpRatio(nvlRatio(conf.getAtkSpeedUpRatio(), BigDecimal.ZERO));
         role.setAtkSpeedDownRatio(nvlRatio(conf.getAtkSpeedDownRatio(), BigDecimal.ZERO));
         role.setMainRole(Boolean.TRUE.equals(conf.getMainRole()));
@@ -137,6 +140,15 @@ public class PlayerRoleService extends WxServiceImpl<PlayerRoleMapper, PlayerRol
         }
         if (role.getLifeStealRatio() == null) {
             role.setLifeStealRatio(BigDecimal.ZERO);
+        }
+        if (role.getFinalAtkRatio() == null) {
+            role.setFinalAtkRatio(HUNDRED);
+        }
+        if (role.getFinalHpRatio() == null) {
+            role.setFinalHpRatio(HUNDRED);
+        }
+        if (role.getFinalDefRatio() == null) {
+            role.setFinalDefRatio(HUNDRED);
         }
         if (role.getAtkSpeedUpRatio() == null) {
             role.setAtkSpeedUpRatio(BigDecimal.ZERO);

@@ -44,7 +44,7 @@ public class SkillEffect extends WxBaseEntity<SkillEffect> {
 
     /**
      * 伤害/治疗/属性修改公式 token JSON。
-     * 读取参数可带 readRole：SELF / EACH_TARGET
+     * 读取参数可带 readRole：SELF / GLOBAL / EACH_TARGET（EACH_TARGET 仅效果公式）
      */
     private String formulaJson;
 

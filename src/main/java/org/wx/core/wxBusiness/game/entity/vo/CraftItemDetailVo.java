@@ -21,9 +21,22 @@ public class CraftItemDetailVo {
     private BigDecimal weight;
     private String remark;
 
-    /** 充能技能槽数量 */
+    /** 默认充能技能槽数量 */
     private Integer chargeSkillSlotCount;
-    private Boolean playerCanEditSkillSlot;
+    private Integer playerDefaultEditChargeSkillSlotCount;
+    private Integer playerMaxEditChargeSkillSlotCount;
+    private Integer basicPassiveSlotCount;
+    private Integer playerDefaultEditBasicPassiveSlotCount;
+    private Integer playerMaxEditBasicPassiveSlotCount;
+    private Integer advancedPassiveSlotCount;
+    private Integer playerDefaultEditAdvancedPassiveSlotCount;
+    private Integer playerMaxEditAdvancedPassiveSlotCount;
+    private Integer anchorPassiveSlotCount;
+    private Integer playerDefaultEditAnchorPassiveSlotCount;
+    private Integer playerMaxEditAnchorPassiveSlotCount;
+    private Integer periodicPassiveSlotCount;
+    private Integer playerDefaultEditPeriodicPassiveSlotCount;
+    private Integer playerMaxEditPeriodicPassiveSlotCount;
 
     /** 武器 */
     private Integer baseAtk;
@@ -44,4 +57,28 @@ public class CraftItemDetailVo {
 
     /** 默认充能技能（含 id，供前端点击查看详情） */
     private List<SkillLinkVo> defaultSkills = new ArrayList<>();
+
+    /** 类型中文 */
+    private String itemTypeLabel;
+
+    /** 攻速文案（武器/饰品） */
+    private String atkSpeedText;
+
+    /** 普攻技能完整描述 */
+    private SkillDescVo normalSkillDesc;
+
+    /** 默认充能技能完整描述 */
+    private List<SkillDescVo> defaultSkillDescs = new ArrayList<>();
+
+    /** 默认基础属性被动描述 */
+    private List<PassiveDescVo> defaultBasicPassiveDescs = new ArrayList<>();
+
+    /** 默认高级属性被动描述 */
+    private List<PassiveDescVo> defaultAdvancedPassiveDescs = new ArrayList<>();
+
+    /** 默认锚点被动描述 */
+    private List<PassiveDescVo> defaultAnchorPassiveDescs = new ArrayList<>();
+
+    /** 默认周期被动描述 */
+    private List<PassiveDescVo> defaultPeriodicPassiveDescs = new ArrayList<>();
 }

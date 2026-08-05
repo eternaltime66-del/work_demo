@@ -174,6 +174,9 @@
       };
       return request(pathMap[type], { json: true, body: body || {} }).then(ensureSuccess);
     },
+    itemDetail: function (id) {
+      return request('/back/item/detail', { body: { id: id } }).then(ensureSuccess);
+    },
     itemDefaultSkillList: function (itemId) {
       return request('/back/item/default/skill/list', { body: { itemId: itemId } }).then(ensureSuccess);
     },
@@ -181,6 +184,18 @@
       return request('/back/item/default/skill/save', {
         json: true,
         body: { itemId: itemId, skills: skills || [] }
+      }).then(ensureSuccess);
+    },
+    itemDefaultPassiveList: function (itemId, passiveType) {
+      return request('/back/item/default/passive/list', {
+        json: true,
+        body: { itemId: itemId, passiveType: passiveType }
+      }).then(ensureSuccess);
+    },
+    itemDefaultPassiveSave: function (itemId, passiveType, passives) {
+      return request('/back/item/default/passive/save', {
+        json: true,
+        body: { itemId: itemId, passiveType: passiveType, passives: passives || [] }
       }).then(ensureSuccess);
     },
 
@@ -254,23 +269,21 @@
       return request('/back/active/skill/effect/remove', { json: true, body: { id: id } }).then(ensureSuccess);
     },
 
-    skillChargeGroupList: function (body) {
-      return request('/back/skill/charge/group/list', { json: true, body: body || {} }).then(ensureSuccess);
+    passiveSkillList: function (body, page) {
+      var qs = '';
+      if (page && (page.size || page.current)) {
+        qs = '?current=' + (page.current || 1) + '&size=' + (page.size || 20);
+      }
+      return request('/back/passive/skill/list' + qs, { json: true, body: body || {} }).then(ensureSuccess);
     },
-    skillChargeGroupUpdate: function (body) {
-      return request('/back/skill/charge/group/update', { json: true, body: body || {} }).then(ensureSuccess);
+    passiveSkillDetail: function (id) {
+      return request('/back/passive/skill/detail', { body: { id: id } }).then(ensureSuccess);
     },
-    skillChargeGroupRemove: function (id) {
-      return request('/back/skill/charge/group/remove', { json: true, body: { id: id } }).then(ensureSuccess);
+    passiveSkillUpdate: function (body) {
+      return request('/back/passive/skill/update', { json: true, body: body || {} }).then(ensureSuccess);
     },
-    skillEffectGroupList: function (body) {
-      return request('/back/skill/effect/group/list', { json: true, body: body || {} }).then(ensureSuccess);
-    },
-    skillEffectGroupUpdate: function (body) {
-      return request('/back/skill/effect/group/update', { json: true, body: body || {} }).then(ensureSuccess);
-    },
-    skillEffectGroupRemove: function (id) {
-      return request('/back/skill/effect/group/remove', { json: true, body: { id: id } }).then(ensureSuccess);
+    passiveSkillRemove: function (id) {
+      return request('/back/passive/skill/remove', { json: true, body: { id: id } }).then(ensureSuccess);
     }
   };
 })(window);

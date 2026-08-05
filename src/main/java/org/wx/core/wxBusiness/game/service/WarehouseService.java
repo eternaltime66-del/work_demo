@@ -26,6 +26,8 @@ public class WarehouseService extends WxServiceImpl<WarehouseMapper, Warehouse> 
     private WarehouseItemService warehouseItemService;
     @Resource
     private ItemService itemService;
+    @Resource
+    private ItemDetailService itemDetailService;
 
     /**
      * 确保玩家有仓库，没有则创建（默认 100 格）
@@ -239,6 +241,7 @@ public class WarehouseService extends WxServiceImpl<WarehouseMapper, Warehouse> 
                 row.setItemType(item.getItemType());
                 row.setMaxStack(item.getMaxStack());
                 row.setWeight(item.getWeight());
+                row.setDetail(itemDetailService.buildRich(item));
             }
         }
     }

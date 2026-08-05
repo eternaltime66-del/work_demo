@@ -65,6 +65,15 @@ public class PlayerRole extends WxBaseEntity<PlayerRole> {
     /** 吸血比例（单位 1%，默认 0） */
     private BigDecimal lifeStealRatio;
 
+    /** 最终攻击比例（单位 1%，默认 100；总攻击 = 攻击合计 × 比例） */
+    private BigDecimal finalAtkRatio;
+
+    /** 最终生命比例（单位 1%，默认 100） */
+    private BigDecimal finalHpRatio;
+
+    /** 最终防御比例（单位 1%，默认 100） */
+    private BigDecimal finalDefRatio;
+
     /** 增加攻速（单位 1%，叠乘） */
     private BigDecimal atkSpeedUpRatio;
 

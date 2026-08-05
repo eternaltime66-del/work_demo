@@ -41,7 +41,39 @@ public final class SkillTargetResolver {
             case ALLY_MIN_HP -> extremeHp(friends, false);
             case ALL_ENEMY -> sortByFrontThenCol(foes, !casterAlly);
             case ALL_ALLY -> sortByFrontThenCol(friends, casterAlly);
+            // 锚点/周期专属目标请走 resolveWithAnchor
+            case ANCHOR_HIT_TARGET, ANCHOR_CASTER, DAMAGE_SOURCE, EACH_DAMAGED_TARGET, SPECIFIC_TARGET -> List.of();
         };
+    }
+
+    /**
+     * 解析效果目标；锚点/周期专属目标从 {@link AnchorEvalContext} 取单位。
+     */
+    public static List<BattleRuntimeUnit> resolveWithAnchor(
+            SkillEffectTarget targetType,
+            BattleRuntimeUnit owner,
+            List<BattleRuntimeUnit> all,
+            AnchorEvalContext anchor
+    ) {
+        SkillEffectTarget type = targetType == null ? SkillEffectTarget.SELF : targetType;
+        if (type.isAnchorExclusive() || type.isPeriodicExclusive()) {
+            BattleRuntimeUnit u = switch (type) {
+                case ANCHOR_HIT_TARGET, EACH_DAMAGED_TARGET ->
+                        anchor != null ? anchor.getHitTarget() : null;
+                case ANCHOR_CASTER ->
+                        anchor != null ? anchor.getCaster() : null;
+                case DAMAGE_SOURCE ->
+                        anchor != null ? anchor.getDamageSource() : null;
+                case SPECIFIC_TARGET ->
+                        anchor != null ? anchor.getSpecificTarget() : null;
+                default -> null;
+            };
+            if (u != null && u.alive()) {
+                return List.of(u);
+            }
+            return List.of();
+        }
+        return resolve(type, owner, all);
     }
 
     private static List<BattleRuntimeUnit> living(List<BattleRuntimeUnit> all, BattleSide side) {

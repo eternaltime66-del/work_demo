@@ -7,9 +7,12 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.wx.core.wxBase.annotation.NeedHeader;
+import org.wx.core.wxBase.annotation.ParamCheck;
 import org.wx.core.wxBase.base.WxResult;
+import org.wx.core.wxBase.factory.ErrorFactory;
 import org.wx.core.wxBusiness.account.entity.enums.MemberRole;
 import org.wx.core.wxBusiness.game.entity.Item;
+import org.wx.core.wxBusiness.game.entity.vo.CraftItemDetailVo;
 import org.wx.core.wxBusiness.game.entity.ItemAccessory;
 import org.wx.core.wxBusiness.game.entity.ItemArmor;
 import org.wx.core.wxBusiness.game.entity.ItemGloves;
@@ -19,6 +22,7 @@ import org.wx.core.wxBusiness.game.entity.ItemMaterial;
 import org.wx.core.wxBusiness.game.entity.ItemWeapon;
 import org.wx.core.wxBusiness.game.service.ItemAccessoryService;
 import org.wx.core.wxBusiness.game.service.ItemArmorService;
+import org.wx.core.wxBusiness.game.service.ItemDetailService;
 import org.wx.core.wxBusiness.game.service.ItemGlovesService;
 import org.wx.core.wxBusiness.game.service.ItemHelmetService;
 import org.wx.core.wxBusiness.game.service.ItemLegsService;
@@ -52,6 +56,8 @@ public class B11ItemController {
     public ItemAccessoryService itemAccessoryService;
     @Resource
     public ItemLegsService itemLegsService;
+    @Resource
+    public ItemDetailService itemDetailService;
 
     // ---------- 物品主表 ----------
 
@@ -62,6 +68,16 @@ public class B11ItemController {
         entity.clearEmptyString();
         IPage<Item> page = itemService.pageQuery(entity);
         return WxResult.page(page);
+    }
+
+    /** 装备/物品详情（含技能被动人性化文案） */
+    @PostMapping("/detail")
+    @WxRequestLog()
+    @NeedHeader(roles = {MemberRole.ADMIN})
+    public WxResult<CraftItemDetailVo> detail(@ParamCheck String id) {
+        CraftItemDetailVo vo = itemDetailService.buildRichByItemId(id);
+        ErrorFactory.notNull(vo, "物品不存在");
+        return WxResult.success(vo);
     }
 
     @PostMapping("/update")

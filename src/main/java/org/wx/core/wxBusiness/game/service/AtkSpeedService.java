@@ -11,13 +11,14 @@ import org.wx.core.wxBusiness.game.entity.PlayerEquip;
 import org.wx.core.wxBusiness.game.entity.PlayerRole;
 import org.wx.core.wxBusiness.game.entity.enums.EquipSlot;
 import org.wx.core.wxBusiness.game.entity.enums.ItemType;
+import org.wx.core.wxBusiness.game.entity.vo.EquipBonusVo;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 收集各来源攻速增减并叠乘得出最终行动值（仅角色 / 武器 / 饰品）
+ * 收集各来源攻速增减并叠乘得出最终行动值（角色 / 武器 / 饰品 / OUT 被动）。
  */
 @Service
 public class AtkSpeedService {
@@ -30,13 +31,24 @@ public class AtkSpeedService {
     private ItemWeaponService itemWeaponService;
     @Resource
     private ItemAccessoryService itemAccessoryService;
+    @Resource
+    private EquipBonusService equipBonusService;
 
     public int calcRoleAction(String uid, PlayerRole role) {
+        EquipBonusVo bonus = Wx.isEmpty(uid) ? null : equipBonusService.sumBonus(uid);
+        return calcRoleAction(uid, role, bonus);
+    }
+
+    public int calcRoleAction(String uid, PlayerRole role, EquipBonusVo bonus) {
         List<BigDecimal> ups = new ArrayList<>();
         List<BigDecimal> downs = new ArrayList<>();
         collectRole(role, ups, downs);
         if (!Wx.isEmpty(uid)) {
             collectEquip(uid, ups, downs);
+            if (bonus != null) {
+                add(ups, bonus.getAtkSpeedUpAdd());
+                add(downs, bonus.getAtkSpeedDownAdd());
+            }
         }
         return AtkSpeedCalcUnit.calcFinalAction(role == null ? null : role.getBaseAction(), ups, downs);
     }
@@ -66,23 +78,17 @@ public class AtkSpeedService {
             return;
         }
         ItemType type = item.getItemType();
-        switch (type) {
-            case WEAPON -> {
-                ItemWeapon ext = itemWeaponService.getByItemId(itemId);
-                if (ext != null) {
-                    add(ups, ext.getAtkSpeedUpRatio());
-                    add(downs, ext.getAtkSpeedDownRatio());
-                }
+        if (type == ItemType.WEAPON) {
+            ItemWeapon ext = itemWeaponService.getByItemId(itemId);
+            if (ext != null) {
+                add(ups, ext.getAtkSpeedUpRatio());
+                add(downs, ext.getAtkSpeedDownRatio());
             }
-            case ACCESSORY -> {
-                ItemAccessory ext = itemAccessoryService.getByItemId(itemId);
-                if (ext != null) {
-                    add(ups, ext.getAtkSpeedUpRatio());
-                    add(downs, ext.getAtkSpeedDownRatio());
-                }
-            }
-            // 护甲 / 护手 / 头盔 / 护腿 不参与攻速
-            default -> {
+        } else if (type == ItemType.ACCESSORY) {
+            ItemAccessory ext = itemAccessoryService.getByItemId(itemId);
+            if (ext != null) {
+                add(ups, ext.getAtkSpeedUpRatio());
+                add(downs, ext.getAtkSpeedDownRatio());
             }
         }
     }

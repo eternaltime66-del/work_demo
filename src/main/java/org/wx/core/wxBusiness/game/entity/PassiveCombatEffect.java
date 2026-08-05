@@ -13,40 +13,35 @@ import org.wx.core.wxBusiness.game.entity.enums.SkillEffectTarget;
 import org.wx.core.wxBusiness.game.entity.enums.SkillEffectType;
 
 /**
- * 快捷效果组（可复用模板）
+ * 战斗内被动效果（锚点/周期），结构对齐主动技能效果
  */
 @Data
 @EqualsAndHashCode(callSuper = true)
-@TableName("app_skill_effect_group")
-@BizIdPrefix("SEG")
-public class SkillEffectGroup extends WxBaseEntity<SkillEffectGroup> {
+@TableName("app_passive_combat_effect")
+@BizIdPrefix("PCE")
+public class PassiveCombatEffect extends WxBaseEntity<PassiveCombatEffect> {
 
     @TableId(type = IdType.INPUT)
     private String id;
 
+    /** 被动技能 id */
+    private String skillId;
+
     private String name;
 
-    /** 目标选择 */
     private SkillEffectTarget targetType;
 
-    /** 触发效果类型 */
     private SkillEffectType effectType;
 
-    /** ATTR_MODIFY：修改属性 */
     private AttrModifyKey attrKey;
 
-    /** ATTR_MODIFY：增加 / 减少 */
     private AttrModifyDirection attrDir;
 
-    /** 伤害/治疗/属性修改公式 token JSON */
     private String formulaJson;
 
-    /** 本公式触发几段 */
     private Integer hitSegments;
 
     private Integer sort;
-
-    private Boolean enable;
 
     private String remark;
 

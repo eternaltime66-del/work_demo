@@ -8,14 +8,18 @@ import org.wx.core.wxBase.factory.ErrorFactory;
 import org.wx.core.wxBusiness.game.battle.BattleEngine;
 import org.wx.core.wxBusiness.game.battle.BattleRuntimeUnit;
 import org.wx.core.wxBusiness.game.battle.BattleSide;
+import org.wx.core.wxBusiness.game.battle.FinalStatCalcUnit;
+import org.wx.core.wxBusiness.game.battle.PassiveConditionEvalUnit;
 import org.wx.core.wxBusiness.game.entity.ActiveSkill;
 import org.wx.core.wxBusiness.game.entity.Monster;
+import org.wx.core.wxBusiness.game.entity.PassiveSkill;
 import org.wx.core.wxBusiness.game.entity.PlayerLayout;
 import org.wx.core.wxBusiness.game.entity.PlayerRole;
 import org.wx.core.wxBusiness.game.entity.SkillCharge;
 import org.wx.core.wxBusiness.game.entity.StageLevelMonster;
 import org.wx.core.wxBusiness.game.entity.enums.ActiveSkillType;
 import org.wx.core.wxBusiness.game.entity.enums.ChargeConditionType;
+import org.wx.core.wxBusiness.game.entity.enums.ItemType;
 import org.wx.core.wxBusiness.game.entity.enums.NeedChargeMode;
 import org.wx.core.wxBusiness.game.entity.enums.SkillChargeEvent;
 import org.wx.core.wxBusiness.game.entity.enums.SkillChargeMatchMode;
@@ -72,6 +76,33 @@ public class BattleService {
         ActiveSkill defaultNormal = activeSkillService.ensureDefaultNormalSkill();
         ActiveSkill weaponNormal = playerEquipService.resolveWeaponNormalSkill(uid);
         List<ActiveSkill> equipChargeSkills = playerEquipService.resolveEquippedDefaultSkills(uid);
+        List<PassiveSkill> equippedAnchors = playerEquipService.resolveEquippedAnchorPassives(uid);
+        List<PassiveSkill> equippedPeriodics = playerEquipService.resolveEquippedPeriodicPassives(uid);
+        Set<String> equippedItemIds = playerEquipService.resolveEquippedItemIds(uid);
+        Set<ItemType> equippedItemTypes = playerEquipService.resolveEquippedItemTypes(uid);
+        Set<String> equippedSkillIds = new HashSet<>();
+        Set<ActiveSkillType> equippedSkillTypes = new HashSet<>();
+        if (weaponNormal != null && weaponNormal.getId() != null) {
+            equippedSkillIds.add(weaponNormal.getId());
+            if (weaponNormal.getSkillType() != null) {
+                equippedSkillTypes.add(weaponNormal.getSkillType());
+            }
+        }
+        if (equipChargeSkills != null) {
+            for (ActiveSkill s : equipChargeSkills) {
+                if (s == null || s.getId() == null) {
+                    continue;
+                }
+                equippedSkillIds.add(s.getId());
+                if (s.getSkillType() != null) {
+                    equippedSkillTypes.add(s.getSkillType());
+                }
+            }
+        }
+        List<PassiveSkill> battleAnchors = filterEquipPassives(
+                equippedAnchors, equippedItemIds, equippedSkillIds, equippedItemTypes, equippedSkillTypes);
+        List<PassiveSkill> battlePeriodics = filterEquipPassives(
+                equippedPeriodics, equippedItemIds, equippedSkillIds, equippedItemTypes, equippedSkillTypes);
         var equipBonus = equipBonusService.sumBonus(uid);
 
         List<PlayerLayout> layouts = playerLayoutService.listByUid(uid);
@@ -99,11 +130,14 @@ public class BattleService {
             unit.setPosRow(nvl(layout.getPosRow()));
             unit.setGridW(Math.max(1, nvl(role.getGridW(), 1)));
             unit.setGridH(Math.max(1, nvl(role.getGridH(), 1)));
-            unit.setMaxHp(Math.max(1, nvl(role.getBaseHp()) + nvl(role.getExtraHp()) + equipBonus.getHp()));
+            int sumHp = nvl(role.getBaseHp()) + nvl(role.getExtraHp()) + equipBonus.getHp();
+            int sumAtk = nvl(role.getBaseAtk()) + nvl(role.getExtraAtk()) + equipBonus.getAtk();
+            int sumDef = nvl(role.getBaseDef()) + nvl(role.getExtraDef()) + equipBonus.getDefense();
+            unit.setMaxHp(FinalStatCalcUnit.applyHp(sumHp, equipBonus.mergeFinalHpRatio(role.getFinalHpRatio())));
             unit.setHp(unit.getMaxHp());
-            unit.setAtk(Math.max(0, nvl(role.getBaseAtk()) + nvl(role.getExtraAtk()) + equipBonus.getAtk()));
-            unit.setDef(Math.max(0, nvl(role.getBaseDef()) + nvl(role.getExtraDef()) + equipBonus.getDefense()));
-            unit.setAction(atkSpeedService.calcRoleAction(uid, role));
+            unit.setAtk(Math.max(0, FinalStatCalcUnit.apply(sumAtk, equipBonus.mergeFinalAtkRatio(role.getFinalAtkRatio()))));
+            unit.setDef(Math.max(0, FinalStatCalcUnit.apply(sumDef, equipBonus.mergeFinalDefRatio(role.getFinalDefRatio()))));
+            unit.setAction(atkSpeedService.calcRoleAction(uid, role, equipBonus));
             List<ActiveSkill> skills = applyWeaponNormalOverride(
                     playerRoleSkillService.listSkillsByRoleId(role.getId()),
                     weaponNormal,
@@ -111,7 +145,13 @@ public class BattleService {
             );
             mergeEquipChargeSkills(skills, equipChargeSkills);
             unit.getSkills().addAll(skills);
-            skills.forEach(s -> skillIds.add(s.getId()));
+            skills.forEach(s -> {
+                if (s != null && s.getId() != null) {
+                    skillIds.add(s.getId());
+                }
+            });
+            unit.getAnchorPassives().addAll(battleAnchors);
+            unit.getPeriodicPassives().addAll(battlePeriodics);
             engine.addUnit(unit);
         }
         ErrorFactory.throwError(allyIdx == 0, "没有可用的上阵角色");
@@ -180,6 +220,40 @@ public class BattleService {
                     sb.append("；");
                 }
                 sb.append(formatEquipChargeSkillBrief(s));
+            }
+            engine.addLog(sb.toString());
+        }
+        if (!battleAnchors.isEmpty()) {
+            StringBuilder sb = new StringBuilder("装备锚点被动：");
+            for (int i = 0; i < battleAnchors.size(); i++) {
+                PassiveSkill p = battleAnchors.get(i);
+                if (p == null) {
+                    continue;
+                }
+                if (i > 0) {
+                    sb.append("；");
+                }
+                sb.append(p.getName() != null ? p.getName() : p.getId());
+                if (p.getAnchorType() != null) {
+                    sb.append("（").append(p.getAnchorType().getLabel()).append("）");
+                }
+            }
+            engine.addLog(sb.toString());
+        }
+        if (!battlePeriodics.isEmpty()) {
+            StringBuilder sb = new StringBuilder("装备周期被动：");
+            for (int i = 0; i < battlePeriodics.size(); i++) {
+                PassiveSkill p = battlePeriodics.get(i);
+                if (p == null) {
+                    continue;
+                }
+                if (i > 0) {
+                    sb.append("；");
+                }
+                sb.append(p.getName() != null ? p.getName() : p.getId());
+                if (p.getPeriodicTriggerMode() != null) {
+                    sb.append("（").append(p.getPeriodicTriggerMode().getLabel()).append("）");
+                }
             }
             engine.addLog(sb.toString());
         }
@@ -356,6 +430,26 @@ public class BattleService {
             case ULTIMATE -> "大招";
             case SMALL -> "小技能";
         };
+    }
+
+    private List<PassiveSkill> filterEquipPassives(
+            List<PassiveSkill> source,
+            Set<String> equippedItemIds,
+            Set<String> equippedSkillIds,
+            Set<ItemType> equippedItemTypes,
+            Set<ActiveSkillType> equippedSkillTypes
+    ) {
+        List<PassiveSkill> out = new ArrayList<>();
+        if (source == null) {
+            return out;
+        }
+        for (PassiveSkill p : source) {
+            if (PassiveConditionEvalUnit.matchEquipConditions(
+                    p, equippedItemIds, equippedSkillIds, equippedItemTypes, equippedSkillTypes)) {
+                out.add(p);
+            }
+        }
+        return out;
     }
 
     private int nvl(Integer v) {

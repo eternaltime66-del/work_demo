@@ -2,8 +2,8 @@ package org.wx.core.wxBusiness.game.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import org.apache.ibatis.annotations.Mapper;
-import org.wx.core.wxBusiness.game.entity.SkillChargeGroup;
+import org.wx.core.wxBusiness.game.entity.PassiveSkill;
 
 @Mapper
-public interface SkillChargeGroupMapper extends BaseMapper<SkillChargeGroup> {
+public interface PassiveSkillMapper extends BaseMapper<PassiveSkill> {
 }
