@@ -76,6 +76,7 @@ public class ActiveSkillService extends WxServiceImpl<ActiveSkillMapper, ActiveS
         effect.setTargetType(SkillEffectTarget.FIRST);
         effect.setEffectType(SkillEffectType.DAMAGE);
         effect.setHitSegments(1);
+        effect.setTriggerRate(100);
         effect.setSort(0);
         effect.setFormulaJson(
                 "[{\"kind\":\"PARAM\",\"paramMode\":\"READ\",\"readRole\":\"SELF\",\"readKey\":\"ATK\"}"

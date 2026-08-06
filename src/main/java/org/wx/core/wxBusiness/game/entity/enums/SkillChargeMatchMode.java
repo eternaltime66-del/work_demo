@@ -8,6 +8,6 @@ public enum SkillChargeMatchMode {
     ANY,
     /** 任意指定类型 */
     ANY_TYPE,
-    /** 指定某一个技能 */
+    /** 指定技能 */
     SPECIFIC
 }

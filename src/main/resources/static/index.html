@@ -4,471 +4,545 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>游戏首页</title>
+  <link rel="stylesheet" href="/css/tokens.css">
+  <link rel="stylesheet" href="/css/base.css">
+  <link rel="stylesheet" href="/css/components.css">
+  <link rel="stylesheet" href="/css/modal.css">
   <link rel="stylesheet" href="/css/auth.css">
   <link rel="stylesheet" href="/css/home.css">
+  <link rel="stylesheet" href="/css/layout.css">
+  <link rel="stylesheet" href="/css/deploy.css">
   <link rel="stylesheet" href="/css/prep.css">
   <link rel="stylesheet" href="/css/warehouse.css">
   <link rel="stylesheet" href="/css/craft.css">
   <script src="/js/dev-live.js"></script>
   <script src="/js/vue.global.prod.js"></script>
+  <script src="/js/composables/useDragMove.js"></script>
+  <script src="/js/art.js"></script>
 </head>
 <body>
 <div id="app" class="page home-page">
   <div class="bg-glow bg-glow-1"></div>
   <div class="bg-glow bg-glow-2"></div>
 
-  <div class="home-header">
+  <header v-if="tab === 'home'" class="home-hud">
+    <div class="home-hud-user" @click="openHeroDetail">
+      <div class="home-hud-avatar art-slot" data-art="char/hero-idle.png">
+        <span>{{ (hero && hero.name ? hero.name.charAt(0) : '主') }}</span>
+      </div>
+      <div class="home-hud-meta">
+        <strong class="ellipsis">{{ (hero && hero.name) || '主角' }}</strong>
+        <span>Lv.{{ (hero && hero.level) || 1 }}</span>
+      </div>
+    </div>
+    <div class="home-hud-res">
+      <div class="home-hud-chip art-slot" data-art="hud/coin.png" title="金币"><span>🪙</span><em class="num">—</em></div>
+      <div class="home-hud-chip art-slot" data-art="hud/energy.png" title="体力"><span>⚡</span><em class="num">—</em></div>
+    </div>
+    <button type="button" class="home-hud-settings hit-44" aria-label="设置" @click="settingsOpen = true">⚙</button>
+  </header>
+  <div v-else class="home-header">
     <h1>{{ tabTitle }}</h1>
-    <button type="button" @click="logout">退出</button>
+    <button type="button" class="btn-ghost btn-sm hit-44" @click="settingsOpen = true">设置</button>
   </div>
 
   <div v-if="tab === 'craft'" class="craft-topbar">
-    <div class="craft-type-select" :class="{ open: craftTypeOpen }" @click.stop>
-      <button type="button" class="craft-type-trigger" @click="craftTypeOpen = !craftTypeOpen">
-        <span>{{ craftTypeLabel }}</span>
-        <em class="craft-type-caret">▾</em>
-      </button>
-      <div v-if="craftTypeOpen" class="craft-type-menu">
-        <button
-          v-for="opt in craftTypeOptions"
-          :key="opt.value"
-          type="button"
-          class="craft-type-option"
-          :class="{ active: craftFilter === opt.value }"
-          @click="pickCraftType(opt.value)"
-        >{{ opt.label }}</button>
-      </div>
-    </div>
+    <div class="craft-anvil art-slot" data-art="craft/anvil-bg.jpg" aria-hidden="true"></div>
     <input
       class="craft-filter-input"
       v-model.trim="craftKeyword"
       type="search"
-      placeholder="输入名称筛选"
+      placeholder="搜索配方名称"
     >
+    <div class="craft-chip-row hide-scrollbar">
+      <button
+        v-for="opt in craftTypeOptions"
+        :key="opt.value"
+        type="button"
+        class="chip"
+        :class="{ active: craftFilter === opt.value }"
+        @click="craftFilter = opt.value"
+      >{{ opt.label }}</button>
+      <button
+        type="button"
+        class="chip"
+        :class="{ active: craftOnlyCan }"
+        @click="craftOnlyCan = !craftOnlyCan"
+      >仅可合成</button>
+    </div>
   </div>
 
   <div class="home-main" :class="{ 'home-main-prep': tab === 'prep', 'home-main-craft': tab === 'craft' }">
     <!-- 首页 -->
-    <div v-show="tab === 'home'" class="home-scene">
-      <div v-if="loading" class="loading-text">加载中...</div>
-      <div v-else-if="hero" class="hero-actor" @click="openHeroDetail">
-        <div class="hero-body">
-          <div class="hero-head"></div>
+    <div v-show="tab === 'home'" class="home-scene stage">
+      <div class="stage-bg art-slot" data-art="home/stage-bg.jpg"></div>
+      <div class="stage-mid art-slot" data-art="home/stage-mid.png"></div>
+      <div v-if="loading" class="stage-loading">
+        <div class="skeleton-block" style="width:88px;height:88px;border-radius:22px;margin:0 auto 12px"></div>
+        <div class="skeleton-block" style="width:120px;height:14px;margin:0 auto"></div>
+      </div>
+      <div v-else-if="hero" class="stage-char">
+        <div class="hero-actor" @click="openHeroDetail">
+          <div class="hero-body art-slot" data-art="char/hero-idle.png">
+            <div class="hero-head"></div>
+          </div>
+          <div class="stage-shadow art-slot" data-art="home/shadow.png"></div>
+          <div class="hero-label">{{ hero.name || '主角' }}</div>
+          <button type="button" class="hero-info-btn hit-44" aria-label="详情" @click.stop="openHeroDetail">i</button>
         </div>
-        <div class="hero-label">{{ hero.name || '主角' }}</div>
-        <div class="hero-tip">点击查看详情</div>
       </div>
       <div v-else class="loading-text">暂无角色，请重新登录领取主角</div>
+      <div class="stage-fx"></div>
+      <div class="home-quick" v-if="!loading && hero">
+        <button type="button" class="chip" @click="tab = 'prep'">备战</button>
+        <button type="button" class="chip" @click="openCraft">合成</button>
+        <button type="button" class="chip active" @click="openDeploy">出击</button>
+      </div>
     </div>
 
-    <!-- 备战 -->
+    <!-- 备战：上区人偶/仓库互斥切换，下区战斗背包常驻 -->
     <div v-show="tab === 'prep'" class="tab-panel prep-panel">
-      <div class="prep-top">
+      <section
+        class="prep-top"
+        :class="{ 'is-wh': warehouseOpen, 'prep-drop-zone': warehouseOpen && isWhDropZone }"
+        :data-drop="warehouseOpen ? 'WAREHOUSE:zone' : undefined"
+      >
         <div class="prep-section-head">
           <div class="prep-head-left">
             <h3>{{ warehouseOpen ? '仓库' : '角色人偶' }}</h3>
-            <span class="prep-meta" v-if="warehouseOpen && warehouse">
-              {{ warehouse.usedSlots }}/{{ warehouse.maxSlots }} 格
-            </span>
+            <span class="prep-meta" v-if="warehouseOpen && warehouse">{{ warehouse.usedSlots }}/{{ warehouse.maxSlots }}</span>
             <span v-if="!warehouseOpen && prepDisplayRole" class="prep-hero-name-inline">{{ prepDisplayRole.name || '主角' }}</span>
+          </div>
+          <div class="prep-toolbar">
             <button
               v-if="!warehouseOpen && prepDisplayRole"
               type="button"
-              class="prep-role-detail-btn"
+              class="btn-ghost btn-sm hit-44"
               @click="openPrepRoleDetail"
-            >角色详情</button>
-          </div>
-          <div class="prep-toolbar">
-            <button v-if="!warehouseOpen" type="button" @click="openWarehouse">打开仓库</button>
-            <button v-else type="button" @click="closeWarehouse">关闭仓库</button>
-            <template v-if="warehouseOpen">
+            >详情</button>
+            <button
+              v-if="!warehouseOpen"
+              type="button"
+              class="btn-ghost btn-sm hit-44"
+              @click="openWarehouse"
+            >打开仓库</button>
+            <template v-else>
               <button
                 type="button"
+                class="btn-ghost btn-sm hit-44"
                 :class="{ active: batchMode === 'toBag' }"
                 :disabled="prepActing"
                 @click="toggleBatchMode('toBag')"
-              >批量移入背包</button>
+              >批量</button>
               <button
-                v-if="batchMode === 'toBag'"
                 type="button"
-                :disabled="prepActing || !canConfirmBatch"
-                @click="confirmBatch"
-              >确认转移</button>
-              <button v-if="batchMode === 'toBag'" type="button" @click="cancelBatch">取消</button>
+                class="btn-ghost btn-sm hit-44"
+                @click="closeWarehouse"
+              >关闭仓库</button>
             </template>
           </div>
         </div>
-        <div
-          class="prep-scroll"
-          :class="{ 'prep-scroll-hero': !warehouseOpen, 'prep-drop-zone': isWhDropZone }"
-          @dragover.prevent="onWhZoneDragOver"
-          @drop.prevent="onWhZoneDrop"
-        >
-          <template v-if="warehouseOpen">
-            <div v-if="!warehouseFilledSlots.length" class="prep-empty-tip">
-              <span v-if="isWhDropZone">松手放入仓库</span>
-              <span v-else>仓库为空</span>
+
+        <!-- 舞台：人偶占位定高，仓库同尺寸覆盖 -->
+        <div class="prep-top-stage">
+          <div
+            v-if="prepDisplayRole"
+            class="prep-doll-body"
+            :class="{ 'is-placeholder': warehouseOpen }"
+            :aria-hidden="warehouseOpen ? 'true' : 'false'"
+          >
+            <div class="equip-doll">
+              <div
+                class="equip-slot"
+                :class="[slotFilled('HELMET') ? 'filled' : '', rarityClass(slotRarity('HELMET'))]"
+                style="grid-area:helmet"
+                @click="onEquipSlotClick('HELMET')"
+              >
+                <img v-if="slotDisplayIcon('HELMET').type === 'img'" class="equip-slot-img" :src="slotDisplayIcon('HELMET').src" alt="">
+                <span v-else-if="slotDisplayIcon('HELMET').type === 'emoji'" class="equip-slot-emoji">{{ slotDisplayIcon('HELMET').text }}</span>
+                <span v-else class="equip-slot-sil art-slot" data-art="equip/slot-helmet.svg">{{ equipSilhouette('HELMET') }}</span>
+                <i v-if="slotFilled('HELMET')" class="equip-slot-dot"></i>
+                <span class="equip-slot-label">头盔</span>
+              </div>
+              <div
+                class="equip-slot"
+                :class="[slotFilled('WEAPON') ? 'filled' : '', rarityClass(slotRarity('WEAPON'))]"
+                style="grid-area:weapon"
+                @click="onEquipSlotClick('WEAPON')"
+              >
+                <img v-if="slotDisplayIcon('WEAPON').type === 'img'" class="equip-slot-img" :src="slotDisplayIcon('WEAPON').src" alt="">
+                <span v-else-if="slotDisplayIcon('WEAPON').type === 'emoji'" class="equip-slot-emoji">{{ slotDisplayIcon('WEAPON').text }}</span>
+                <span v-else class="equip-slot-sil art-slot" data-art="equip/slot-weapon.svg">{{ equipSilhouette('WEAPON') }}</span>
+                <i v-if="slotFilled('WEAPON')" class="equip-slot-dot"></i>
+                <span class="equip-slot-label">武器</span>
+              </div>
+              <div class="equip-doll-body art-slot" style="grid-area:body" data-art="char/hero-idle.png" @click="openPrepRoleDetail">
+                <div class="equip-doll-figure">
+                  <div class="hero-body"><div class="hero-head"></div></div>
+                </div>
+              </div>
+              <div
+                class="equip-slot"
+                :class="[slotFilled('ARMOR') ? 'filled' : '', rarityClass(slotRarity('ARMOR'))]"
+                style="grid-area:armor"
+                @click="onEquipSlotClick('ARMOR')"
+              >
+                <img v-if="slotDisplayIcon('ARMOR').type === 'img'" class="equip-slot-img" :src="slotDisplayIcon('ARMOR').src" alt="">
+                <span v-else-if="slotDisplayIcon('ARMOR').type === 'emoji'" class="equip-slot-emoji">{{ slotDisplayIcon('ARMOR').text }}</span>
+                <span v-else class="equip-slot-sil art-slot" data-art="equip/slot-armor.svg">{{ equipSilhouette('ARMOR') }}</span>
+                <i v-if="slotFilled('ARMOR')" class="equip-slot-dot"></i>
+                <span class="equip-slot-label">护甲</span>
+              </div>
+              <div
+                class="equip-slot"
+                :class="[slotFilled('GLOVES') ? 'filled' : '', rarityClass(slotRarity('GLOVES'))]"
+                style="grid-area:gloves"
+                @click="onEquipSlotClick('GLOVES')"
+              >
+                <img v-if="slotDisplayIcon('GLOVES').type === 'img'" class="equip-slot-img" :src="slotDisplayIcon('GLOVES').src" alt="">
+                <span v-else-if="slotDisplayIcon('GLOVES').type === 'emoji'" class="equip-slot-emoji">{{ slotDisplayIcon('GLOVES').text }}</span>
+                <span v-else class="equip-slot-sil art-slot" data-art="equip/slot-gloves.svg">{{ equipSilhouette('GLOVES') }}</span>
+                <i v-if="slotFilled('GLOVES')" class="equip-slot-dot"></i>
+                <span class="equip-slot-label">护手</span>
+              </div>
+              <div
+                class="equip-slot"
+                :class="[slotFilled('LEGS') ? 'filled' : '', rarityClass(slotRarity('LEGS'))]"
+                style="grid-area:legs"
+                @click="onEquipSlotClick('LEGS')"
+              >
+                <img v-if="slotDisplayIcon('LEGS').type === 'img'" class="equip-slot-img" :src="slotDisplayIcon('LEGS').src" alt="">
+                <span v-else-if="slotDisplayIcon('LEGS').type === 'emoji'" class="equip-slot-emoji">{{ slotDisplayIcon('LEGS').text }}</span>
+                <span v-else class="equip-slot-sil art-slot" data-art="equip/slot-legs.svg">{{ equipSilhouette('LEGS') }}</span>
+                <i v-if="slotFilled('LEGS')" class="equip-slot-dot"></i>
+                <span class="equip-slot-label">护腿</span>
+              </div>
+              <div
+                v-for="(acc, idx) in accessorySlots"
+                :key="acc.slot"
+                class="equip-slot"
+                :class="[slotFilled(acc.slot) ? 'filled' : '', rarityClass(slotRarity(acc.slot))]"
+                :style="{ gridArea: 'acc' + (idx + 1) }"
+                @click="onEquipSlotClick(acc.slot)"
+              >
+                <img v-if="slotDisplayIcon(acc.slot).type === 'img'" class="equip-slot-img" :src="slotDisplayIcon(acc.slot).src" alt="">
+                <span v-else-if="slotDisplayIcon(acc.slot).type === 'emoji'" class="equip-slot-emoji">{{ slotDisplayIcon(acc.slot).text }}</span>
+                <span v-else class="equip-slot-sil art-slot" data-art="equip/slot-acc.svg">{{ equipSilhouette(acc.slot) }}</span>
+                <i v-if="slotFilled(acc.slot)" class="equip-slot-dot"></i>
+                <span class="equip-slot-label">{{ acc.label }}</span>
+              </div>
+            </div>
+            <div class="prep-stat-brief">
+              <div class="prep-stat-chip"><span class="prep-stat-chip-label">攻击</span><span class="prep-stat-chip-value num">{{ roleDisplayAtk(prepDisplayRole) }}</span></div>
+              <div class="prep-stat-chip"><span class="prep-stat-chip-label">防御</span><span class="prep-stat-chip-value num">{{ roleDisplayDef(prepDisplayRole) }}</span></div>
+              <div class="prep-stat-chip"><span class="prep-stat-chip-label">生命</span><span class="prep-stat-chip-value num">{{ roleDisplayHp(prepDisplayRole) }}</span></div>
+              <div class="prep-stat-chip"><span class="prep-stat-chip-label">攻速</span><span class="prep-stat-chip-value num">{{ roleDisplayAtkSpeed(prepDisplayRole) }}</span></div>
+            </div>
+          </div>
+          <div
+            v-else
+            class="prep-empty-tip"
+            :class="{ 'is-placeholder': warehouseOpen }"
+          >暂无角色</div>
+
+          <!-- 仓库：与角色区同尺寸覆盖 -->
+          <div v-show="warehouseOpen" class="prep-wh-layer hide-scrollbar" data-scroll-key="prep-wh">
+            <div v-if="!warehouseFilledSlots.length" class="empty-state">
+              <div class="empty-state-icon art-slot" data-art="empty/bag.png">📦</div>
+              <p>{{ isWhDropZone ? '松手放入仓库' : '仓库为空' }}</p>
             </div>
             <div class="prep-item-grid" v-else>
-              <div
-                v-for="slot in warehouseFilledSlots"
-                :key="slot.slotNo"
-                class="prep-item-wrap"
-              >
+              <div v-for="slot in warehouseFilledSlots" :key="slot.slotNo" class="prep-item-wrap">
                 <div
                   class="prep-item"
                   :class="prepSlotClasses(slot)"
-                  :draggable="!batchMode"
-                  @dragstart="onDragStart($event, 'WAREHOUSE', slot.slotNo, slot)"
-                  @dragover.prevent="onDragOver($event, 'WAREHOUSE', slot.slotNo, slot)"
-                  @dragenter.prevent="onDragEnter('WAREHOUSE', slot.slotNo)"
-                  @dragleave="onDragLeaveEl"
-                  @drop.prevent="onDrop($event, 'WAREHOUSE', slot.slotNo, slot)"
-                  @dragend="onDragEnd"
-                  @click="onWarehouseClick(slot)"
+                  :data-drop="'WAREHOUSE:' + slot.slotNo"
+                  @pointerdown="onPrepItemPointerDown($event, 'WAREHOUSE', slot.slotNo, slot)"
                 >
                   <img v-if="itemIconIsImage(slot.icon)" class="prep-item-img" :src="slot.icon" :alt="slot.itemName">
                   <span v-else class="prep-item-icon">{{ slot.icon || '📦' }}</span>
-                  <span class="prep-item-qty">{{ slot.quantity }}</span>
+                  <span class="qty-badge prep-item-qty">{{ slot.quantity }}</span>
                 </div>
-                <div class="prep-item-name">{{ slot.itemName }}</div>
+                <div class="prep-item-name ellipsis">{{ slot.itemName }}</div>
               </div>
             </div>
-          </template>
-          <template v-else>
-            <div class="prep-hero-card" v-if="prepDisplayRole">
-              <div class="prep-equip-body">
-                <div class="prep-equip-panel prep-equip-panel-top">
-                  <div class="prep-equip-row prep-equip-row-center">
-                    <div
-                      class="prep-equip-slot"
-                      :class="{ filled: slotFilled('HELMET') }"
-                      @click="onEquipSlotClick('HELMET')"
-                    >
-                      <span class="prep-equip-slot-label">头盔</span>
-                      <img v-if="slotDisplayIcon('HELMET').type === 'img'" class="prep-equip-slot-img" :src="slotDisplayIcon('HELMET').src" alt="">
-                      <span v-else-if="slotDisplayIcon('HELMET').type === 'emoji'" class="prep-equip-slot-emoji">{{ slotDisplayIcon('HELMET').text }}</span>
-                      <span v-else class="prep-equip-slot-empty">空</span>
-                      <span v-if="slotItemName('HELMET')" class="prep-equip-slot-name">{{ slotItemName('HELMET') }}</span>
-                    </div>
-                  </div>
-                  <div class="prep-equip-row">
-                    <div
-                      class="prep-equip-slot"
-                      :class="{ filled: slotFilled('WEAPON') }"
-                      @click="onEquipSlotClick('WEAPON')"
-                    >
-                      <span class="prep-equip-slot-label">武器</span>
-                      <img v-if="slotDisplayIcon('WEAPON').type === 'img'" class="prep-equip-slot-img" :src="slotDisplayIcon('WEAPON').src" alt="">
-                      <span v-else-if="slotDisplayIcon('WEAPON').type === 'emoji'" class="prep-equip-slot-emoji">{{ slotDisplayIcon('WEAPON').text }}</span>
-                      <span v-else class="prep-equip-slot-empty">空</span>
-                      <span v-if="slotItemName('WEAPON')" class="prep-equip-slot-name">{{ slotItemName('WEAPON') }}</span>
-                    </div>
-                    <div
-                      class="prep-equip-slot"
-                      :class="{ filled: slotFilled('ARMOR') }"
-                      @click="onEquipSlotClick('ARMOR')"
-                    >
-                      <span class="prep-equip-slot-label">护甲</span>
-                      <img v-if="slotDisplayIcon('ARMOR').type === 'img'" class="prep-equip-slot-img" :src="slotDisplayIcon('ARMOR').src" alt="">
-                      <span v-else-if="slotDisplayIcon('ARMOR').type === 'emoji'" class="prep-equip-slot-emoji">{{ slotDisplayIcon('ARMOR').text }}</span>
-                      <span v-else class="prep-equip-slot-empty">空</span>
-                      <span v-if="slotItemName('ARMOR')" class="prep-equip-slot-name">{{ slotItemName('ARMOR') }}</span>
-                    </div>
-                  </div>
-                  <div class="prep-equip-row">
-                    <div
-                      class="prep-equip-slot"
-                      :class="{ filled: slotFilled('GLOVES') }"
-                      @click="onEquipSlotClick('GLOVES')"
-                    >
-                      <span class="prep-equip-slot-label">护手</span>
-                      <img v-if="slotDisplayIcon('GLOVES').type === 'img'" class="prep-equip-slot-img" :src="slotDisplayIcon('GLOVES').src" alt="">
-                      <span v-else-if="slotDisplayIcon('GLOVES').type === 'emoji'" class="prep-equip-slot-emoji">{{ slotDisplayIcon('GLOVES').text }}</span>
-                      <span v-else class="prep-equip-slot-empty">空</span>
-                      <span v-if="slotItemName('GLOVES')" class="prep-equip-slot-name">{{ slotItemName('GLOVES') }}</span>
-                    </div>
-                    <div
-                      class="prep-equip-slot"
-                      :class="{ filled: slotFilled('LEGS') }"
-                      @click="onEquipSlotClick('LEGS')"
-                    >
-                      <span class="prep-equip-slot-label">护腿</span>
-                      <img v-if="slotDisplayIcon('LEGS').type === 'img'" class="prep-equip-slot-img" :src="slotDisplayIcon('LEGS').src" alt="">
-                      <span v-else-if="slotDisplayIcon('LEGS').type === 'emoji'" class="prep-equip-slot-emoji">{{ slotDisplayIcon('LEGS').text }}</span>
-                      <span v-else class="prep-equip-slot-empty">空</span>
-                      <span v-if="slotItemName('LEGS')" class="prep-equip-slot-name">{{ slotItemName('LEGS') }}</span>
-                    </div>
-                  </div>
-                  <div class="prep-equip-row prep-equip-row-triple">
-                    <div
-                      v-for="acc in accessorySlots"
-                      :key="acc.slot"
-                      class="prep-equip-slot prep-equip-slot-sm"
-                      :class="{ filled: slotFilled(acc.slot) }"
-                      @click="onEquipSlotClick(acc.slot)"
-                    >
-                      <span class="prep-equip-slot-label">{{ acc.label }}</span>
-                      <img v-if="slotDisplayIcon(acc.slot).type === 'img'" class="prep-equip-slot-img" :src="slotDisplayIcon(acc.slot).src" alt="">
-                      <span v-else-if="slotDisplayIcon(acc.slot).type === 'emoji'" class="prep-equip-slot-emoji">{{ slotDisplayIcon(acc.slot).text }}</span>
-                      <span v-else class="prep-equip-slot-empty">空</span>
-                      <span v-if="slotItemName(acc.slot)" class="prep-equip-slot-name">{{ slotItemName(acc.slot) }}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div class="prep-hero-stats">
-                <div class="prep-stat-brief">
-                  <div class="prep-stat-chip">
-                    <span class="prep-stat-chip-label">攻击</span>
-                    <span class="prep-stat-chip-value">{{ roleDisplayAtk(prepDisplayRole) }}</span>
-                  </div>
-                  <div class="prep-stat-chip">
-                    <span class="prep-stat-chip-label">防御</span>
-                    <span class="prep-stat-chip-value">{{ roleDisplayDef(prepDisplayRole) }}</span>
-                  </div>
-                  <div class="prep-stat-chip">
-                    <span class="prep-stat-chip-label">生命</span>
-                    <span class="prep-stat-chip-value">{{ roleDisplayHp(prepDisplayRole) }}</span>
-                  </div>
-                  <div class="prep-stat-chip">
-                    <span class="prep-stat-chip-label">攻速</span>
-                    <span class="prep-stat-chip-value">{{ roleDisplayAtkSpeed(prepDisplayRole) }}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div v-else class="prep-empty-tip">暂无角色</div>
-          </template>
+          </div>
         </div>
+      </section>
+
+      <div v-if="dragState" class="prep-drag-hint">
+        {{ dragHintText }}
       </div>
 
-      <div class="prep-bottom">
+      <!-- 战斗背包常驻 -->
+      <section class="prep-bottom" :class="{ 'prep-drop-zone': isBagDropZone }" data-drop="BAG:zone">
         <div class="prep-section-head">
           <div class="prep-head-left">
             <h3>战斗背包</h3>
-            <span class="prep-meta">无格子上限</span>
+            <span class="prep-meta">{{ bagItems.length }} 件</span>
           </div>
           <div class="prep-toolbar">
             <button
               type="button"
+              class="btn-ghost btn-sm hit-44"
               :class="{ active: batchMode === 'toWarehouse' }"
               :disabled="prepActing"
               @click="toggleBatchMode('toWarehouse')"
-            >批量移入仓库</button>
-            <button
-              v-if="batchMode === 'toWarehouse'"
-              type="button"
-              :disabled="prepActing || !canConfirmBatch"
-              @click="confirmBatch"
-            >确认转移</button>
-            <button v-if="batchMode === 'toWarehouse'" type="button" @click="cancelBatch">取消</button>
+            >批量</button>
           </div>
         </div>
-        <div
-          class="prep-scroll prep-bag-zone"
-          :class="{ 'prep-drop-zone': isBagDropZone }"
-          @dragover.prevent="onBagZoneDragOver"
-          @dragenter.prevent="onDragEnter('BAG', 'zone')"
-          @dragleave="onDragLeaveEl"
-          @drop.prevent="onBagZoneDrop"
-        >
-          <div v-if="!bagItems.length" class="prep-empty-tip">
-            <span v-if="isBagDropZone">松手放入背包</span>
-            <span v-else>背包为空，从仓库拖入或批量转移物品</span>
+        <div class="prep-scroll prep-bag-zone hide-scrollbar" data-scroll-key="prep-bag">
+          <div v-if="!bagItems.length" class="empty-state">
+            <div class="empty-state-icon art-slot" data-art="empty/bag.png">🎒</div>
+            <p>{{ isBagDropZone ? '松手放入背包' : (warehouseOpen ? '背包为空，从仓库拖入' : '背包为空，点上方打开仓库') }}</p>
           </div>
           <div v-else class="prep-item-grid">
-            <div
-              v-for="item in bagItems"
-              :key="item.id"
-              class="prep-item-wrap"
-            >
+            <div v-for="item in bagItems" :key="item.id" class="prep-item-wrap">
               <div
                 class="prep-item"
                 :class="prepBagClasses(item)"
-                :draggable="!batchMode"
-                @dragstart="onDragStart($event, 'BAG', item.id, item)"
-                @dragover.prevent="onDragOver($event, 'BAG', item.id, item)"
-                @dragenter.prevent="onDragEnter('BAG', item.id)"
-                @dragleave="onDragLeaveEl"
-                @drop.prevent="onDrop($event, 'BAG', item.id, item)"
-                @dragend="onDragEnd"
-                @click="onBagClick(item)"
+                :data-drop="'BAG:' + item.id"
+                @pointerdown="onPrepItemPointerDown($event, 'BAG', item.id, item)"
               >
                 <img v-if="itemIconIsImage(item.icon)" class="prep-item-img" :src="item.icon" :alt="item.itemName">
                 <span v-else class="prep-item-icon">{{ item.icon || '📦' }}</span>
-                <span class="prep-item-qty">{{ item.quantity }}</span>
+                <span class="qty-badge prep-item-qty">{{ item.quantity }}</span>
               </div>
-              <div class="prep-item-name">{{ item.itemName }}</div>
+              <div class="prep-item-name ellipsis">{{ item.itemName }}</div>
             </div>
           </div>
         </div>
-      </div>
+      </section>
     </div>
 
     <!-- 布局 -->
-    <div v-show="tab === 'layout'" class="tab-panel">
-      <div class="panel-tip">己方战场 · 横6 竖5 · 拖角色到格子放置 · 主角 2×2</div>
-      <div
-        class="battle-board"
-        ref="layoutBoard"
-        :style="boardStyle"
-      >
+    <div v-show="tab === 'layout'" class="tab-panel layout-panel" data-scroll-key="layout">
+      <div class="layout-status">
+        <span>{{ layoutStatusText }}</span>
+        <button type="button" class="layout-help hit-44" title="规则" @click="showToast('横6竖5；拖角色到格子；主角通常 2×2；近战偏前两列')">?</button>
+      </div>
+      <div class="layout-board-wrap">
         <div
-          v-for="cell in cells"
-          :key="'p-' + cell.r + '-' + cell.c"
-          class="battle-cell"
-          :class="{ active: isAnchor(cell.c, cell.r, draftLayouts), hover: isLayoutCellHot(cell.c, cell.r) }"
-          :style="cellStyle(cell.c, cell.r)"
-        ></div>
-        <div
-          v-for="item in draftLayouts"
-          :key="item.roleId"
-          class="battle-unit player-unit"
-          :class="{ main: item.mainRole, dragging: layoutDrag && layoutDrag.roleId === item.roleId }"
-          :style="layoutUnitStyle(item)"
-          @pointerdown.prevent="onLayoutUnitDown($event, item)"
-          @click.stop="selectPlaced(item)"
+          class="battle-board"
+          ref="layoutBoard"
+          :style="boardStyle"
         >
-          <span>{{ shortName(item.roleName) }}</span>
-          <em>{{ item.gridH }}×{{ item.gridW }}</em>
+          <div
+            v-for="cell in cells"
+            :key="'p-' + cell.r + '-' + cell.c"
+            class="battle-cell"
+            :class="{
+              melee: cell.c < 2,
+              ranged: cell.c >= 2,
+              active: isAnchor(cell.c, cell.r, draftLayouts),
+              valid: isLayoutCellHot(cell.c, cell.r),
+              invalid: isLayoutCellInvalid(cell.c, cell.r),
+              hover: isLayoutCellHot(cell.c, cell.r)
+            }"
+            :style="cellStyle(cell.c, cell.r)"
+          ></div>
+          <div
+            v-for="item in draftLayouts"
+            :key="item.roleId"
+            class="battle-unit player-unit"
+            :class="{ main: item.mainRole, dragging: layoutDrag && layoutDrag.roleId === item.roleId, selected: selectedRoleId === item.roleId }"
+            :style="layoutUnitStyle(item)"
+            @pointerdown.prevent="onLayoutUnitDown($event, item)"
+            @click.stop="selectPlaced(item)"
+          >
+            <span>{{ shortName(item.roleName) }}</span>
+            <em>{{ item.gridH }}×{{ item.gridW }}</em>
+          </div>
+        </div>
+        <div class="layout-enemy-dir" aria-hidden="true">
+          <span></span><span></span><span></span>
+          <em>敌方来袭方向</em>
         </div>
       </div>
 
-      <div class="roster-title">可选角色 · 按住拖到战场</div>
-      <div class="roster-list">
-        <button
-          v-for="role in roles"
-          :key="role.id"
-          type="button"
-          class="roster-item"
-          :class="{ selected: selectedRoleId === role.id, onField: isOnField(role.id), dragging: layoutDrag && layoutDrag.roleId === role.id }"
-          @pointerdown.prevent="onLayoutRosterDown($event, role)"
-          @click="selectRole(role)"
-        >
-          <strong>{{ role.name || '角色' }}</strong>
-          <span>{{ role.mainRole ? '主角' : '角色' }} · {{ role.gridH || 1 }}×{{ role.gridW || 1 }}{{ isOnField(role.id) ? ' · 已上场' : '' }}</span>
-        </button>
-      </div>
-
-      <div class="panel-actions">
-        <button type="button" class="btn-ghost" @click="removeSelected" :disabled="!selectedRoleId">卸下</button>
-        <button type="button" class="btn-primary" @click="saveLayout" :disabled="layoutSaving">
-          {{ layoutSaving ? '保存中...' : '保存布局' }}
-        </button>
+      <div
+        class="roster-zone"
+        ref="layoutRoster"
+        :class="{ 'drop-active': layoutDrag && layoutDrag.fromBoard && layoutOverRoster }"
+      >
+        <div class="roster-title">可选角色 · 拖到战场上场 · 拖回此处下阵</div>
+        <div class="roster-list">
+          <button
+            v-for="role in roles"
+            :key="role.id"
+            type="button"
+            class="roster-item"
+            :class="{ selected: selectedRoleId === role.id, onField: isOnField(role.id), dragging: layoutDrag && layoutDrag.roleId === role.id }"
+            @pointerdown.prevent="onLayoutRosterDown($event, role)"
+            @click="selectRole(role)"
+          >
+            <strong class="ellipsis">{{ role.name || '角色' }}</strong>
+            <span>{{ role.mainRole ? '主角' : '角色' }} · {{ role.gridH || 1 }}×{{ role.gridW || 1 }}</span>
+          </button>
+        </div>
       </div>
     </div>
 
     <div
       v-if="layoutGhost.show"
-      class="layout-finger-ghost"
+      class="drag-ghost layout-finger-ghost"
       :style="{ left: layoutGhost.x + 'px', top: layoutGhost.y + 'px' }"
     >{{ layoutGhost.name }}</div>
+    <div
+      v-if="prepGhost.show"
+      class="drag-ghost"
+      :style="{ left: prepGhost.x + 'px', top: prepGhost.y + 'px' }"
+    >{{ prepGhost.name }}</div>
 
     <!-- 合成台 -->
     <div v-show="tab === 'craft'" class="tab-panel craft-panel">
-      <div v-if="craftLoading" class="loading-text">加载中...</div>
-      <div v-else-if="!filteredCraftRecipes.length" class="prep-empty-tip">暂无匹配配方</div>
-      <div v-else class="craft-list">
-        <div v-for="recipe in filteredCraftRecipes" :key="recipe.id" class="craft-row">
-          <div class="craft-row-main">
+      <div v-if="craftLoading" class="craft-skel">
+        <div class="skeleton-block" style="height:84px;margin-bottom:8px"></div>
+        <div class="skeleton-block" style="height:84px;margin-bottom:8px"></div>
+        <div class="skeleton-block" style="height:84px"></div>
+      </div>
+      <div v-else-if="!filteredCraftRecipes.length" class="empty-state">
+        <div class="empty-state-icon art-slot" data-art="empty/recipe.png">🧪</div>
+        <p>暂无匹配配方</p>
+      </div>
+      <div v-else class="craft-list" data-scroll-key="craft">
+        <div
+          v-for="recipe in filteredCraftRecipes"
+          :key="recipe.id"
+          class="craft-card"
+          @click="openCraftDetail(recipe)"
+        >
+          <div class="craft-card-top">
             <img v-if="itemIconIsImage(recipe.resultItemIcon)" class="craft-row-icon" :src="recipe.resultItemIcon" alt="">
             <span v-else class="craft-row-emoji">{{ recipe.resultItemIcon || '📦' }}</span>
             <div class="craft-row-text">
               <div class="craft-row-name">{{ recipe.resultItemName || recipe.name }}</div>
               <div class="craft-row-sub">×{{ recipe.resultQty || 1 }} · {{ itemTypeLabel(recipe.resultItemType) }}</div>
             </div>
+            <button
+              type="button"
+              class="craft-detail-link hit-44"
+              @click.stop="openCraftItemDetail(recipe)"
+            >详情</button>
+            <i class="craft-rarity-bar" :class="gradeRarityClass(recipe.grade || 1)"></i>
           </div>
-          <span class="craft-stock" :class="recipe.canCraft ? 'ok' : 'no'">{{ recipe.canCraft ? '材料充足' : '材料不足' }}</span>
-          <button type="button" class="craft-btn ghost" @click="openCraftDetail(recipe)">详情</button>
-          <button
-            v-if="recipe.canCraft"
-            type="button"
-            class="craft-btn primary"
-            :disabled="craftActing"
-            @click="executeCraft(recipe)"
-          >合成</button>
-          <button
-            v-else
-            type="button"
-            class="craft-btn warn"
-            @click="openCraftDetail(recipe, true)"
-          >去获取</button>
+          <div class="craft-card-bottom">
+            <div class="craft-mat-thumbs">
+              <div
+                v-for="mat in (recipe.materials || [])"
+                :key="mat.itemId"
+                class="craft-mat-chip"
+                :class="{ short: !mat.enough }"
+                :title="(mat.itemName || '') + ' ' + (mat.ownedQty || 0) + '/' + (mat.requiredQty || 0)"
+              >
+                <div class="craft-mat-thumb">
+                  <img v-if="itemIconIsImage(mat.icon)" :src="mat.icon" alt="">
+                  <span v-else>{{ mat.icon || '📦' }}</span>
+                </div>
+                <span class="craft-mat-x">×{{ mat.requiredQty || 0 }}</span>
+              </div>
+              <span v-if="!(recipe.materials && recipe.materials.length)" class="muted" style="font-size:11px">无材料数据</span>
+            </div>
+            <button
+              v-if="recipe.canCraft"
+              type="button"
+              class="craft-btn primary hit-44"
+              :disabled="craftActing"
+              @click.stop="executeCraft(recipe)"
+            >合成</button>
+            <button
+              v-else
+              type="button"
+              class="craft-btn warn hit-44"
+              @click.stop="openCraftDetail(recipe, true)"
+            >查看缺料</button>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- 出击：大关竖列表 -->
+    <!-- 出击：章节手风琴 -->
     <div v-show="tab === 'deploy'" class="tab-panel deploy-panel">
-      <div v-if="deployLoading" class="empty-hint">加载关卡中...</div>
+      <div v-if="deployLoading" class="deploy-skel">
+        <div class="skeleton-block" style="height:88px;margin-bottom:8px"></div>
+        <div class="skeleton-block" style="height:88px;margin-bottom:8px"></div>
+        <div class="skeleton-block" style="height:88px"></div>
+      </div>
       <div v-else class="sortie-panel">
         <div class="stage-panel-head">
           <h2>选关出击</h2>
-          <span class="muted">点大关进入小关</span>
+          <span class="muted">展开大关 · 点小关预览</span>
         </div>
 
-        <div v-if="!flatChapters.length" class="empty-hint">暂无大关</div>
-        <div v-else class="chapter-list">
+        <div v-if="!flatChapters.length" class="empty-state">
+          <div class="empty-state-icon art-slot" data-art="empty/level.png">🗺</div>
+          <p>暂无大关</p>
+        </div>
+        <div v-else class="chapter-list" data-scroll-key="deploy">
           <template v-for="group in chapterGroups" :key="group.typeId">
             <div v-if="chapterGroups.length > 1" class="chapter-group-title">{{ group.typeName }}</div>
-            <button
+            <div
               v-for="ch in group.chapters"
               :key="ch.id"
-              type="button"
-              class="chapter-row"
-              @click="openLevelSheet(ch, group.typeId)"
+              class="chapter-accordion"
+              :class="{ open: expandedChapterId === ch.id }"
             >
-              <div class="chapter-row-main">
-                <strong>{{ ch.name }}</strong>
-                <span>{{ (ch.levels || []).length }} 个小关</span>
+              <button type="button" class="chapter-row" @click="toggleChapter(ch, group.typeId)">
+                <div class="chapter-thumb art-slot" :data-art="'chapter/' + ch.id + '.jpg'">🏞</div>
+                <div class="chapter-row-main">
+                  <strong class="ellipsis">{{ ch.name }}</strong>
+                  <span>{{ (ch.levels || []).length }} 小关</span>
+                  <div class="chapter-progress"><i :style="{ width: chapterProgress(ch) + '%' }"></i></div>
+                </div>
+                <span class="chapter-row-arrow">{{ expandedChapterId === ch.id ? '▾' : '›' }}</span>
+              </button>
+              <div v-if="expandedChapterId === ch.id" class="chapter-levels">
+                <div v-if="!(ch.levels || []).length" class="empty-hint">暂无小关</div>
+                <button
+                  v-for="lv in (ch.levels || [])"
+                  :key="lv.id"
+                  type="button"
+                  class="level-row"
+                  :class="{ locked: lv.locked }"
+                  @click="onLevelRowClick(lv, ch)"
+                >
+                  <div class="level-row-code">{{ lv.code || '—' }}</div>
+                  <div class="level-row-meta">
+                    <span class="ellipsis">{{ lv.name }}</span>
+                    <div class="level-faces">
+                      <span
+                        v-for="(face, fi) in levelFaces(lv.id)"
+                        :key="lv.id + '-f' + fi"
+                        class="level-face art-slot"
+                        :class="rarityClass(face.rarity)"
+                        :data-art="face.monsterId ? ('monster/' + face.monsterId + '-face.png') : null"
+                      >{{ face.ch }}</span>
+                      <em v-if="!levelFaces(lv.id).length">{{ levelMonsterCount(lv.id) }}</em>
+                    </div>
+                  </div>
+                  <div class="level-stars" aria-hidden="true">
+                    <span v-for="s in 3" :key="s" :class="{ on: s <= (lv.stars || 0) }">★</span>
+                  </div>
+                  <span class="chapter-row-arrow">›</span>
+                </button>
               </div>
-              <span class="chapter-row-arrow">›</span>
-            </button>
+            </div>
           </template>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- 小关列表弹窗 -->
-  <div v-if="levelSheetOpen" class="deploy-sheet-mask" @click.self="closeLevelSheet">
-    <div class="deploy-sheet">
-      <div class="deploy-sheet-head">
-        <div>
-          <h3>{{ sheetChapter ? sheetChapter.name : '小关' }}</h3>
-          <p class="muted">选择小关查看阵容</p>
-        </div>
-        <button type="button" class="deploy-sheet-close" @click="closeLevelSheet">关闭</button>
-      </div>
-      <div class="deploy-sheet-body">
-        <div v-if="!sheetLevels.length" class="empty-hint">该大关暂无小关</div>
-        <button
-          v-for="lv in sheetLevels"
-          :key="lv.id"
-          type="button"
-          class="level-row"
-          @click="openPreviewSheet(lv)"
-        >
-          <div class="level-row-code">{{ lv.code || lv.name }}</div>
-          <div class="level-row-meta">
-            <span>{{ lv.name }}</span>
-            <em>{{ levelMonsterCount(lv.id) }}</em>
-          </div>
-          <span class="chapter-row-arrow">›</span>
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- 预览 + 出击弹窗 -->
+  <!-- 预览 + 出击弹窗（唯一 sheet） -->
   <div v-if="previewSheetOpen" class="deploy-sheet-mask is-preview" @click.self="closePreviewSheet">
     <div class="deploy-sheet deploy-sheet-preview">
+      <div class="sheet-handle"></div>
       <div class="deploy-sheet-head">
         <div>
           <h3>{{ selectedLevel ? (selectedLevel.code || selectedLevel.name) : '关卡预览' }}</h3>
           <p class="muted">{{ sheetChapter ? sheetChapter.name : '' }} · 敌方阵容</p>
         </div>
-        <button type="button" class="deploy-sheet-close" @click="closePreviewSheet">返回</button>
+        <button type="button" class="deploy-sheet-close hit-44" aria-label="关闭" @click="closePreviewSheet">×</button>
       </div>
       <div class="deploy-sheet-body">
         <div class="deploy-preview">
@@ -491,28 +565,36 @@
               class="battle-unit enemy-unit"
               :class="rarityClass(m.rarity)"
               :style="unitStyle(m)"
+              @click="showEnemyInfo(m)"
             >
               <span>{{ shortName(m.monsterName) }}</span>
               <em>{{ rarityLabel(m.rarity) }}</em>
             </div>
           </div>
           <div class="enemy-tags" v-if="levelMonsters.length">
-            <span
+            <button
               v-for="m in levelMonsters"
               :key="'tag-' + m.id"
+              type="button"
               class="enemy-tag"
               :class="rarityClass(m.rarity)"
-            >{{ m.monsterName }} · {{ rarityLabel(m.rarity) }}</span>
+              @click="showEnemyInfo(m)"
+            >{{ m.monsterName }} · {{ rarityLabel(m.rarity) }}</button>
           </div>
         </div>
         <button
           type="button"
-          class="battle-start-btn"
+          class="battle-start-btn pulse"
           :disabled="!selectedLevelId || monsterLoading"
           @click="startBattle"
         >进入战斗</button>
       </div>
     </div>
+  </div>
+
+  <div v-if="craftBurst.show" class="craft-burst">
+    <div class="craft-burst-ring"></div>
+    <div class="craft-burst-icon">{{ craftBurst.icon || '✨' }}</div>
   </div>
 
   <nav class="home-tabbar">
@@ -524,18 +606,30 @@
   </nav>
 
   <!-- 合成详情 -->
-  <div v-if="craftDetail" class="craft-detail-mask" @click.self="closeCraftDetail">
+  <div
+    v-if="craftDetail"
+    class="craft-detail-mask"
+    :class="{ 'modal-under': skillDetailOpen || prepItemDetail }"
+    @click.self="closeCraftDetail"
+  >
     <div class="craft-detail-panel">
       <div class="craft-detail-head">
         <h3>合成详情</h3>
-        <button type="button" class="craft-detail-close" @click="closeCraftDetail">关闭</button>
+        <button type="button" class="craft-detail-close hit-44" aria-label="关闭" @click="closeCraftDetail">×</button>
       </div>
       <div class="craft-detail-body">
         <div class="craft-detail-result">
           <img v-if="itemIconIsImage(craftDetail.resultItemIcon)" class="craft-detail-result-img" :src="craftDetail.resultItemIcon" alt="">
           <span v-else class="craft-detail-result-emoji">{{ craftDetail.resultItemIcon || '📦' }}</span>
           <div>
-            <div class="craft-detail-result-name">{{ craftDetail.resultItemName || craftDetail.name }}</div>
+            <div class="craft-detail-result-name">
+              {{ craftDetail.resultItemName || craftDetail.name }}
+              <em
+                v-if="craftDetail.resultItem && craftDetail.resultItem.grade != null"
+                class="craft-grade-badge"
+                :class="gradeRarityClass(craftDetail.resultItem.grade)"
+              >品级 {{ craftDetail.resultItem.grade }}</em>
+            </div>
             <div class="craft-detail-result-meta">
               产出 ×{{ craftDetail.resultQty || 1 }}
               <template v-if="craftDetail.resultItemType"> · {{ itemTypeLabel(craftDetail.resultItemType) }}</template>
@@ -545,130 +639,28 @@
         </div>
 
         <div class="craft-detail-section" v-if="craftDetail.resultItem">
-          <div class="section-title">物品详情</div>
-          <div class="craft-item-stats">
-            <div class="craft-stat-row" v-if="craftDetail.resultItem.code">
-              <span>编码</span><span>{{ craftDetail.resultItem.code }}</span>
+          <div class="hero-detail-primary craft-core-stats">
+            <div class="hero-stat-card stat-atk">
+              <span class="hero-stat-label">攻击</span>
+              <span class="hero-stat-value">{{ craftDetail.resultItem.baseAtk != null ? craftDetail.resultItem.baseAtk : '—' }}</span>
             </div>
-            <div class="craft-stat-row" v-if="craftDetail.resultItem.maxStack != null">
-              <span>堆叠上限</span><span>{{ craftDetail.resultItem.maxStack }}</span>
+            <div class="hero-stat-card stat-def">
+              <span class="hero-stat-label">防御</span>
+              <span class="hero-stat-value">{{ craftDetail.resultItem.defense != null ? craftDetail.resultItem.defense : '—' }}</span>
             </div>
-            <div class="craft-stat-row" v-if="craftDetail.resultItem.weight != null">
-              <span>重量</span><span>{{ craftDetail.resultItem.weight }}</span>
+            <div class="hero-stat-card stat-hp">
+              <span class="hero-stat-label">生命</span>
+              <span class="hero-stat-value">{{ craftDetail.resultItem.hp != null ? craftDetail.resultItem.hp : '—' }}</span>
             </div>
-            <div class="craft-stat-row" v-if="craftDetail.resultItem.grade != null">
-              <span>品级</span><span class="hl">{{ craftDetail.resultItem.grade }}</span>
-            </div>
-            <div class="craft-stat-row" v-if="craftDetail.resultItem.baseAtk != null">
-              <span>基础攻击</span><span class="hl">{{ craftDetail.resultItem.baseAtk }}</span>
-            </div>
-            <div class="craft-stat-row" v-if="craftDetail.resultItem.hp != null">
-              <span>生命</span><span class="hl">{{ craftDetail.resultItem.hp }}</span>
-            </div>
-            <div class="craft-stat-row" v-if="craftDetail.resultItem.defense != null">
-              <span>防御</span><span class="hl">{{ craftDetail.resultItem.defense }}</span>
-            </div>
-            <div class="craft-stat-row" v-if="craftDetail.resultItem.atkSpeedText">
-              <span>攻速</span><span class="hl">{{ craftDetail.resultItem.atkSpeedText }}</span>
-            </div>
-            <template v-else>
-              <div class="craft-stat-row" v-if="craftDetail.resultItem.atkSpeedUpRatio != null && Number(craftDetail.resultItem.atkSpeedUpRatio) !== 0">
-                <span>增加攻速</span><span class="hl">{{ craftDetail.resultItem.atkSpeedUpRatio }}%</span>
-              </div>
-              <div class="craft-stat-row" v-if="craftDetail.resultItem.atkSpeedDownRatio != null && Number(craftDetail.resultItem.atkSpeedDownRatio) !== 0">
-                <span>减少攻速</span><span class="hl">{{ craftDetail.resultItem.atkSpeedDownRatio }}%</span>
-              </div>
-            </template>
-            <div class="craft-stat-row" v-if="craftDetail.resultItem.normalSkillName || craftDetail.resultItem.normalSkillId">
-              <span>普攻技能</span>
-              <button
-                type="button"
-                class="skill-link"
-                :disabled="!craftDetail.resultItem.normalSkillId"
-                @click="openSkillDetail(craftDetail.resultItem.normalSkillId)"
-              >{{ craftDetail.resultItem.normalSkillName || craftDetail.resultItem.normalSkillId }}</button>
-            </div>
-            <div class="item-detail-desc" v-if="craftDetail.resultItem.normalSkillDesc && craftDetail.resultItem.normalSkillDesc.summary">
-              <pre class="item-desc-summary">{{ craftDetail.resultItem.normalSkillDesc.summary }}</pre>
-            </div>
-            <div class="craft-stat-row" v-if="craftDetail.resultItem.chargeSkillSlotCount != null && craftDetail.resultItem.chargeSkillSlotCount > 0">
-              <span>充能技能槽</span><span class="hl">{{ craftDetail.resultItem.chargeSkillSlotCount }}</span>
-            </div>
-            <div class="craft-stat-row" v-if="craftDetail.resultItem.playerMaxEditChargeSkillSlotCount > 0">
-              <span>可编辑充能技能槽</span><span class="hl">{{ craftDetail.resultItem.playerMaxEditChargeSkillSlotCount }}</span>
-            </div>
-            <div class="craft-stat-row" v-if="craftDetail.resultItem.basicPassiveSlotCount > 0">
-              <span>基础被动槽</span><span class="hl">{{ craftDetail.resultItem.basicPassiveSlotCount }}</span>
-            </div>
-            <div class="craft-stat-row" v-if="craftDetail.resultItem.advancedPassiveSlotCount > 0">
-              <span>高级被动槽</span><span class="hl">{{ craftDetail.resultItem.advancedPassiveSlotCount }}</span>
-            </div>
-            <div class="craft-stat-row" v-if="craftDetail.resultItem.anchorPassiveSlotCount > 0">
-              <span>锚点被动槽</span><span class="hl">{{ craftDetail.resultItem.anchorPassiveSlotCount }}</span>
-            </div>
-            <div class="craft-stat-row" v-if="craftDetail.resultItem.periodicPassiveSlotCount > 0">
-              <span>周期被动槽</span><span class="hl">{{ craftDetail.resultItem.periodicPassiveSlotCount }}</span>
-            </div>
-            <div class="craft-stat-row craft-stat-row-skills" v-if="craftDetail.resultItem.defaultSkills && craftDetail.resultItem.defaultSkills.length">
-              <span>默认技能</span>
-              <div class="skill-link-list">
-                <button
-                  v-for="sk in craftDetail.resultItem.defaultSkills"
-                  :key="sk.id || sk.name"
-                  type="button"
-                  class="skill-link"
-                  :disabled="!sk.id"
-                  @click="openSkillDetail(sk.id)"
-                >{{ sk.name || sk.id }}</button>
-              </div>
-            </div>
-            <div class="craft-stat-row" v-else-if="craftDetail.resultItem.defaultSkillNames && craftDetail.resultItem.defaultSkillNames.length">
-              <span>默认技能</span><span class="hl">{{ craftDetail.resultItem.defaultSkillNames.join('、') }}</span>
-            </div>
-            <div
-              v-for="(sk, idx) in (craftDetail.resultItem.defaultSkillDescs || [])"
-              :key="'csd-' + idx"
-              class="item-detail-desc"
-            >
-              <div class="item-desc-slot">默认充能技能 {{ idx + 1 }}</div>
-              <pre class="item-desc-summary">{{ sk.summary }}</pre>
-            </div>
-            <div
-              v-for="(ps, idx) in (craftDetail.resultItem.defaultBasicPassiveDescs || [])"
-              :key="'cbd-' + idx"
-              class="item-detail-desc"
-            >
-              <div class="item-desc-slot">默认基础被动 {{ idx + 1 }}</div>
-              <pre class="item-desc-summary">{{ ps.summary }}</pre>
-            </div>
-            <div
-              v-for="(ps, idx) in (craftDetail.resultItem.defaultAdvancedPassiveDescs || [])"
-              :key="'cad-' + idx"
-              class="item-detail-desc"
-            >
-              <div class="item-desc-slot">默认高级被动 {{ idx + 1 }}</div>
-              <pre class="item-desc-summary">{{ ps.summary }}</pre>
-            </div>
-            <div
-              v-for="(ps, idx) in (craftDetail.resultItem.defaultAnchorPassiveDescs || [])"
-              :key="'cnd-' + idx"
-              class="item-detail-desc"
-            >
-              <div class="item-desc-slot">默认锚点被动 {{ idx + 1 }}</div>
-              <pre class="item-desc-summary">{{ ps.summary }}</pre>
-            </div>
-            <div
-              v-for="(ps, idx) in (craftDetail.resultItem.defaultPeriodicPassiveDescs || [])"
-              :key="'cpd-' + idx"
-              class="item-detail-desc"
-            >
-              <div class="item-desc-slot">默认周期被动 {{ idx + 1 }}</div>
-              <pre class="item-desc-summary">{{ ps.summary }}</pre>
-            </div>
-            <div class="craft-stat-row" v-if="craftDetail.resultItem.remark">
-              <span>备注</span><span>{{ craftDetail.resultItem.remark }}</span>
+            <div class="hero-stat-card stat-spd">
+              <span class="hero-stat-label">攻速</span>
+              <span class="hero-stat-value">{{ formatAtkSpeedShort(craftDetail.resultItem) }}</span>
             </div>
           </div>
+
+          <button type="button" class="craft-more-toggle" @click="openCraftItemDetail(craftDetail)">
+            详情
+          </button>
         </div>
 
         <div class="craft-detail-section">
@@ -679,13 +671,21 @@
             class="craft-mat-row"
             :class="{ enough: mat.enough, short: !mat.enough }"
           >
+            <span v-if="mat.enough" class="craft-mat-check" aria-hidden="true">✓</span>
             <img v-if="itemIconIsImage(mat.icon)" class="craft-mat-img" :src="mat.icon" alt="">
             <span v-else class="craft-mat-emoji">{{ mat.icon || '📦' }}</span>
             <div class="craft-mat-info">
               <div class="craft-mat-name">{{ mat.itemName }}</div>
-              <div class="craft-mat-qty">拥有 {{ mat.ownedQty }}/需要 {{ mat.requiredQty }}</div>
+              <div class="craft-mat-qty" :class="{ short: !mat.enough }">拥有 {{ mat.ownedQty }}/需要 {{ mat.requiredQty }}</div>
             </div>
             <button
+              v-if="!mat.enough"
+              type="button"
+              class="craft-btn warn mini"
+              @click="onMaterialAction(mat)"
+            >去获取</button>
+            <button
+              v-else
               type="button"
               class="craft-btn ghost mini"
               @click="onMaterialAction(mat)"
@@ -716,11 +716,18 @@
   </div>
 
   <!-- 备战物品详情 -->
-  <div v-if="prepItemDetail && prepItemView" class="item-detail-mask" @click.self="closePrepItemDetail">
+  <div
+    v-if="prepItemDetail && prepItemView"
+    class="item-detail-mask"
+    :class="{ 'modal-under': skillDetailOpen }"
+    @click.self="closePrepItemDetail"
+  >
     <div class="item-detail-panel">
       <div class="item-detail-head">
-        <button type="button" class="item-detail-close" @click="closePrepItemDetail">关闭</button>
+        <h3>物品详情</h3>
+        <button type="button" class="item-detail-close hit-44" aria-label="关闭" @click="closePrepItemDetail">×</button>
       </div>
+      <div class="item-detail-body">
       <div class="item-detail-hero">
         <img
           v-if="itemIconIsImage(prepItemView.icon)"
@@ -761,11 +768,7 @@
         <template v-if="prepItemView.itemType === 'WEAPON'">
           <div class="item-detail-section-title">武器属性</div>
           <div class="item-stat-row"><span>基础攻击</span><span class="highlight">{{ prepItemView.baseAtk ?? 0 }}</span></div>
-          <div class="item-stat-row" v-if="prepItemView.atkSpeedText"><span>攻速</span><span class="highlight">{{ prepItemView.atkSpeedText }}</span></div>
-          <template v-else>
-            <div class="item-stat-row" v-if="Number(prepItemView.atkSpeedUpRatio || 0) !== 0"><span>增加攻速</span><span class="highlight">{{ prepItemView.atkSpeedUpRatio }}%</span></div>
-            <div class="item-stat-row" v-if="Number(prepItemView.atkSpeedDownRatio || 0) !== 0"><span>减少攻速</span><span class="highlight">{{ prepItemView.atkSpeedDownRatio }}%</span></div>
-          </template>
+          <div class="item-stat-row" v-if="formatAtkSpeedShort(prepItemView) !== '—'"><span>攻速</span><span class="highlight">{{ formatAtkSpeedShort(prepItemView) }}</span></div>
           <div class="item-stat-row">
             <span>普攻技能</span>
             <button type="button" class="skill-link" :disabled="!prepItemView.normalSkillId" @click="openSkillDetail(prepItemView.normalSkillId)">
@@ -785,12 +788,7 @@
 
         <template v-if="prepItemView.itemType === 'ACCESSORY'">
           <div class="item-detail-section-title">饰品属性</div>
-          <div class="item-stat-row" v-if="prepItemView.atkSpeedText"><span>攻速</span><span class="highlight">{{ prepItemView.atkSpeedText }}</span></div>
-          <div class="item-stat-row" v-if="Number(prepItemView.atkSpeedUpRatio || 0) !== 0"><span>增加攻速</span><span class="highlight">{{ prepItemView.atkSpeedUpRatio }}%</span></div>
-          <div class="item-stat-row" v-if="Number(prepItemView.atkSpeedDownRatio || 0) !== 0"><span>减少攻速</span><span class="highlight">{{ prepItemView.atkSpeedDownRatio }}%</span></div>
-          <div class="item-stat-row" v-if="!prepItemView.atkSpeedText && !Number(prepItemView.atkSpeedUpRatio || 0) && !Number(prepItemView.atkSpeedDownRatio || 0)">
-            <span>攻速</span><span class="highlight">无变化</span>
-          </div>
+          <div class="item-stat-row"><span>攻速</span><span class="highlight">{{ formatAtkSpeedShort(prepItemView) }}</span></div>
         </template>
 
         <template v-if="prepItemView.itemType === 'MATERIAL'">
@@ -889,6 +887,7 @@
           </template>
         </template>
       </div>
+      </div>
       <div class="item-detail-actions">
         <button
           v-if="prepItemDetail.source === 'WAREHOUSE'"
@@ -927,7 +926,7 @@
     <div class="hero-detail-panel">
       <div class="hero-detail-head">
         <h3>角色详情</h3>
-        <button type="button" class="hero-detail-close" @click="closeHeroDetail">关闭</button>
+        <button type="button" class="hero-detail-close hit-44" aria-label="关闭" @click="closeHeroDetail">×</button>
       </div>
       <div class="hero-detail-body">
         <div class="hero-detail-hero">
@@ -994,10 +993,14 @@
     <div class="skill-detail-panel">
       <div class="skill-detail-head">
         <h3>技能详情</h3>
-        <button type="button" class="item-detail-close" @click="closeSkillDetail">关闭</button>
+        <button type="button" class="item-detail-close hit-44" aria-label="关闭" @click="closeSkillDetail">×</button>
       </div>
-      <div v-if="skillDetailLoading" class="item-detail-loading">加载中…</div>
-      <template v-else-if="skillDetail">
+      <div v-if="skillDetailLoading" class="skill-detail-body">
+        <div class="skeleton-block" style="height:64px;margin-bottom:10px"></div>
+        <div class="skeleton-block" style="height:14px;width:70%;margin-bottom:8px"></div>
+        <div class="skeleton-block" style="height:14px;width:45%"></div>
+      </div>
+      <div v-else-if="skillDetail" class="skill-detail-body">
         <div class="skill-detail-hero">
           <div class="skill-detail-name">{{ skillDetail.skill.name || '技能' }}</div>
           <div class="skill-detail-sub">
@@ -1005,7 +1008,7 @@
             <template v-if="skillDetail.skill.code"> · {{ skillDetail.skill.code }}</template>
           </div>
         </div>
-        <div class="item-detail-stats">
+        <div class="item-detail-stats skill-detail-stats">
           <div class="item-stat-row">
             <span>所需充能</span>
             <span class="highlight">{{ skillNeedChargeText(skillDetail.skill) }}</span>
@@ -1030,8 +1033,8 @@
             <template v-else-if="c.conditionType === 'SKILL_CHARGE'">
               <div class="item-stat-row"><span>事件</span><span>{{ skillChargeEventLabel(c.skillChargeEvent) }}</span></div>
               <div class="item-stat-row"><span>范围</span><span>{{ skillChargeMatchLabel(c.skillChargeMatch) }}</span></div>
-              <div class="item-stat-row" v-if="c.skillChargeMatch === 'ANY_TYPE'">
-                <span>技能类型</span><span>{{ skillTypeLabel(c.matchSkillType) }}</span>
+              <div class="item-stat-row" v-if="c.skillChargeMatch === 'ANY_TYPE' || c.skillChargeMatch === 'SPECIFIC'">
+                <span>类型/技能</span><span>{{ skillChargeTargetLabel(c) }}</span>
               </div>
               <div class="item-stat-row"><span>增加充能</span><span class="highlight">+{{ c.chargeGain || 0 }}</span></div>
             </template>
@@ -1061,7 +1064,32 @@
         <div class="item-detail-section" v-if="(!skillDetail.charges || !skillDetail.charges.length) && (!skillDetail.effects || !skillDetail.effects.length)">
           <div class="muted" style="font-size:13px">暂无充能条件与效果配置</div>
         </div>
-      </template>
+      </div>
+    </div>
+  </div>
+
+  <div v-if="batchMode" class="batch-bar">
+    <span>已选 {{ batchSelectedCount }} 件</span>
+    <button type="button" class="btn-ghost btn-sm hit-44" @click="selectAllBatch">全选</button>
+    <button
+      type="button"
+      class="btn-primary btn-sm hit-44"
+      :disabled="prepActing || !canConfirmBatch"
+      @click="confirmBatch"
+    >确认转移</button>
+    <button type="button" class="btn-ghost btn-sm hit-44" @click="cancelBatch">取消</button>
+  </div>
+
+  <div v-if="settingsOpen" class="sheet-mask" @click.self="settingsOpen = false">
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <h3 style="margin:0">设置</h3>
+        <button type="button" class="sheet-close hit-44" aria-label="关闭" @click="settingsOpen = false">×</button>
+      </div>
+      <div class="sheet-body">
+        <button type="button" class="btn-danger btn-block btn-md" @click="logout">退出登录</button>
+      </div>
     </div>
   </div>
 
@@ -1081,6 +1109,7 @@ createApp({
   data() {
     return {
       tab: 'home',
+      tabScrollMap: {},
       loading: true,
       hero: null,
       roles: [],
@@ -1092,7 +1121,11 @@ createApp({
       layoutSaving: false,
       layoutDrag: null,
       layoutHover: null,
+      layoutOverRoster: false,
       layoutGhost: { show: false, x: 0, y: 0, name: '' },
+      savedLayoutSnap: '',
+      _layoutSavePending: false,
+      settingsOpen: false,
       stageTree: [],
       selectedTypeId: '',
       selectedChapterId: '',
@@ -1100,10 +1133,11 @@ createApp({
       selectedLevel: null,
       sheetChapter: null,
       sheetLevels: [],
-      levelSheetOpen: false,
+      expandedChapterId: '',
       previewSheetOpen: false,
       levelMonsters: [],
       monsterCountMap: {},
+      levelFaceMap: {},
       deployLoading: false,
       monsterLoading: false,
       warehouseOpen: false,
@@ -1116,6 +1150,7 @@ createApp({
       batchWhSlots: [],
       batchBagIds: [],
       dragState: null,
+      prepGhost: { show: false, x: 0, y: 0, name: '' },
       prepItemDetail: null,
       skillDetailOpen: false,
       skillDetailLoading: false,
@@ -1125,13 +1160,14 @@ createApp({
       craftLoading: false,
       craftActing: false,
       craftFilter: 'all',
-      craftTypeOpen: false,
+      craftOnlyCan: false,
       craftKeyword: '',
       craftDetail: null,
       craftDropSources: [],
       craftDropFocusName: '',
+      craftBurst: { show: false, icon: '✨' },
       craftTypeOptions: [
-        { value: 'all', label: '全部类型' },
+        { value: 'all', label: '全部' },
         { value: 'WEAPON', label: '武器' },
         { value: 'ARMOR', label: '护甲' },
         { value: 'HELMET', label: '头盔' },
@@ -1170,16 +1206,14 @@ createApp({
     tabTitle() {
       return { home: '首页', prep: '备战', layout: '布局', craft: '合成台', deploy: '出击' }[this.tab] || '首页';
     },
-    craftTypeLabel() {
-      var hit = (this.craftTypeOptions || []).find((o) => o.value === this.craftFilter);
-      return hit ? hit.label : '全部类型';
-    },
     filteredCraftRecipes() {
       var list = this.craftRecipes || [];
       var kw = (this.craftKeyword || '').toLowerCase();
       var filter = this.craftFilter || 'all';
+      var onlyCan = !!this.craftOnlyCan;
       return list.filter((r) => {
         if (filter !== 'all' && (r.resultItemType || '') !== filter) return false;
+        if (onlyCan && !r.canCraft) return false;
         if (!kw) return true;
         var name = ((r.resultItemName || '') + ' ' + (r.name || '')).toLowerCase();
         return name.indexOf(kw) >= 0;
@@ -1271,11 +1305,35 @@ createApp({
       if (this.batchMode === 'toWarehouse') return this.batchBagIds.length > 0;
       return false;
     },
+    batchSelectedCount() {
+      if (this.batchMode === 'toBag') return this.batchWhSlots.length;
+      if (this.batchMode === 'toWarehouse') return this.batchBagIds.length;
+      return 0;
+    },
+    dragHintText() {
+      if (!this.dragState) return '';
+      if (this.dragState.fromType === 'WAREHOUSE') return '拖到下方背包松手即可转移';
+      if (this.dragState.fromType === 'BAG') return '拖到上方仓库松手即可转移';
+      return '拖拽转移中…';
+    },
     isBagDropZone() {
       return this.dragState && this.dragState.fromType === 'WAREHOUSE';
     },
     isWhDropZone() {
       return this.dragState && this.dragState.fromType === 'BAG';
+    },
+    layoutStatusText() {
+      var total = (this.roles || []).length;
+      var on = (this.draftLayouts || []).length;
+      var hasMain = (this.draftLayouts || []).some((x) => x.mainRole);
+      var parts = ['已上场 ' + on + '/' + Math.max(total, on)];
+      if (!hasMain) parts.push('主角未上场');
+      if (this.layoutSaving) parts.push('保存中');
+      else if (this.layoutDirty) parts.push('保存失败');
+      return parts.join(' · ');
+    },
+    layoutDirty() {
+      return this.layoutSnap(this.draftLayouts) !== this.savedLayoutSnap;
     },
     equipableSlotOptions() {
       if (!this.prepItemDetail || this.prepItemDetail.source !== 'BAG') return [];
@@ -1319,6 +1377,16 @@ createApp({
         g.chapters.forEach((ch) => list.push(ch));
       });
       return list;
+    },
+    overlayOpen() {
+      return !!(
+        this.detailOpen
+        || this.craftDetail
+        || this.prepItemDetail
+        || this.skillDetailOpen
+        || this.previewSheetOpen
+        || this.settingsOpen
+      );
     }
   },
   mounted() {
@@ -1326,18 +1394,97 @@ createApp({
       location.href = APP_CONFIG.loginPage || '/login.html';
       return;
     }
-    this._onDocClick = () => { this.craftTypeOpen = false; };
-    document.addEventListener('click', this._onDocClick);
+    var self = this;
+    this._prepDrag = typeof useDragMove === 'function' ? useDragMove({
+      onPick: function (payload, e) { self.onPrepDragPick(payload, e); },
+      onHover: function (payload, dropEl, e) { self.onPrepDragHover(payload, dropEl, e); },
+      onDrop: function (payload, dropEl, e) { self.onPrepDragDrop(payload, dropEl, e); },
+      onClick: function (payload) { self.onPrepDragClick(payload); }
+    }) : null;
+    this._onEsc = function (e) {
+      if (e.key === 'Escape' || e.key === 'Esc') self.closeTopOverlay();
+    };
+    document.addEventListener('keydown', this._onEsc);
     this.loadHero();
     if (location.hash === '#deploy') {
       this.openDeploy();
     }
+    this.$nextTick(() => { if (window.ArtSlots) ArtSlots.apply(this.$el); });
+  },
+  watch: {
+    overlayOpen(v) {
+      document.body.classList.toggle('modal-open', !!v);
+    },
+    tab(next, prev) {
+      this.saveTabScroll(prev);
+      this.$nextTick(() => {
+        this.restoreTabScroll(next);
+        if (window.ArtSlots) ArtSlots.apply(this.$el);
+      });
+    },
+    expandedChapterId() {
+      this.$nextTick(() => { if (window.ArtSlots) ArtSlots.apply(this.$el); });
+    }
   },
   beforeUnmount() {
-    if (this._onDocClick) document.removeEventListener('click', this._onDocClick);
+    if (this._onEsc) document.removeEventListener('keydown', this._onEsc);
+    document.body.classList.remove('modal-open');
     this.unbindLayoutDragListeners();
+    if (this._prepDrag) this._prepDrag.cancel();
+    if (this._burstTimer) clearTimeout(this._burstTimer);
   },
   methods: {
+    closeTopOverlay() {
+      if (this.skillDetailOpen) { this.closeSkillDetail(); return; }
+      if (this.craftDetail) { this.closeCraftDetail(); return; }
+      if (this.prepItemDetail) { this.closePrepItemDetail(); return; }
+      if (this.detailOpen) { this.closeHeroDetail(); return; }
+      if (this.previewSheetOpen) { this.closePreviewSheet(); return; }
+      if (this.settingsOpen) { this.settingsOpen = false; }
+    },
+    saveTabScroll(tab) {
+      if (!tab || !this.$el) return;
+      var map = Object.assign({}, this.tabScrollMap);
+      var nodes = this.$el.querySelectorAll('[data-scroll-key]');
+      for (var i = 0; i < nodes.length; i++) {
+        var el = nodes[i];
+        var key = el.getAttribute('data-scroll-key');
+        if (!key) continue;
+        if (tab === 'prep' && key.indexOf('prep') !== 0) continue;
+        if (tab === 'craft' && key !== 'craft') continue;
+        if (tab === 'deploy' && key !== 'deploy') continue;
+        if (tab === 'layout' && key !== 'layout') continue;
+        if (tab === 'home') continue;
+        map[key] = el.scrollTop;
+      }
+      this.tabScrollMap = map;
+    },
+    restoreTabScroll(tab) {
+      if (!tab || !this.$el) return;
+      var map = this.tabScrollMap || {};
+      var nodes = this.$el.querySelectorAll('[data-scroll-key]');
+      for (var i = 0; i < nodes.length; i++) {
+        var key = nodes[i].getAttribute('data-scroll-key');
+        if (map[key] != null) nodes[i].scrollTop = map[key];
+      }
+    },
+    requestTab(key, onEnter) {
+      if (key === this.tab) return;
+      if (this.tab === 'layout') {
+        var heroId = this.hero && this.hero.id;
+        var hasMain = (this.draftLayouts || []).some((x) => x.mainRole || (heroId && x.roleId === heroId));
+        if (!hasMain) {
+          this.showToast('主角必须上场');
+          return;
+        }
+        if (this.layoutDirty) {
+          if (!window.confirm('布局尚未保存，确定离开？未保存的改动将丢失。')) return;
+        }
+      }
+      this.closeDeploySheets();
+      this.tab = key;
+      if (typeof onEnter === 'function') onEnter.call(this);
+    },
     showToast(text, type) {
       this.toast = { show: true, text: text, type: type || 'error' };
       setTimeout(() => { this.toast.show = false; }, 2200);
@@ -1395,57 +1542,51 @@ createApp({
       this.detailRoleData = null;
     },
     logout() {
+      this.settingsOpen = false;
       GameApi.clearToken();
       location.href = APP_CONFIG.loginPage || '/login.html';
     },
     goTab(key) {
-      this.closeDeploySheets();
-      this.craftTypeOpen = false;
-      this.tab = key;
+      this.requestTab(key);
     },
     closeDeploySheets() {
-      this.levelSheetOpen = false;
       this.previewSheetOpen = false;
       this.levelMonsters = [];
     },
     openPrep() {
-      this.closeDeploySheets();
-      this.tab = 'prep';
-      this.loadPrep();
+      this.requestTab('prep', function () { this.loadPrep(); });
     },
     openLayout() {
-      this.closeDeploySheets();
-      this.tab = 'layout';
-      if (!this.roles.length) this.loadHero();
-      GameApi.playerLayoutList()
-        .then((res) => {
-          this.draftLayouts = (res.data || []).map((x) => Object.assign({}, x));
-          if (!this.selectedRoleId && this.hero) this.selectedRoleId = this.hero.id;
-        })
-        .catch((err) => this.authCatch(err));
+      this.requestTab('layout', function () {
+        if (!this.roles.length) this.loadHero();
+        GameApi.playerLayoutList()
+          .then((res) => {
+            this.draftLayouts = (res.data || []).map((x) => Object.assign({}, x));
+            this.savedLayoutSnap = this.layoutSnap(this.draftLayouts);
+            if (!this.selectedRoleId && this.hero) this.selectedRoleId = this.hero.id;
+          })
+          .catch((err) => this.authCatch(err));
+      });
+    },
+    layoutSnap(list) {
+      return JSON.stringify((list || []).map((x) => ({
+        roleId: x.roleId,
+        posCol: x.posCol,
+        posRow: x.posRow
+      })).sort((a, b) => String(a.roleId).localeCompare(String(b.roleId))));
     },
     openDeploy() {
-      this.closeDeploySheets();
-      this.tab = 'deploy';
-      if (this.stageTree.length) return;
-      this.deployLoading = true;
-      GameApi.stageTree()
-        .then((res) => { this.stageTree = res.data || []; })
-        .catch((err) => this.authCatch(err))
-        .finally(() => { this.deployLoading = false; });
+      this.requestTab('deploy', function () {
+        if (this.stageTree.length) return;
+        this.deployLoading = true;
+        GameApi.stageTree()
+          .then((res) => { this.stageTree = res.data || []; })
+          .catch((err) => this.authCatch(err))
+          .finally(() => { this.deployLoading = false; });
+      });
     },
     openCraft() {
-      this.closeDeploySheets();
-      this.craftTypeOpen = false;
-      this.tab = 'craft';
-      this.loadCraft();
-    },
-    pickCraftType(value) {
-      this.craftFilter = value || 'all';
-      this.craftTypeOpen = false;
-    },
-    closeCraftTypeMenu() {
-      this.craftTypeOpen = false;
+      this.requestTab('craft', function () { this.loadCraft(); });
     },
     loadCraft() {
       this.craftLoading = true;
@@ -1453,6 +1594,21 @@ createApp({
         .then((res) => { this.craftRecipes = res.data || []; })
         .catch((err) => this.authCatch(err))
         .finally(() => { this.craftLoading = false; });
+    },
+    formatAtkSpeedShort(item) {
+      if (!item) return '—';
+      var up = Number(item.atkSpeedUpRatio || 0);
+      var down = Number(item.atkSpeedDownRatio || 0);
+      if (up) return up + '%';
+      if (down) return '-' + down + '%';
+      var text = item.atkSpeedText;
+      if (text) {
+        var m = String(text).match(/-?\d+(?:\.\d+)?%/);
+        if (m) return m[0];
+        if (text === '无变化') return '—';
+        return text;
+      }
+      return '—';
     },
     openCraftDetail(recipe, focusMissing) {
       if (!recipe || !recipe.id) return;
@@ -1469,29 +1625,73 @@ createApp({
         })
         .catch((err) => this.authCatch(err));
     },
+    openCraftItemDetail(recipe) {
+      if (!recipe) return;
+      var showItem = function (item) {
+        if (!item) {
+          this.showToast('暂无装备详情');
+          return;
+        }
+        this.prepItemDetail = { source: 'VIEW', data: Object.assign({}, item) };
+      }.bind(this);
+      if (recipe.resultItem) {
+        showItem(recipe.resultItem);
+        return;
+      }
+      if (!recipe.id) {
+        showItem(null);
+        return;
+      }
+      GameApi.craftDetail(recipe.id)
+        .then((res) => {
+          var data = res.data || {};
+          showItem(data.resultItem);
+        })
+        .catch((err) => this.authCatch(err));
+    },
     closeCraftDetail() {
       this.craftDetail = null;
       this.craftDropSources = [];
       this.craftDropFocusName = '';
+    },
+    playCraftBurst(recipe) {
+      var icon = recipe && recipe.resultItemIcon;
+      this.craftBurst = {
+        show: true,
+        icon: this.itemIconIsImage(icon) ? '✨' : (icon || '✨')
+      };
+      if (this._burstTimer) clearTimeout(this._burstTimer);
+      var self = this;
+      this._burstTimer = setTimeout(function () {
+        self.craftBurst = { show: false, icon: '✨' };
+      }, 420);
+    },
+    gradeRarityClass(grade) {
+      var g = Number(grade);
+      if (g >= 4) return 'rarity-boss';
+      if (g === 3) return 'rarity-epic';
+      if (g === 2) return 'rarity-rare';
+      return 'rarity-normal';
     },
     executeCraft(recipe) {
       var id = recipe && recipe.id;
       if (!id || this.craftActing) return;
       this.craftActing = true;
       var detailOpen = !!(this.craftDetail && this.craftDetail.id === id);
+      var self = this;
       GameApi.craftExecute(id)
         .then((res) => {
-          this.showToast('合成成功，已放入背包', 'success');
+          self.playCraftBurst(recipe);
+          self.showToast('合成成功，已放入背包', 'success');
           var updated = res.data;
           if (updated) {
-            // 仅在详情已打开时刷新详情；列表点「合成」不应弹出详情
-            if (detailOpen) this.craftDetail = updated;
-            this.craftRecipes = (this.craftRecipes || []).map((r) => r.id === updated.id ? updated : r);
+            if (detailOpen) self.craftDetail = updated;
+            self.craftRecipes = (self.craftRecipes || []).map((r) => r.id === updated.id ? updated : r);
           }
-          this.loadCraft();
+          self.loadCraft();
         })
-        .catch((err) => this.authCatch(err))
-        .finally(() => { this.craftActing = false; });
+        .catch((err) => self.authCatch(err))
+        .finally(() => { self.craftActing = false; });
     },
     onMaterialAction(mat) {
       if (!mat) return;
@@ -1521,8 +1721,6 @@ createApp({
       if (!levelId) return;
       localStorage.setItem(APP_CONFIG.selectedLevelKey || 'selectedLevelId', levelId);
       this.closeCraftDetail();
-      this.craftTypeOpen = false;
-      this.tab = 'deploy';
       var self = this;
       var openTarget = function () {
         var found = self.findStageLevel(levelId);
@@ -1530,21 +1728,32 @@ createApp({
           self.showToast('未找到对应关卡');
           return;
         }
-        self.openLevelSheet(found.chapter, found.typeId);
+        self.expandedChapterId = found.chapter.id;
+        self.selectedTypeId = found.typeId || '';
+        self.selectedChapterId = found.chapter.id;
+        self.sheetChapter = found.chapter;
+        self.prefetchChapterFaces(found.chapter);
         self.openPreviewSheet(found.level);
       };
-      if (this.stageTree.length) {
-        openTarget();
+      var ensureTree = function () {
+        if (self.stageTree.length) {
+          openTarget();
+          return;
+        }
+        self.deployLoading = true;
+        GameApi.stageTree()
+          .then((res) => {
+            self.stageTree = res.data || [];
+            openTarget();
+          })
+          .catch((err) => self.authCatch(err))
+          .finally(() => { self.deployLoading = false; });
+      };
+      if (this.tab === 'deploy') {
+        ensureTree();
         return;
       }
-      this.deployLoading = true;
-      GameApi.stageTree()
-        .then((res) => {
-          this.stageTree = res.data || [];
-          openTarget();
-        })
-        .catch((err) => this.authCatch(err))
-        .finally(() => { this.deployLoading = false; });
+      this.requestTab('deploy', ensureTree);
     },
     /** 在关卡树中定位小关 */
     findStageLevel(levelId) {
@@ -1655,7 +1864,13 @@ createApp({
       return { CAST: '释放', RECEIVE: '受到' }[v] || v || '—';
     },
     skillChargeMatchLabel(v) {
-      return { ANY: '任意', ANY_TYPE: '任意类型', SPECIFIC: '指定一个' }[v] || v || '—';
+      return { ANY: '任意', ANY_TYPE: '任意类型', SPECIFIC: '指定' }[v] || v || '—';
+    },
+    skillChargeTargetLabel(c) {
+      if (!c) return '—';
+      if (c.skillChargeMatch === 'ANY_TYPE') return this.skillTypeLabel(c.matchSkillType) || '—';
+      if (c.skillChargeMatch === 'SPECIFIC') return c.matchSkillName || c.matchSkillId || '—';
+      return '—';
     },
     effectTargetLabel(v) {
       return {
@@ -1953,6 +2168,29 @@ createApp({
       this.batchWhSlots = [];
       this.batchBagIds = [];
     },
+    selectAllBatch() {
+      if (this.batchMode === 'toBag') {
+        this.batchWhSlots = (this.warehouseFilledSlots || []).map((s) => s.slotNo);
+      } else if (this.batchMode === 'toWarehouse') {
+        this.batchBagIds = (this.bagItems || []).map((b) => b.id);
+      }
+    },
+    equipSilhouette(slot) {
+      return {
+        HELMET: '⛑',
+        WEAPON: '⚔',
+        ARMOR: '🛡',
+        GLOVES: '🧤',
+        LEGS: '🥾',
+        ACCESSORY_1: '💍',
+        ACCESSORY_2: '💍',
+        ACCESSORY_3: '💍'
+      }[slot] || '◆';
+    },
+    slotRarity(slot) {
+      var s = this.slotItem(slot);
+      return (s && (s.rarity || s.itemRarity)) || 'NORMAL';
+    },
     confirmBatch() {
       var self = this;
       if (!this.canConfirmBatch || this.prepActing) return;
@@ -1993,64 +2231,108 @@ createApp({
       }
       return cls;
     },
-    onDragStart(e, type, key, item) {
+    onPrepItemPointerDown(e, type, key, item) {
+      if (this.prepActing) return;
       if (this.batchMode) {
         e.preventDefault();
+        if (type === 'WAREHOUSE') this.onWarehouseClick(item);
+        else if (type === 'BAG') this.onBagClick(item);
         return;
       }
-      this.dragState = { fromType: type, fromKey: String(key), item: item, overKey: '' };
-      this._dragDepth = 0;
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', type + ':' + key);
-      if (type === 'BAG' && !this.warehouseOpen) {
+      if (!this._prepDrag) return;
+      e.preventDefault();
+      this._prepDrag.onPointerDown(e, { fromType: type, fromKey: String(key), item: item });
+    },
+    onPrepDragPick(payload, e) {
+      if (payload.fromType === 'BAG' && !this.warehouseOpen) {
         this.openWarehouse();
       }
+      this.dragState = {
+        fromType: payload.fromType,
+        fromKey: payload.fromKey,
+        item: payload.item,
+        overKey: ''
+      };
+      this.prepGhost = {
+        show: true,
+        x: e.clientX,
+        y: e.clientY,
+        name: (payload.item && (payload.item.itemName || payload.item.name)) || '物品'
+      };
     },
-    onDragEnd() {
-      if (!this.prepActing) {
-        this.dragState = null;
-        this._dragDepth = 0;
+    parsePrepDrop(dropEl) {
+      if (!dropEl) return null;
+      var raw = dropEl.getAttribute('data-drop') || '';
+      var i = raw.indexOf(':');
+      if (i < 0) return null;
+      return { type: raw.slice(0, i), key: raw.slice(i + 1) };
+    },
+    onPrepDragHover(payload, dropEl, e) {
+      if (!this.dragState) return;
+      this.prepGhost = {
+        show: true,
+        x: e.clientX,
+        y: e.clientY,
+        name: this.prepGhost.name || '物品'
+      };
+      var drop = this.parsePrepDrop(dropEl);
+      if (!drop) {
+        this.dragState.overKey = '';
+        return;
       }
-    },
-    onDragEnter(type, key) {
-      this._dragDepth++;
-      this.onDragOver(null, type, key, null);
-    },
-    onDragLeaveEl() {
-      this._dragDepth--;
-      if (this._dragDepth <= 0) {
-        this._dragDepth = 0;
-        if (this.dragState) this.dragState.overKey = '';
-      }
-    },
-    onDragOver(e, type, key, item) {
-      if (!this.dragState || this.batchMode) return;
       var from = this.dragState;
-      if (from.fromType === 'WAREHOUSE' && type === 'BAG') {
-        from.overKey = 'BAG:' + key;
+      if (from.fromType === 'WAREHOUSE' && drop.type === 'BAG') {
+        from.overKey = 'BAG:' + drop.key;
         return;
       }
-      if (from.fromType === 'BAG' && type === 'WAREHOUSE') {
-        from.overKey = 'WAREHOUSE:' + key;
+      if (from.fromType === 'BAG' && drop.type === 'WAREHOUSE') {
+        from.overKey = 'WAREHOUSE:' + drop.key;
         return;
       }
-      if (from.fromType === 'BAG' && type === 'BAG' && String(key) !== from.fromKey) {
-        if (item && from.item && item.itemId === from.item.itemId) {
-          from.overKey = 'BAG:' + key;
+      if (from.fromType === 'BAG' && drop.type === 'BAG' && drop.key !== from.fromKey) {
+        var target = this.bagItems.find((b) => String(b.id) === String(drop.key));
+        if (target && from.item && target.itemId === from.item.itemId) {
+          from.overKey = 'BAG:' + drop.key;
+        } else {
+          from.overKey = '';
         }
+        return;
+      }
+      from.overKey = '';
+    },
+    onPrepDragDrop(payload, dropEl) {
+      this.prepGhost = { show: false, x: 0, y: 0, name: '' };
+      if (!this.dragState || this.batchMode) {
+        this.dragState = null;
+        return;
+      }
+      var drop = this.parsePrepDrop(dropEl);
+      var from = this.dragState;
+      this.dragState = null;
+      if (!drop) return;
+      var toType = drop.type;
+      var toKey = drop.key === 'zone' ? '0' : drop.key;
+      if (from.fromType === toType && from.fromKey === String(toKey)) return;
+      if (from.fromType === 'WAREHOUSE' && toType === 'BAG') {
+        this.doTransfer(from.fromType, from.fromKey, 'BAG', toKey);
+        return;
+      }
+      if (from.fromType === 'BAG' && toType === 'WAREHOUSE') {
+        this.doTransfer(from.fromType, from.fromKey, 'WAREHOUSE', toKey);
+        return;
+      }
+      if (from.fromType === 'BAG' && toType === 'BAG') {
+        var target = this.bagItems.find((b) => String(b.id) === String(toKey));
+        if (!target || !from.item || target.itemId !== from.item.itemId) return;
+        this.doTransfer(from.fromType, from.fromKey, toType, String(toKey));
       }
     },
-    onBagZoneDragOver() {
-      if (!this.dragState || this.batchMode) return;
-      if (this.dragState.fromType === 'WAREHOUSE') {
-        this.dragState.overKey = 'BAG:zone';
-      }
-    },
-    onWhZoneDragOver() {
-      if (!this.dragState || this.batchMode) return;
-      if (this.dragState.fromType === 'BAG') {
-        this.dragState.overKey = 'WAREHOUSE:zone';
-      }
+    onPrepDragClick(payload) {
+      this.prepGhost = { show: false, x: 0, y: 0, name: '' };
+      this.dragState = null;
+      if (!payload) return;
+      if (payload.fromType === 'WAREHOUSE') this.onWarehouseClick(payload.item);
+      else if (payload.fromType === 'BAG') this.onBagClick(payload.item);
     },
     doTransfer(fromType, fromKey, toType, toKey) {
       var self = this;
@@ -2064,48 +2346,65 @@ createApp({
         .finally(() => {
           self.prepActing = false;
           self.dragState = null;
-          self._dragDepth = 0;
+          self.prepGhost = { show: false, x: 0, y: 0, name: '' };
         });
     },
-    onBagZoneDrop() {
-      if (!this.dragState || this.batchMode) return;
-      if (this.dragState.fromType !== 'WAREHOUSE') return;
-      var payload = this.dragState;
-      this.doTransfer(payload.fromType, payload.fromKey, 'BAG', '0');
-    },
-    onWhZoneDrop() {
-      if (!this.dragState || this.batchMode) return;
-      if (this.dragState.fromType !== 'BAG') return;
-      var payload = this.dragState;
-      this.doTransfer(payload.fromType, payload.fromKey, 'WAREHOUSE', '0');
-    },
-    onDrop(e, toType, toKey, item) {
-      if (this.dragState) this.dragState.overKey = '';
-      this._dragDepth = 0;
-      if (!this.dragState || this.batchMode) return;
-      var payload = this.dragState;
-      if (payload.fromType === toType && payload.fromKey === String(toKey)) return;
-      if (payload.fromType === 'BAG' && toType === 'BAG') {
-        var target = this.bagItems.find((b) => b.id === toKey);
-        if (!target || !payload.item || target.itemId !== payload.item.itemId) {
-          return;
-        }
+    toggleChapter(chapter, typeId) {
+      if (!chapter) return;
+      if (this.expandedChapterId === chapter.id) {
+        this.expandedChapterId = '';
+        return;
       }
-      this.doTransfer(payload.fromType, payload.fromKey, toType, String(toKey));
-    },
-    openLevelSheet(chapter, typeId) {
+      this.expandedChapterId = chapter.id;
       this.sheetChapter = chapter;
       this.sheetLevels = chapter.levels || [];
       this.selectedTypeId = typeId || '';
       this.selectedChapterId = chapter.id;
-      this.previewSheetOpen = false;
-      this.levelMonsters = [];
-      this.levelSheetOpen = true;
+      this.prefetchChapterFaces(chapter);
     },
-    closeLevelSheet() {
-      this.levelSheetOpen = false;
-      this.previewSheetOpen = false;
-      this.levelMonsters = [];
+    chapterProgress(ch) {
+      var levels = (ch && ch.levels) || [];
+      if (!levels.length) return 0;
+      var done = levels.filter((lv) => (lv.stars || 0) > 0 || lv.cleared).length;
+      return Math.round((done / levels.length) * 100);
+    },
+    onLevelRowClick(lv, ch) {
+      if (!lv) return;
+      if (lv.locked) {
+        this.showToast(lv.lockHint || '关卡未解锁');
+        return;
+      }
+      if (ch) this.sheetChapter = ch;
+      this.openPreviewSheet(lv);
+    },
+    prefetchChapterFaces(chapter) {
+      var levels = (chapter && chapter.levels) || [];
+      var self = this;
+      levels.forEach((lv) => {
+        if (!lv || !lv.id || self.levelFaceMap[lv.id] != null) return;
+        GameApi.stageLevelMonsterList(lv.id)
+          .then((res) => {
+            var list = res.data || [];
+            var faces = list.slice(0, 4).map((m) => ({
+              ch: (m.monsterName || '?').charAt(0),
+              rarity: m.rarity,
+              monsterId: m.monsterId || null
+            }));
+            var nextFaces = Object.assign({}, self.levelFaceMap);
+            nextFaces[lv.id] = faces;
+            self.levelFaceMap = nextFaces;
+            var nextCount = Object.assign({}, self.monsterCountMap);
+            nextCount[lv.id] = list.length;
+            self.monsterCountMap = nextCount;
+            self.$nextTick(function () {
+              if (window.ArtSlots) ArtSlots.apply(self.$el);
+            });
+          })
+          .catch(() => {});
+      });
+    },
+    levelFaces(levelId) {
+      return this.levelFaceMap[levelId] || [];
     },
     openPreviewSheet(lv) {
       if (!lv) return;
@@ -2119,10 +2418,16 @@ createApp({
       this.previewSheetOpen = false;
       this.levelMonsters = [];
     },
+    showEnemyInfo(m) {
+      if (!m) return;
+      var parts = [m.monsterName || '敌人', this.rarityLabel(m.rarity)];
+      if (m.baseHp != null) parts.push('生命 ' + m.baseHp);
+      this.showToast(parts.join(' · '));
+    },
     levelMonsterCount(levelId) {
       var n = this.monsterCountMap[levelId];
-      if (n == null) return '点选预览';
-      return n + ' 只怪';
+      if (n == null) return '…';
+      return n + ' 只';
     },
     shortName(name) {
       if (!name) return '?';
@@ -2229,6 +2534,13 @@ createApp({
         && r >= this.layoutHover.row && r < this.layoutHover.row + h
         && this.layoutHover.valid;
     },
+    isLayoutCellInvalid(c, r) {
+      if (!this.layoutDrag || !this.layoutHover || this.layoutHover.valid) return false;
+      var w = this.layoutDrag.gridW || 1;
+      var h = this.layoutDrag.gridH || 1;
+      return c >= this.layoutHover.col && c < this.layoutHover.col + w
+        && r >= this.layoutHover.row && r < this.layoutHover.row + h;
+    },
     selectRole(role) {
       this.selectedRoleId = role.id;
     },
@@ -2251,7 +2563,7 @@ createApp({
       this._layoutMoveBound = null;
       this._layoutUpBound = null;
     },
-    beginLayoutDrag(e, roleLike) {
+    beginLayoutDrag(e, roleLike, fromBoard) {
       if (e.button != null && e.button !== 0) return;
       this.selectedRoleId = roleLike.id || roleLike.roleId;
       this.layoutDrag = {
@@ -2261,8 +2573,9 @@ createApp({
         gridH: roleLike.gridH || 1,
         gridW: roleLike.gridW || 1,
         pointerId: e.pointerId,
-        fromBoard: !!roleLike.roleId
+        fromBoard: !!fromBoard
       };
+      this.layoutOverRoster = false;
       this.layoutGhost = {
         show: true,
         x: e.clientX,
@@ -2273,7 +2586,7 @@ createApp({
       this.updateLayoutHover(e.clientX, e.clientY);
     },
     onLayoutRosterDown(e, role) {
-      this.beginLayoutDrag(e, role);
+      this.beginLayoutDrag(e, role, false);
     },
     onLayoutUnitDown(e, item) {
       var role = this.roles.find((r) => r.id === item.roleId) || {
@@ -2283,12 +2596,26 @@ createApp({
         gridH: item.gridH,
         gridW: item.gridW
       };
-      this.beginLayoutDrag(e, Object.assign({}, role, { roleId: item.roleId }));
+      this.beginLayoutDrag(e, role, true);
+    },
+    isOverLayoutRoster(clientX, clientY) {
+      var el = this.$refs.layoutRoster;
+      if (Array.isArray(el)) el = el[0];
+      if (!el) return false;
+      var rect = el.getBoundingClientRect();
+      return clientX >= rect.left && clientX <= rect.right
+        && clientY >= rect.top && clientY <= rect.bottom;
     },
     updateLayoutHover(clientX, clientY) {
+      if (!this.layoutDrag) {
+        this.layoutHover = null;
+        this.layoutOverRoster = false;
+        return;
+      }
+      this.layoutOverRoster = this.isOverLayoutRoster(clientX, clientY);
       var el = this.$refs.layoutBoard;
       if (Array.isArray(el)) el = el[0];
-      if (!el || !this.layoutDrag) {
+      if (!el) {
         this.layoutHover = null;
         return;
       }
@@ -2335,10 +2662,16 @@ createApp({
       if (this.layoutDrag.pointerId != null && e.pointerId !== this.layoutDrag.pointerId) return;
       var drag = this.layoutDrag;
       var hover = this.layoutHover;
+      var overRoster = this.layoutOverRoster || this.isOverLayoutRoster(e.clientX, e.clientY);
       this.layoutDrag = null;
       this.layoutGhost = { show: false, x: 0, y: 0, name: '' };
       this.layoutHover = null;
+      this.layoutOverRoster = false;
       this.unbindLayoutDragListeners();
+      if (drag.fromBoard && overRoster) {
+        this.removeRoleFromField(drag.roleId);
+        return;
+      }
       if (!hover) return;
       if (!hover.valid) {
         this.showToast('无法放置：越界或重叠');
@@ -2365,25 +2698,43 @@ createApp({
       });
       this.draftLayouts = next;
       this.selectedRoleId = role.id;
+      this.saveLayout();
     },
-    removeSelected() {
-      if (!this.selectedRoleId) return;
-      this.draftLayouts = this.draftLayouts.filter((x) => x.roleId !== this.selectedRoleId);
+    removeRoleFromField(roleId) {
+      if (!roleId) return;
+      if (!this.draftLayouts.some((x) => x.roleId === roleId)) return;
+      this.draftLayouts = this.draftLayouts.filter((x) => x.roleId !== roleId);
+      if (this.selectedRoleId === roleId) this.selectedRoleId = null;
+      this.saveLayout();
     },
     saveLayout() {
+      if (this.layoutSaving) {
+        this._layoutSavePending = true;
+        return;
+      }
       this.layoutSaving = true;
+      this._layoutSavePending = false;
       var payload = this.draftLayouts.map((x) => ({
         roleId: x.roleId,
         posCol: x.posCol,
         posRow: x.posRow
       }));
+      var snap = this.layoutSnap(this.draftLayouts);
+      var self = this;
       GameApi.playerLayoutSave(payload)
         .then((res) => {
-          this.draftLayouts = (res.data || []).map((x) => Object.assign({}, x));
-          this.showToast('布局已保存', 'success');
+          if (self.layoutSnap(self.draftLayouts) !== snap) return;
+          self.draftLayouts = (res.data || []).map((x) => Object.assign({}, x));
+          self.savedLayoutSnap = self.layoutSnap(self.draftLayouts);
         })
-        .catch((err) => this.authCatch(err))
-        .finally(() => { this.layoutSaving = false; });
+        .catch((err) => self.authCatch(err))
+        .finally(() => {
+          self.layoutSaving = false;
+          if (self._layoutSavePending || self.layoutDirty) {
+            self._layoutSavePending = false;
+            self.saveLayout();
+          }
+        });
     },
     loadLevelMonsters() {
       this.levelMonsters = [];

@@ -51,6 +51,18 @@ public class SkillEffect extends WxBaseEntity<SkillEffect> {
     /** 本公式触发几段（伤害/治疗/属性修改） */
     private Integer hitSegments;
 
+    /**
+     * 本条效果触发概率（百分比整数）。
+     * 100 = 100% 必触发；释放技能时对每条效果独立掷骰，未命中则跳过该效果。
+     */
+    private Integer triggerRate;
+
+    /**
+     * ATTR_MODIFY 生效行动值；0/null=永久修改。
+     * &gt;0 时挂时长 buff，经过该行动值后撤销；同源再触发刷新时长不叠层。
+     */
+    private Integer durationAv;
+
     /** 排序 */
     private Integer sort;
 

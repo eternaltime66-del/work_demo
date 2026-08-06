@@ -17,6 +17,7 @@ spring:
       shutdown:
         await-termination: true
         await-termination-period: 60s
+  # 开发默认本地库；线上见 application-remote.yml（--spring.profiles.active=remote）
   datasource:
     type: com.alibaba.druid.pool.DruidDataSource
     driver-class-name: com.mysql.cj.jdbc.Driver

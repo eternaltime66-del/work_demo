@@ -43,6 +43,18 @@
     return result;
   }
 
+  /** page: { current, size } → querystring；后端 PageFactory 读 current/size */
+  function pageQs(page) {
+    page = page || {};
+    var current = page.current != null ? page.current : 1;
+    var size = page.size != null ? page.size : 20;
+    return '?current=' + current + '&size=' + size;
+  }
+
+  function listJson(path, body, page) {
+    return request(path + pageQs(page), { json: true, body: body || {} }).then(ensureSuccess);
+  }
+
   window.AdminApi = {
     getAdminToken: getAdminToken,
     saveAdminToken: saveAdminToken,
@@ -63,8 +75,8 @@
       }).then(ensureSuccess);
     },
 
-    memberList: function (body) {
-      return request('/back/member/list', { json: true, body: body || {} }).then(ensureSuccess);
+    memberList: function (body, page) {
+      return listJson('/back/member/list', body, page);
     },
     memberGift: function (uid, itemId, quantity) {
       return request('/back/member/gift', {
@@ -72,8 +84,8 @@
       }).then(ensureSuccess);
     },
 
-    roleBaseStatList: function (body) {
-      return request('/back/role/base/stat/list', { json: true, body: body || {} }).then(ensureSuccess);
+    roleBaseStatList: function (body, page) {
+      return listJson('/back/role/base/stat/list', body, page);
     },
     roleBaseStatUpdate: function (body) {
       return request('/back/role/base/stat/update', { json: true, body: body || {} }).then(ensureSuccess);
@@ -82,8 +94,8 @@
       return request('/back/role/base/stat/remove', { json: true, body: { id: id } }).then(ensureSuccess);
     },
 
-    playerRoleList: function (body) {
-      return request('/back/player/role/list', { json: true, body: body || {} }).then(ensureSuccess);
+    playerRoleList: function (body, page) {
+      return listJson('/back/player/role/list', body, page);
     },
     playerRoleGrant: function (uid, baseStatId) {
       return request('/back/player/role/grant', { body: { uid: uid, baseStatId: baseStatId } }).then(ensureSuccess);
@@ -95,8 +107,8 @@
       return request('/back/player/role/remove', { json: true, body: { id: id } }).then(ensureSuccess);
     },
 
-    monsterList: function (body) {
-      return request('/back/monster/list', { json: true, body: body || {} }).then(ensureSuccess);
+    monsterList: function (body, page) {
+      return listJson('/back/monster/list', body, page);
     },
     monsterUpdate: function (body) {
       return request('/back/monster/update', { json: true, body: body || {} }).then(ensureSuccess);
@@ -141,8 +153,8 @@
       return request('/back/stage/level/monster/remove', { json: true, body: { id: id } }).then(ensureSuccess);
     },
 
-    itemList: function (body) {
-      return request('/back/item/list', { json: true, body: body || {} }).then(ensureSuccess);
+    itemList: function (body, page) {
+      return listJson('/back/item/list', body, page);
     },
     itemUpdate: function (body) {
       return request('/back/item/update', { json: true, body: body || {} }).then(ensureSuccess);
@@ -150,7 +162,7 @@
     itemRemove: function (id) {
       return request('/back/item/remove', { json: true, body: { id: id } }).then(ensureSuccess);
     },
-    itemExtList: function (type, body) {
+    itemExtList: function (type, body, page) {
       var pathMap = {
         MATERIAL: '/back/item/material/list',
         WEAPON: '/back/item/weapon/list',
@@ -160,7 +172,7 @@
         ACCESSORY: '/back/item/accessory/list',
         LEGS: '/back/item/legs/list'
       };
-      return request(pathMap[type], { json: true, body: body || {} }).then(ensureSuccess);
+      return listJson(pathMap[type], body, page || { current: 1, size: 500 });
     },
     itemExtUpdate: function (type, body) {
       var pathMap = {
@@ -199,8 +211,8 @@
       }).then(ensureSuccess);
     },
 
-    recipeList: function (body) {
-      return request('/back/recipe/list', { json: true, body: body || {} }).then(ensureSuccess);
+    recipeList: function (body, page) {
+      return listJson('/back/recipe/list', body, page);
     },
     recipeDetail: function (id) {
       return request('/back/recipe/detail', { body: { id: id } }).then(ensureSuccess);
@@ -221,8 +233,8 @@
       return request('/back/recipe/material/remove', { json: true, body: { id: id } }).then(ensureSuccess);
     },
 
-    monsterDropList: function (body) {
-      return request('/back/monster/drop/list', { json: true, body: body || {} }).then(ensureSuccess);
+    monsterDropList: function (body, page) {
+      return listJson('/back/monster/drop/list', body, page);
     },
     monsterDropListByMonster: function (monsterId) {
       return request('/back/monster/drop/listByMonster', { body: { monsterId: monsterId } }).then(ensureSuccess);
@@ -235,11 +247,7 @@
     },
 
     activeSkillList: function (body, page) {
-      var qs = '';
-      if (page && (page.size || page.current)) {
-        qs = '?current=' + (page.current || 1) + '&size=' + (page.size || 20);
-      }
-      return request('/back/active/skill/list' + qs, { json: true, body: body || {} }).then(ensureSuccess);
+      return listJson('/back/active/skill/list', body, page || { current: 1, size: 20 });
     },
     activeSkillUpdate: function (body) {
       return request('/back/active/skill/update', { json: true, body: body || {} }).then(ensureSuccess);
@@ -270,11 +278,7 @@
     },
 
     passiveSkillList: function (body, page) {
-      var qs = '';
-      if (page && (page.size || page.current)) {
-        qs = '?current=' + (page.current || 1) + '&size=' + (page.size || 20);
-      }
-      return request('/back/passive/skill/list' + qs, { json: true, body: body || {} }).then(ensureSuccess);
+      return listJson('/back/passive/skill/list', body, page || { current: 1, size: 20 });
     },
     passiveSkillDetail: function (id) {
       return request('/back/passive/skill/detail', { body: { id: id } }).then(ensureSuccess);

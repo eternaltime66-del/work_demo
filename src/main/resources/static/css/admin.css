@@ -564,6 +564,42 @@ body.admin-body .bg-glow {
   overflow-x: auto;
 }
 
+.admin-pager {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-top: 12px;
+  padding: 10px 4px 2px;
+  font-size: 12px;
+  color: rgba(245, 247, 255, 0.72);
+}
+.admin-pager button {
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: #f5f7ff;
+  cursor: pointer;
+}
+.admin-pager button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.admin-pager select {
+  min-height: 28px;
+  padding: 0 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: #171f33;
+  color: #f5f7ff;
+}
+.admin-pager .pager-page {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
 .admin-table {
   width: 100%;
   border-collapse: collapse;
@@ -972,6 +1008,7 @@ body.admin-body .bg-glow {
   overflow-x: hidden;
   padding: 20px 22px;
   min-width: 0;
+  min-height: 0;
 }
 
 .drawer-footer {

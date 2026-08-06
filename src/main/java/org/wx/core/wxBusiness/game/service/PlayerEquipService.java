@@ -144,6 +144,13 @@ public class PlayerEquipService extends WxServiceImpl<PlayerEquipMapper, PlayerE
     }
 
     /**
+     * 当前穿戴装备上的默认持续效果被动（去重），含完整条件与战斗效果。
+     */
+    public List<PassiveSkill> resolveEquippedSustainedPassives(String uid) {
+        return resolveEquippedCombatPassives(uid, PassiveSkillType.IN_SUSTAINED);
+    }
+
+    /**
      * 当前穿戴装备上的默认战斗外被动（基础+高级，去重），含效果与条件。
      */
     public List<PassiveSkill> resolveEquippedOutPassives(String uid) {

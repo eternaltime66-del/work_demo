@@ -1,6 +1,8 @@
 package org.wx.core.wxBusiness.game.entity;
 
+import com.baomidou.mybatisplus.annotation.FieldStrategy;
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
@@ -40,6 +42,18 @@ public class Monster extends WxBaseEntity<Monster> {
     private Integer baseAction;
     private Integer sort;
     private String remark;
+
+    /** 普攻槽 → app_active_skill.id（NORMAL） */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private String normalSkillId;
+
+    /** 小技能槽 → app_active_skill.id（SMALL） */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private String smallSkillId;
+
+    /** 大招槽 → app_active_skill.id（ULTIMATE） */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private String ultimateSkillId;
 
     /**
      * 固定稀有度强制默认占地；特殊保留可编辑占地（默认 1*1）

@@ -48,11 +48,13 @@ public class PassiveSkillService extends WxServiceImpl<PassiveSkillMapper, Passi
         PassiveSkill skill = this.getById(id);
         ErrorFactory.notNull(skill, "被动技能不存在");
         skill.setConditions(passiveConditionService.listBySkillId(id));
-        if (skill.getPassiveType() == PassiveSkillType.IN_ANCHOR || skill.getPassiveType() == PassiveSkillType.IN_PERIODIC) {
+        if (skill.getPassiveType() != null && skill.getPassiveType().isInCombat()) {
             skill.setCombatEffects(passiveCombatEffectService.listBySkillId(id));
             skill.setEffects(List.of());
             if (skill.getPassiveType() == PassiveSkillType.IN_ANCHOR) {
                 skill.setStackModeLabel(anchorListLabel(skill.getAnchorType()));
+            } else if (skill.getPassiveType() == PassiveSkillType.IN_SUSTAINED) {
+                skill.setStackModeLabel("持续·" + periodicListLabel(skill.getPeriodicTriggerMode()));
             } else {
                 skill.setStackModeLabel(periodicListLabel(skill.getPeriodicTriggerMode()));
             }
@@ -90,6 +92,8 @@ public class PassiveSkillService extends WxServiceImpl<PassiveSkillMapper, Passi
                 s.setStackModeLabel(anchorListLabel(s.getAnchorType()));
             } else if (s.getPassiveType() == PassiveSkillType.IN_PERIODIC) {
                 s.setStackModeLabel(periodicListLabel(s.getPeriodicTriggerMode()));
+            } else if (s.getPassiveType() == PassiveSkillType.IN_SUSTAINED) {
+                s.setStackModeLabel("持续·" + periodicListLabel(s.getPeriodicTriggerMode()));
             } else {
                 fillStackModeLabel(s, bySkill.get(s.getId()));
             }
@@ -154,20 +158,25 @@ public class PassiveSkillService extends WxServiceImpl<PassiveSkillMapper, Passi
             validateConditions(conditions);
         }
 
-        boolean inCombat = entity.getPassiveType() == PassiveSkillType.IN_ANCHOR
-                || entity.getPassiveType() == PassiveSkillType.IN_PERIODIC;
+        boolean inCombat = entity.getPassiveType() != null && entity.getPassiveType().isInCombat();
         if (entity.getPassiveType() == PassiveSkillType.IN_ANCHOR) {
             clearPeriodicFields(entity);
             validateAnchor(entity);
             List<PassiveCombatEffect> combatEffects = entity.getCombatEffects();
             ErrorFactory.throwError(combatEffects == null || combatEffects.isEmpty(), "请至少添加一条效果");
-            validateCombatEffects(combatEffects);
+            validateCombatEffects(combatEffects, false);
         } else if (entity.getPassiveType() == PassiveSkillType.IN_PERIODIC) {
             clearAnchorFields(entity);
             validatePeriodic(entity);
             List<PassiveCombatEffect> combatEffects = entity.getCombatEffects();
             ErrorFactory.throwError(combatEffects == null || combatEffects.isEmpty(), "请至少添加一条效果");
-            validateCombatEffects(combatEffects);
+            validateCombatEffects(combatEffects, false);
+        } else if (entity.getPassiveType() == PassiveSkillType.IN_SUSTAINED) {
+            clearAnchorFields(entity);
+            validateSustained(entity);
+            List<PassiveCombatEffect> combatEffects = entity.getCombatEffects();
+            ErrorFactory.throwError(combatEffects == null || combatEffects.isEmpty(), "请至少添加一条效果");
+            validateCombatEffects(combatEffects, true);
         } else {
             clearAnchorFields(entity);
             clearPeriodicFields(entity);
@@ -216,6 +225,12 @@ public class PassiveSkillService extends WxServiceImpl<PassiveSkillMapper, Passi
                 row.setAttrDir(e.getAttrDir());
                 row.setFormulaJson(e.getFormulaJson());
                 row.setHitSegments(e.getHitSegments() != null && e.getHitSegments() > 0 ? e.getHitSegments() : 1);
+                row.setTriggerRate(e.getTriggerRate() != null ? e.getTriggerRate() : 100);
+                if (entity.getPassiveType() == PassiveSkillType.IN_SUSTAINED) {
+                    row.setDurationAv(0);
+                } else {
+                    row.setDurationAv(e.getDurationAv() != null && e.getDurationAv() > 0 ? e.getDurationAv() : 0);
+                }
                 row.setSort(e.getSort() != null ? e.getSort() : effectSort);
                 row.setRemark(e.getRemark());
                 row.setMore(e.getMore());
@@ -282,6 +297,16 @@ public class PassiveSkillService extends WxServiceImpl<PassiveSkillMapper, Passi
         ErrorFactory.throwError(entity.getMaxTriggerPerBattle() < 0, "触发次数不能为负");
     }
 
+    private void validateSustained(PassiveSkill entity) {
+        ErrorFactory.notNull(entity.getPeriodicTriggerMode(), "请选择触发模式");
+        ErrorFactory.notEmpty(entity.getLeftFormulaJson(), "请配置上公式");
+        ErrorFactory.throwError("[]".equals(entity.getLeftFormulaJson().trim()), "请配置上公式");
+        ErrorFactory.notNull(entity.getCompareOp(), "请选择比较符");
+        ErrorFactory.notEmpty(entity.getRightFormulaJson(), "请配置下公式");
+        ErrorFactory.throwError("[]".equals(entity.getRightFormulaJson().trim()), "请配置下公式");
+        entity.setMaxTriggerPerBattle(0);
+    }
+
     private void validateAnchor(PassiveSkill entity) {
         ErrorFactory.notNull(entity.getAnchorType(), "请选择锚点");
         PassiveAnchorType anchor = entity.getAnchorType();
@@ -305,19 +330,26 @@ public class PassiveSkillService extends WxServiceImpl<PassiveSkillMapper, Passi
         }
     }
 
-    private void validateCombatEffects(List<PassiveCombatEffect> effects) {
+    private void validateCombatEffects(List<PassiveCombatEffect> effects, boolean sustainedOnlyAttr) {
         for (PassiveCombatEffect e : effects) {
             ErrorFactory.notEmpty(e.getName(), "请输入效果名称");
             ErrorFactory.notNull(e.getTargetType(), "请选择效果目标");
             ErrorFactory.notNull(e.getEffectType(), "请选择效果类型");
             ErrorFactory.notEmpty(e.getFormulaJson(), "请配置效果公式");
             ErrorFactory.throwError("[]".equals(e.getFormulaJson().trim()), "请配置效果公式");
+            if (sustainedOnlyAttr) {
+                ErrorFactory.throwError(e.getEffectType() != SkillEffectType.ATTR_MODIFY,
+                        "持续效果只能配置属性修改");
+            }
             if (e.getEffectType() == SkillEffectType.ATTR_MODIFY) {
                 ErrorFactory.notNull(e.getAttrKey(), "请选择修改属性");
                 ErrorFactory.notNull(e.getAttrDir(), "请选择增加/减少");
             }
             if (e.getHitSegments() != null) {
                 ErrorFactory.throwError(e.getHitSegments() < 1, "段数至少为 1");
+            }
+            if (e.getDurationAv() != null) {
+                ErrorFactory.throwError(e.getDurationAv() < 0, "生效行动值不能为负");
             }
         }
     }

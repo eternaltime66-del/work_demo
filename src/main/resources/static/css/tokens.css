@@ -1,0 +1,123 @@
+/* Game3 design tokens — first stylesheet */
+:root {
+  /* ===== 色板 ===== */
+  --bg-top: #1a1033;
+  --bg-bottom: #0b1220;
+  --bg: #0b1220;
+  --primary: #7c5cff;
+  --primary-dark: #5b3fe0;
+  --accent: #35d7ff;
+  --danger: #ff6b8a;
+  --success: #4ade80;
+  --warning: #fbbf24;
+  --gold: #ffd43b;
+
+  /* 兼容旧变量名 */
+  --card: rgba(255, 255, 255, 0.08);
+  --card-border: rgba(255, 255, 255, 0.12);
+  --muted: rgba(245, 247, 255, 0.65);
+  --input-bg: rgba(255, 255, 255, 0.06);
+  --shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+
+  /* 表面层级 */
+  --surface-0: rgba(255, 255, 255, 0.03);
+  --surface-1: rgba(255, 255, 255, 0.05);
+  --surface-2: rgba(255, 255, 255, 0.08);
+  --surface-3: rgba(255, 255, 255, 0.12);
+  --panel: #171f33;
+  --panel-grad: linear-gradient(180deg, #1a2238 0%, #121826 100%);
+
+  /* 描边 */
+  --line-1: rgba(255, 255, 255, 0.08);
+  --line-2: rgba(255, 255, 255, 0.14);
+  --line-focus: rgba(124, 92, 255, 0.55);
+
+  /* 文字 */
+  --text: #f5f7ff;
+  --text-2: rgba(245, 247, 255, 0.72);
+  --text-3: rgba(245, 247, 255, 0.50);
+  --text-4: rgba(245, 247, 255, 0.32);
+
+  /* 字号阶梯 */
+  --fs-h1: 22px;
+  --fs-h2: 17px;
+  --fs-h3: 14px;
+  --fs-body: 13px;
+  --fs-sub: 12px;
+  --fs-cap: 11px;
+  --fs-micro: 10px;
+  --fw-n: 500;
+  --fw-m: 600;
+  --fw-b: 700;
+  --fw-x: 800;
+
+  /* 间距 */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-7: 32px;
+
+  /* 圆角 */
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 20px;
+  --r-2xl: 24px;
+  --r-pill: 999px;
+
+  /* 阴影 */
+  --sh-1: 0 2px 8px rgba(0, 0, 0, 0.20);
+  --sh-2: 0 8px 24px rgba(0, 0, 0, 0.32);
+  --sh-3: 0 16px 48px rgba(0, 0, 0, 0.45);
+  --glow-primary: 0 8px 24px rgba(124, 92, 255, 0.30);
+
+  /* 动效 */
+  --ease: cubic-bezier(.22, .61, .36, 1);
+  --t-fast: 120ms;
+  --t-mid: 200ms;
+  --t-slow: 320ms;
+
+  /* 尺寸 */
+  --app-w: 420px;
+  --tabbar-h: 56px;
+  /* 底栏占位（含安全区），给 fixed 浮层避让用 */
+  --tabbar-safe-h: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px));
+  --hit: 44px;
+
+  /* 稀有度 */
+  --rar-normal: #94a3b8;
+  --rar-rare: #38bdf8;
+  --rar-epic: #c084fc;
+  --rar-boss: #f87171;
+  --rar-special: #facc15;
+
+  /* z-index 秩序 */
+  --z-base: 1;
+  --z-sticky: 10;
+  --z-dropdown: 40;
+  --z-tabbar: 90;
+  --z-sheet: 200;
+  --z-sheet-2: 210;
+  --z-modal: 300;
+  --z-modal-2: 310;
+  --z-ghost: 400;
+  --z-toast: 500;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+[class*="rarity-"] {
+  --rar: var(--rar-normal);
+}
+.rarity-rare { --rar: var(--rar-rare); }
+.rarity-epic { --rar: var(--rar-epic); }
+.rarity-boss { --rar: var(--rar-boss); }
+.rarity-special { --rar: var(--rar-special); }

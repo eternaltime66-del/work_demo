@@ -106,17 +106,36 @@ public final class GameDescUnit {
         if (effect.getHitSegments() != null && effect.getHitSegments() > 1) {
             seg = "，分" + effect.getHitSegments() + "段结算";
         }
+        String ratePart = triggerRateText(effect.getTriggerRate());
+        String durPart = durationAvText(effect.getDurationAv());
         String prefix = StringUtils.hasText(effect.getName()) ? "【" + effect.getName() + "】" : "";
         if (type == SkillEffectType.HEAL) {
-            return prefix + "为" + target + "恢复生命" + formulaPart + seg;
+            return prefix + "为" + target + "恢复生命" + formulaPart + seg + ratePart;
         }
         if (type == SkillEffectType.ATTR_MODIFY) {
             String attr = attrKeyLabel(effect.getAttrKey());
             String dir = effect.getAttrDir() == AttrModifyDirection.DECREASE ? "减少" : "增加";
-            return prefix + "使" + target + "的" + attr + dir + formulaPart + seg;
+            return prefix + "使" + target + "的" + attr + dir + formulaPart + seg + ratePart + durPart;
         }
         // DAMAGE default
-        return prefix + "对" + target + "造成伤害" + formulaPart + seg;
+        return prefix + "对" + target + "造成伤害" + formulaPart + seg + ratePart;
+    }
+
+    /** 非 100% 时追加「，概率N%」 */
+    private static String triggerRateText(Integer triggerRate) {
+        if (triggerRate == null || triggerRate >= 100) {
+            return "";
+        }
+        int rate = Math.max(0, triggerRate);
+        return "，概率" + rate + "%";
+    }
+
+    /** durationAv &gt; 0 时追加「，持续N行动值」 */
+    private static String durationAvText(Integer durationAv) {
+        if (durationAv == null || durationAv <= 0) {
+            return "";
+        }
+        return "，持续" + durationAv + "行动值";
     }
 
     public static String chargeLine(SkillCharge charge, Function<String, String> skillNameFn) {
@@ -305,20 +324,30 @@ public final class GameDescUnit {
                         + anchorMatchSuffix(skill, skillNameFn));
             }
             appendCombatEffectTexts(effectTexts, skill.getCombatEffects());
-        } else if (skill.getPassiveType() == PassiveSkillType.IN_PERIODIC) {
+        } else if (skill.getPassiveType() == PassiveSkillType.IN_PERIODIC
+                || skill.getPassiveType() == PassiveSkillType.IN_SUSTAINED) {
+            boolean sustained = skill.getPassiveType() == PassiveSkillType.IN_SUSTAINED;
             if (skill.getPeriodicTriggerMode() != null) {
-                effectTexts.add("触发：" + skill.getPeriodicTriggerMode().getLabel());
+                effectTexts.add((sustained ? "判定：" : "触发：") + skill.getPeriodicTriggerMode().getLabel());
             }
             String left = formatFormula(skill.getLeftFormulaJson());
             String right = formatFormula(skill.getRightFormulaJson());
             String op = skill.getCompareOp() != null ? skill.getCompareOp().symbol() : "?";
             if (StringUtils.hasText(left) || StringUtils.hasText(right)) {
-                effectTexts.add("每当 " + (StringUtils.hasText(left) ? left : "?")
-                        + " " + op + " " + (StringUtils.hasText(right) ? right : "?"));
+                effectTexts.add((sustained ? "当 " : "每当 ")
+                        + (StringUtils.hasText(left) ? left : "?")
+                        + " " + op + " " + (StringUtils.hasText(right) ? right : "?")
+                        + (sustained ? " 时生效，不满足则取消" : ""));
             }
-            Integer max = skill.getMaxTriggerPerBattle();
-            if (max != null && max > 0) {
-                effectTexts.add("本场最多触发 " + max + " 次");
+            if (sustained) {
+                effectTexts.add("持续效果：条件维持期间生效");
+            } else {
+                Integer max = skill.getMaxTriggerPerBattle();
+                if (max != null && max > 0) {
+                    effectTexts.add("本场最多触发 " + max + " 次");
+                } else {
+                    effectTexts.add("本场触发次数不限");
+                }
             }
             appendCombatEffectTexts(effectTexts, skill.getCombatEffects());
         } else if (effects != null) {
@@ -346,16 +375,18 @@ public final class GameDescUnit {
         if (effect.getHitSegments() != null && effect.getHitSegments() > 1) {
             seg = "，分" + effect.getHitSegments() + "段结算";
         }
+        String ratePart = triggerRateText(effect.getTriggerRate());
+        String durPart = durationAvText(effect.getDurationAv());
         String prefix = StringUtils.hasText(effect.getName()) ? "【" + effect.getName() + "】" : "";
         if (type == SkillEffectType.HEAL) {
-            return prefix + "为" + target + "恢复生命" + formulaPart + seg;
+            return prefix + "为" + target + "恢复生命" + formulaPart + seg + ratePart;
         }
         if (type == SkillEffectType.ATTR_MODIFY) {
             String attr = attrKeyLabel(effect.getAttrKey());
             String dir = effect.getAttrDir() == AttrModifyDirection.DECREASE ? "减少" : "增加";
-            return prefix + "使" + target + "的" + attr + dir + formulaPart + seg;
+            return prefix + "使" + target + "的" + attr + dir + formulaPart + seg + ratePart + durPart;
         }
-        return prefix + "对" + target + "造成伤害" + formulaPart + seg;
+        return prefix + "对" + target + "造成伤害" + formulaPart + seg + ratePart;
     }
 
     private static void appendCombatEffectTexts(List<String> effectTexts, List<PassiveCombatEffect> combatEffects) {
@@ -389,10 +420,10 @@ public final class GameDescUnit {
         BigDecimal u = up != null ? up : BigDecimal.ZERO;
         BigDecimal d = down != null ? down : BigDecimal.ZERO;
         if (u.compareTo(BigDecimal.ZERO) > 0) {
-            return "增加" + stripTrailingZeros(u) + "%（叠乘）";
+            return stripTrailingZeros(u) + "%";
         }
         if (d.compareTo(BigDecimal.ZERO) > 0) {
-            return "减少" + stripTrailingZeros(d) + "%（叠乘）";
+            return "-" + stripTrailingZeros(d) + "%";
         }
         return "无变化";
     }

@@ -34,7 +34,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * 战斗入口：组装布阵/关卡怪物 → 行动值演算 → 胜利掉落入仓库
@@ -78,6 +77,7 @@ public class BattleService {
         List<ActiveSkill> equipChargeSkills = playerEquipService.resolveEquippedDefaultSkills(uid);
         List<PassiveSkill> equippedAnchors = playerEquipService.resolveEquippedAnchorPassives(uid);
         List<PassiveSkill> equippedPeriodics = playerEquipService.resolveEquippedPeriodicPassives(uid);
+        List<PassiveSkill> equippedSustained = playerEquipService.resolveEquippedSustainedPassives(uid);
         Set<String> equippedItemIds = playerEquipService.resolveEquippedItemIds(uid);
         Set<ItemType> equippedItemTypes = playerEquipService.resolveEquippedItemTypes(uid);
         Set<String> equippedSkillIds = new HashSet<>();
@@ -103,6 +103,8 @@ public class BattleService {
                 equippedAnchors, equippedItemIds, equippedSkillIds, equippedItemTypes, equippedSkillTypes);
         List<PassiveSkill> battlePeriodics = filterEquipPassives(
                 equippedPeriodics, equippedItemIds, equippedSkillIds, equippedItemTypes, equippedSkillTypes);
+        List<PassiveSkill> battleSustained = filterEquipPassives(
+                equippedSustained, equippedItemIds, equippedSkillIds, equippedItemTypes, equippedSkillTypes);
         var equipBonus = equipBonusService.sumBonus(uid);
 
         List<PlayerLayout> layouts = playerLayoutService.listByUid(uid);
@@ -126,6 +128,7 @@ public class BattleService {
             unit.setSourceId(role.getId());
             unit.setName(role.getName());
             unit.setSide(BattleSide.ALLY);
+            unit.setCode(Boolean.TRUE.equals(role.getMainRole()) ? "hero" : role.getId());
             unit.setPosCol(nvl(layout.getPosCol()));
             unit.setPosRow(nvl(layout.getPosRow()));
             unit.setGridW(Math.max(1, nvl(role.getGridW(), 1)));
@@ -138,6 +141,7 @@ public class BattleService {
             unit.setAtk(Math.max(0, FinalStatCalcUnit.apply(sumAtk, equipBonus.mergeFinalAtkRatio(role.getFinalAtkRatio()))));
             unit.setDef(Math.max(0, FinalStatCalcUnit.apply(sumDef, equipBonus.mergeFinalDefRatio(role.getFinalDefRatio()))));
             unit.setAction(atkSpeedService.calcRoleAction(uid, role, equipBonus));
+            unit.setBaseAction(unit.getAction());
             List<ActiveSkill> skills = applyWeaponNormalOverride(
                     playerRoleSkillService.listSkillsByRoleId(role.getId()),
                     weaponNormal,
@@ -152,6 +156,7 @@ public class BattleService {
             });
             unit.getAnchorPassives().addAll(battleAnchors);
             unit.getPeriodicPassives().addAll(battlePeriodics);
+            unit.getSustainedPassives().addAll(battleSustained);
             engine.addUnit(unit);
         }
         ErrorFactory.throwError(allyIdx == 0, "没有可用的上阵角色");
@@ -187,6 +192,10 @@ public class BattleService {
             unit.setSourceId(monster.getId());
             unit.setName(displayName);
             unit.setSide(BattleSide.ENEMY);
+            unit.setCode(monster.getId());
+            if (monster.getRarity() != null) {
+                unit.setRarity(monster.getRarity().name());
+            }
             unit.setPosCol(nvl(sm.getPosCol()));
             unit.setPosRow(nvl(sm.getPosRow()));
             unit.setGridW(Math.max(1, nvl(monster.getGridW(), 1)));
@@ -196,10 +205,8 @@ public class BattleService {
             unit.setAtk(Math.max(0, nvl(monster.getBaseAtk())));
             unit.setDef(Math.max(0, nvl(monster.getBaseDef())));
             unit.setAction(Math.max(1, nvl(monster.getBaseAction(), 10)));
-            if (defaultNormal != null) {
-                unit.getSkills().add(defaultNormal);
-                skillIds.add(defaultNormal.getId());
-            }
+            unit.setBaseAction(unit.getAction());
+            bindMonsterSkills(unit, monster, defaultNormal, skillIds);
             engine.addUnit(unit);
         }
 
@@ -209,54 +216,10 @@ public class BattleService {
                     skillEffectService.listBySkillId(skillId));
         }
 
-        if (equipChargeSkills != null && !equipChargeSkills.isEmpty()) {
-            StringBuilder sb = new StringBuilder("装备充能技能：");
-            for (int i = 0; i < equipChargeSkills.size(); i++) {
-                ActiveSkill s = equipChargeSkills.get(i);
-                if (s == null) {
-                    continue;
-                }
-                if (i > 0) {
-                    sb.append("；");
-                }
-                sb.append(formatEquipChargeSkillBrief(s));
-            }
-            engine.addLog(sb.toString());
-        }
-        if (!battleAnchors.isEmpty()) {
-            StringBuilder sb = new StringBuilder("装备锚点被动：");
-            for (int i = 0; i < battleAnchors.size(); i++) {
-                PassiveSkill p = battleAnchors.get(i);
-                if (p == null) {
-                    continue;
-                }
-                if (i > 0) {
-                    sb.append("；");
-                }
-                sb.append(p.getName() != null ? p.getName() : p.getId());
-                if (p.getAnchorType() != null) {
-                    sb.append("（").append(p.getAnchorType().getLabel()).append("）");
-                }
-            }
-            engine.addLog(sb.toString());
-        }
-        if (!battlePeriodics.isEmpty()) {
-            StringBuilder sb = new StringBuilder("装备周期被动：");
-            for (int i = 0; i < battlePeriodics.size(); i++) {
-                PassiveSkill p = battlePeriodics.get(i);
-                if (p == null) {
-                    continue;
-                }
-                if (i > 0) {
-                    sb.append("；");
-                }
-                sb.append(p.getName() != null ? p.getName() : p.getId());
-                if (p.getPeriodicTriggerMode() != null) {
-                    sb.append("（").append(p.getPeriodicTriggerMode().getLabel()).append("）");
-                }
-            }
-            engine.addLog(sb.toString());
-        }
+        appendEquipChargeSkillTreeLogs(engine, equipChargeSkills);
+        appendEquipAnchorPassiveTreeLogs(engine, battleAnchors);
+        appendEquipPeriodicPassiveTreeLogs(engine, battlePeriodics);
+        appendEquipSustainedPassiveTreeLogs(engine, battleSustained);
 
         List<BattleUnitSnapVo> unitSnaps = engine.snapshotUnits();
         BattleResultVo result = engine.run();
@@ -266,10 +229,24 @@ public class BattleService {
             List<MonsterDropResultVo> drops = monsterDropService.rollAndGrantToWarehouse(uid, killed);
             result.setDrops(drops);
             appendVictoryDropLogs(result.getLogs(), drops);
+            attachEndDrops(result, drops);
         } else if ("LOSE".equals(result.getOutcome())) {
             result.getLogs().add("战斗失败");
         }
         return result;
+    }
+
+    private void attachEndDrops(BattleResultVo result, List<MonsterDropResultVo> drops) {
+        if (result == null || result.getEvents() == null || result.getEvents().isEmpty()) {
+            return;
+        }
+        for (int i = result.getEvents().size() - 1; i >= 0; i--) {
+            var ev = result.getEvents().get(i);
+            if (ev != null && "BATTLE_END".equals(ev.getType())) {
+                ev.setDrops(drops != null ? drops : List.of());
+                return;
+            }
+        }
     }
 
     /** 胜利日志：总计 + 逐条物品 */
@@ -294,6 +271,50 @@ public class BattleService {
         }
         for (Map.Entry<String, Integer> e : nameQty.entrySet()) {
             logs.add("  └ " + e.getKey() + " * " + e.getValue());
+        }
+    }
+
+    /** 怪物技能槽：普攻（空则通用默认）+ 可选小技能/大招 */
+    private void bindMonsterSkills(BattleRuntimeUnit unit,
+                                   Monster monster,
+                                   ActiveSkill defaultNormal,
+                                   Set<String> skillIds) {
+        if (unit == null || monster == null) {
+            return;
+        }
+        ActiveSkill normal = resolveTypedSkill(monster.getNormalSkillId(), ActiveSkillType.NORMAL);
+        if (normal == null) {
+            normal = defaultNormal;
+        }
+        appendUnitSkill(unit, skillIds, normal);
+        appendUnitSkill(unit, skillIds, resolveTypedSkill(monster.getSmallSkillId(), ActiveSkillType.SMALL));
+        appendUnitSkill(unit, skillIds, resolveTypedSkill(monster.getUltimateSkillId(), ActiveSkillType.ULTIMATE));
+    }
+
+    private ActiveSkill resolveTypedSkill(String skillId, ActiveSkillType expectType) {
+        if (Wx.isEmpty(skillId)) {
+            return null;
+        }
+        ActiveSkill skill = activeSkillService.getById(skillId);
+        if (skill == null) {
+            return null;
+        }
+        if (expectType != null && skill.getSkillType() != null && skill.getSkillType() != expectType) {
+            return null;
+        }
+        return skill;
+    }
+
+    private void appendUnitSkill(BattleRuntimeUnit unit, Set<String> skillIds, ActiveSkill skill) {
+        if (unit == null || skill == null || Wx.isEmpty(skill.getId())) {
+            return;
+        }
+        boolean exists = unit.getSkills().stream().anyMatch(s -> s != null && skill.getId().equals(s.getId()));
+        if (!exists) {
+            unit.getSkills().add(skill);
+        }
+        if (skillIds != null) {
+            skillIds.add(skill.getId());
         }
     }
 
@@ -336,31 +357,84 @@ public class BattleService {
         }
     }
 
-    /**
-     * 例：重击（需3：释放·任意技能 ×3次）
-     */
-    private String formatEquipChargeSkillBrief(ActiveSkill skill) {
-        String name = skill.getName() != null ? skill.getName() : skill.getId();
-        int need = resolveDisplayedNeedCharge(skill);
-        List<SkillCharge> charges = skillChargeService.listBySkillId(skill.getId());
-        String cond = formatChargeConditionBrief(charges, need);
-        if (need < 0) {
-            // SELF_BASE_ACTION
-            if (Wx.isEmpty(cond)) {
-                return name + "（需自身行动值）";
+    /** 开战日志：充能技能树 */
+    private void appendEquipChargeSkillTreeLogs(BattleEngine engine, List<ActiveSkill> skills) {
+        if (engine == null || skills == null || skills.isEmpty()) {
+            return;
+        }
+        engine.addLog("充能技能");
+        int idx = 0;
+        for (ActiveSkill s : skills) {
+            if (s == null) {
+                continue;
             }
-            return name + "（需自身行动值：" + cond + "）";
+            idx++;
+            String name = s.getName() != null ? s.getName() : s.getId();
+            int need = resolveDisplayedNeedCharge(s);
+            String needText = need < 0 ? "充能值自身行动值" : ("充能" + Math.max(0, need));
+            engine.addLog(" └ " + idx + ". " + name + " " + needText);
+            List<SkillCharge> charges = skillChargeService.listBySkillId(s.getId());
+            for (String detail : formatChargeConditionTreeLines(charges)) {
+                // │ 为二级缩进占位（HTML 会折叠空格，不能只靠空格缩进）
+                engine.addLog(" │  └ " + detail);
+            }
         }
-        if (need <= 0 && Wx.isEmpty(cond)) {
-            return name;
+    }
+
+    /** 开战日志：锚点被动树 */
+    private void appendEquipAnchorPassiveTreeLogs(BattleEngine engine, List<PassiveSkill> passives) {
+        if (engine == null || passives == null || passives.isEmpty()) {
+            return;
         }
-        if (Wx.isEmpty(cond)) {
-            return name + "（需" + need + "）";
+        engine.addLog("锚点被动");
+        int idx = 0;
+        for (PassiveSkill p : passives) {
+            if (p == null) {
+                continue;
+            }
+            idx++;
+            String name = p.getName() != null ? p.getName() : p.getId();
+            String extra = p.getAnchorType() != null ? "（" + p.getAnchorType().getLabel() + "）" : "";
+            engine.addLog(" └ " + idx + ". " + name + extra);
         }
-        if (need <= 0) {
-            return name + "（" + cond + "）";
+    }
+
+    /** 开战日志：周期被动树 */
+    private void appendEquipPeriodicPassiveTreeLogs(BattleEngine engine, List<PassiveSkill> passives) {
+        if (engine == null || passives == null || passives.isEmpty()) {
+            return;
         }
-        return name + "（需" + need + "：" + cond + "）";
+        engine.addLog("周期被动");
+        int idx = 0;
+        for (PassiveSkill p : passives) {
+            if (p == null) {
+                continue;
+            }
+            idx++;
+            String name = p.getName() != null ? p.getName() : p.getId();
+            String extra = p.getPeriodicTriggerMode() != null
+                    ? "（" + p.getPeriodicTriggerMode().getLabel() + "）" : "";
+            engine.addLog(" └ " + idx + ". " + name + extra);
+        }
+    }
+
+    /** 开战日志：持续效果被动树 */
+    private void appendEquipSustainedPassiveTreeLogs(BattleEngine engine, List<PassiveSkill> passives) {
+        if (engine == null || passives == null || passives.isEmpty()) {
+            return;
+        }
+        engine.addLog("持续效果被动");
+        int idx = 0;
+        for (PassiveSkill p : passives) {
+            if (p == null) {
+                continue;
+            }
+            idx++;
+            String name = p.getName() != null ? p.getName() : p.getId();
+            String extra = p.getPeriodicTriggerMode() != null
+                    ? "（" + p.getPeriodicTriggerMode().getLabel() + "）" : "";
+            engine.addLog(" └ " + idx + ". " + name + extra);
+        }
     }
 
     private int resolveDisplayedNeedCharge(ActiveSkill skill) {
@@ -372,11 +446,14 @@ public class BattleService {
         return skill.getNeedCharge() == null ? 0 : Math.max(0, skill.getNeedCharge());
     }
 
-    private String formatChargeConditionBrief(List<SkillCharge> charges, int need) {
+    /**
+     * 例：释放 任意普攻1次 充能+1（按单次触发的充能增量，不算凑满次数）
+     */
+    private List<String> formatChargeConditionTreeLines(List<SkillCharge> charges) {
+        List<String> lines = new ArrayList<>();
         if (charges == null || charges.isEmpty()) {
-            return "";
+            return lines;
         }
-        List<String> parts = new ArrayList<>();
         for (SkillCharge c : charges) {
             if (c == null || c.getConditionType() == null) {
                 continue;
@@ -386,31 +463,26 @@ public class BattleService {
                 String match = formatSkillChargeMatchLabel(c);
                 int gain = c.getChargeGain() == null ? 0 : Math.max(0, c.getChargeGain());
                 if (gain <= 0) {
-                    parts.add(event + "·" + match);
+                    lines.add(event + " " + match + "1次");
                     continue;
                 }
-                if (need > 0) {
-                    int times = (need + gain - 1) / gain;
-                    parts.add(event + "·" + match + " ×" + times + "次");
-                } else {
-                    parts.add(event + "·" + match + " 每次+" + gain);
-                }
+                lines.add(event + " " + match + "1次 充能+" + gain);
             } else if (c.getConditionType() == ChargeConditionType.ACTION_VALUE) {
                 int every = c.getEveryActionValue() == null ? 0 : c.getEveryActionValue();
-                int gain = c.getChargeGain() == null ? 0 : c.getChargeGain();
+                int gain = c.getChargeGain() == null ? 0 : Math.max(0, c.getChargeGain());
                 if (every > 0 && gain > 0) {
-                    parts.add("每" + every + "行动值+" + gain);
+                    lines.add("每" + every + "行动值 充能+" + gain);
                 }
             }
         }
-        return parts.stream().filter(s -> !Wx.isEmpty(s)).collect(Collectors.joining(" / "));
+        return lines;
     }
 
     private String formatSkillChargeMatchLabel(SkillCharge c) {
         SkillChargeMatchMode mode = c.getSkillChargeMatch() == null ? SkillChargeMatchMode.ANY : c.getSkillChargeMatch();
         return switch (mode) {
             case ANY -> "任意技能";
-            case ANY_TYPE -> "任意" + skillTypeLabel(c.getMatchSkillType()) + "技能";
+            case ANY_TYPE -> "任意" + skillTypeLabel(c.getMatchSkillType());
             case SPECIFIC -> {
                 if (Wx.isEmpty(c.getMatchSkillId())) {
                     yield "指定技能";

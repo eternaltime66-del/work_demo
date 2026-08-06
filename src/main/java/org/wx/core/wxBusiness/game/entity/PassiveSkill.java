@@ -50,19 +50,19 @@ public class PassiveSkill extends WxBaseEntity<PassiveSkill> {
 
     private String refSkillId;
 
-    /** IN_PERIODIC：触发模式 */
+    /** IN_PERIODIC / IN_SUSTAINED：触发模式 */
     private PeriodicTriggerMode periodicTriggerMode;
 
-    /** IN_PERIODIC：上公式 */
+    /** IN_PERIODIC / IN_SUSTAINED：上公式 */
     private String leftFormulaJson;
 
-    /** IN_PERIODIC：比较符 */
+    /** IN_PERIODIC / IN_SUSTAINED：比较符 */
     private CompareOp compareOp;
 
-    /** IN_PERIODIC：下公式 */
+    /** IN_PERIODIC / IN_SUSTAINED：下公式 */
     private String rightFormulaJson;
 
-    /** IN_PERIODIC：本场最多触发次数；0/null=不限 */
+    /** IN_PERIODIC：本场最多触发次数；0/null=不限（持续效果不用） */
     private Integer maxTriggerPerBattle;
 
     private Integer sort;
@@ -81,7 +81,7 @@ public class PassiveSkill extends WxBaseEntity<PassiveSkill> {
     @TableField(exist = false)
     private List<PassiveEffect> effects;
 
-    /** 战斗内效果（IN_ANCHOR / IN_PERIODIC，非表字段） */
+    /** 战斗内效果（IN_ANCHOR / IN_PERIODIC / IN_SUSTAINED，非表字段） */
     @TableField(exist = false)
     private List<PassiveCombatEffect> combatEffects;
 

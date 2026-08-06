@@ -1,0 +1,181 @@
+/* Unified sheet + modal skeleton */
+
+.sheet-mask,
+.modal-mask,
+.deploy-sheet-mask,
+.item-detail-mask,
+.skill-detail-mask,
+.hero-detail-mask,
+.craft-detail-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 12, 22, 0.78);
+  backdrop-filter: blur(8px);
+  display: flex;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+/* 底部抽屉 */
+.sheet-mask,
+.deploy-sheet-mask {
+  z-index: var(--z-sheet);
+  align-items: flex-end;
+  padding: 12px;
+}
+.deploy-sheet-mask.is-preview {
+  z-index: var(--z-sheet-2);
+}
+
+/* 居中弹窗 */
+.modal-mask,
+.item-detail-mask,
+.hero-detail-mask,
+.craft-detail-mask {
+  z-index: var(--z-modal);
+  align-items: center;
+  padding: 16px;
+}
+.skill-detail-mask {
+  z-index: var(--z-modal-2);
+  align-items: center;
+  padding: 16px;
+  /* 面板作为 flex 子项时允许被 max-height 压矮，否则内部无法滚动 */
+  min-height: 0;
+}
+.skill-detail-mask > .skill-detail-panel {
+  min-height: 0;
+  align-self: center;
+}
+
+/* 第 2 层打开时，第 1 层后退感 */
+.modal-under > .item-detail-panel,
+.modal-under > .hero-detail-panel,
+.modal-under > .craft-detail-panel,
+.modal-under > .modal {
+  filter: brightness(0.7);
+  transform: scale(0.98);
+  transition: filter var(--t-mid) var(--ease), transform var(--t-mid) var(--ease);
+  pointer-events: none;
+}
+
+.sheet,
+.deploy-sheet {
+  width: 100%;
+  max-width: var(--app-w);
+  max-height: min(82dvh, 720px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--r-xl) var(--r-xl) var(--r-lg) var(--r-lg);
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  box-shadow: var(--sh-3);
+  animation: sheetUp var(--t-mid) var(--ease);
+}
+
+.sheet-handle {
+  width: 36px;
+  height: 4px;
+  margin: 10px auto 0;
+  border-radius: var(--r-pill);
+  background: var(--line-2);
+  flex-shrink: 0;
+}
+
+.modal,
+.item-detail-panel,
+.hero-detail-panel,
+.skill-detail-panel,
+.craft-detail-panel {
+  width: 100%;
+  max-width: var(--app-w);
+  max-height: min(88dvh, 760px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 18px;
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  box-shadow: var(--sh-3);
+  animation: scaleIn 180ms var(--ease);
+}
+
+.sheet-head,
+.modal-head,
+.deploy-sheet-head,
+.item-detail-head,
+.hero-detail-head,
+.skill-detail-head,
+.craft-detail-head {
+  position: sticky;
+  top: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  border-bottom: 1px solid var(--line-1);
+  flex-shrink: 0;
+  background: inherit;
+  z-index: var(--z-base);
+}
+
+.sheet-body,
+.modal-body,
+.deploy-sheet-body,
+.item-detail-body,
+.hero-detail-body,
+.skill-detail-body,
+.craft-detail-body {
+  overflow-y: auto;
+  padding: var(--sp-3) var(--sp-4) var(--sp-4);
+  flex: 1;
+  min-height: 0;
+}
+
+.sheet-foot,
+.modal-foot,
+.item-detail-actions,
+.craft-detail-foot {
+  position: sticky;
+  bottom: 0;
+  padding: var(--sp-3) var(--sp-4) calc(var(--sp-3) + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line-1);
+  flex-shrink: 0;
+  background: inherit;
+}
+
+.modal-close,
+.sheet-close,
+.deploy-sheet-close,
+.item-detail-close,
+.hero-detail-close,
+.craft-detail-close {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: var(--surface-3);
+  color: #fff;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+@keyframes sheetUp {
+  from { transform: translateY(18px); opacity: 0.6; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { transform: scale(0.96); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}

@@ -92,4 +92,13 @@ public class Item extends WxBaseEntity<Item> {
 
     /** 可编辑最大周期被动数量 */
     private Integer playerMaxEditPeriodicPassiveSlotCount;
+
+    /** 默认自带持续效果被动数量 */
+    private Integer sustainedPassiveSlotCount;
+
+    /** 默认可编辑持续效果被动数量 */
+    private Integer playerDefaultEditSustainedPassiveSlotCount;
+
+    /** 可编辑最大持续效果被动数量 */
+    private Integer playerMaxEditSustainedPassiveSlotCount;
 }

@@ -71,9 +71,11 @@ public class B8ActiveSkillController {
     @WxRequestLog()
     @NeedHeader(roles = {MemberRole.ADMIN})
     public WxResult<Map<String, Object>> detail(@ParamCheck String id) {
+        List<SkillCharge> charges = skillChargeService.listBySkillId(id);
+        skillChargeService.fillMatchSkillName(charges, activeSkillService::getById);
         Map<String, Object> data = new HashMap<>();
         data.put("skill", activeSkillService.getById(id));
-        data.put("charges", skillChargeService.listBySkillId(id));
+        data.put("charges", charges);
         data.put("effects", skillEffectService.listBySkillId(id));
         return WxResult.success(data);
     }

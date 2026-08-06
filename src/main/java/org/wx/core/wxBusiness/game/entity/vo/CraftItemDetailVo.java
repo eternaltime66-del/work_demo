@@ -37,6 +37,9 @@ public class CraftItemDetailVo {
     private Integer periodicPassiveSlotCount;
     private Integer playerDefaultEditPeriodicPassiveSlotCount;
     private Integer playerMaxEditPeriodicPassiveSlotCount;
+    private Integer sustainedPassiveSlotCount;
+    private Integer playerDefaultEditSustainedPassiveSlotCount;
+    private Integer playerMaxEditSustainedPassiveSlotCount;
 
     /** 武器 */
     private Integer baseAtk;
@@ -81,4 +84,7 @@ public class CraftItemDetailVo {
 
     /** 默认周期被动描述 */
     private List<PassiveDescVo> defaultPeriodicPassiveDescs = new ArrayList<>();
+
+    /** 默认持续效果被动描述 */
+    private List<PassiveDescVo> defaultSustainedPassiveDescs = new ArrayList<>();
 }

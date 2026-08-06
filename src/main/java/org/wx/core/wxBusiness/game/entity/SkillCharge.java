@@ -1,6 +1,7 @@
 package org.wx.core.wxBusiness.game.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
@@ -46,7 +47,7 @@ public class SkillCharge extends WxBaseEntity<SkillCharge> {
     /** SKILL_CHARGE：释放 / 受到 */
     private SkillChargeEvent skillChargeEvent;
 
-    /** SKILL_CHARGE：任意 / 任意类型 / 指定一个 */
+    /** SKILL_CHARGE：任意 / 任意类型 / 指定 */
     private SkillChargeMatchMode skillChargeMatch;
 
     /** SKILL_CHARGE + ANY_TYPE：匹配的技能类型 */
@@ -54,6 +55,10 @@ public class SkillCharge extends WxBaseEntity<SkillCharge> {
 
     /** SKILL_CHARGE + SPECIFIC：匹配的技能 id */
     private String matchSkillId;
+
+    /** 展示用：指定技能名称（非表字段） */
+    @TableField(exist = false)
+    private String matchSkillName;
 
     /** 排序 */
     private Integer sort;

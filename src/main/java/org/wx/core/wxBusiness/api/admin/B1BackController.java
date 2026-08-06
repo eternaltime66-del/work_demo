@@ -42,18 +42,12 @@ public class B1BackController {
     }
 
     /**
-     * 后台管理员注册
+     * 后台管理员注册（已关闭）
      */
     @PostMapping("/register")
     @WxRequestLog()
-    public WxResult<Object> register(
-            @NotNull @ParamCheck(msg = "邮箱") String email,
-            @NotNull @ParamCheck(msg = "验证码") String emsCode,
-            @NotNull @ParamCheck(msg = "密码") String psd,
-            @NotNull @ParamCheck(msg = "确认密码") String psdAgain
-    ) {
-        String token = Wx.MemberService.signUpAdminAccountForPsd(email, emsCode, psd, psdAgain);
-        return WxResult.token(token);
+    public WxResult<Object> register() {
+        return WxResult.error("403", "后台不开放注册");
     }
 
     /**

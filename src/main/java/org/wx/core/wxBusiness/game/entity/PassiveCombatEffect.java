@@ -41,6 +41,18 @@ public class PassiveCombatEffect extends WxBaseEntity<PassiveCombatEffect> {
 
     private Integer hitSegments;
 
+    /**
+     * 本条效果触发概率（百分比整数）。
+     * 100 = 100% 必触发；未命中则跳过该效果。
+     */
+    private Integer triggerRate;
+
+    /**
+     * ATTR_MODIFY 生效行动值；0/null=永久。
+     * 持续效果被动不使用本字段（由条件维持）。
+     */
+    private Integer durationAv;
+
     private Integer sort;
 
     private String remark;

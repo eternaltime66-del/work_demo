@@ -10,12 +10,14 @@ import org.wx.core.wxBase.base.WxResult;
 import org.wx.core.wxBase.factory.ErrorFactory;
 import org.wx.core.wxBusiness.account.entity.enums.MemberRole;
 import org.wx.core.wxBusiness.game.entity.ActiveSkill;
+import org.wx.core.wxBusiness.game.entity.SkillCharge;
 import org.wx.core.wxBusiness.game.service.ActiveSkillService;
 import org.wx.core.wxBusiness.game.service.SkillChargeService;
 import org.wx.core.wxBusiness.game.service.SkillEffectService;
 import org.wx.core.wxBusiness.log.annotation.WxRequestLog;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -39,9 +41,11 @@ public class A14ActiveSkillController {
         ActiveSkill skill = activeSkillService.getById(id);
         ErrorFactory.throwError(skill == null, "技能不存在");
         ErrorFactory.throwError(Boolean.FALSE.equals(skill.getEnable()), "技能已停用");
+        List<SkillCharge> charges = skillChargeService.listBySkillId(id);
+        skillChargeService.fillMatchSkillName(charges, activeSkillService::getById);
         Map<String, Object> data = new HashMap<>();
         data.put("skill", skill);
-        data.put("charges", skillChargeService.listBySkillId(id));
+        data.put("charges", charges);
         data.put("effects", skillEffectService.listBySkillId(id));
         return WxResult.success(data);
     }

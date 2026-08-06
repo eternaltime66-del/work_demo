@@ -119,6 +119,9 @@ public class ItemDetailService {
         d.setPeriodicPassiveSlotCount(item.getPeriodicPassiveSlotCount());
         d.setPlayerDefaultEditPeriodicPassiveSlotCount(item.getPlayerDefaultEditPeriodicPassiveSlotCount());
         d.setPlayerMaxEditPeriodicPassiveSlotCount(item.getPlayerMaxEditPeriodicPassiveSlotCount());
+        d.setSustainedPassiveSlotCount(item.getSustainedPassiveSlotCount());
+        d.setPlayerDefaultEditSustainedPassiveSlotCount(item.getPlayerDefaultEditSustainedPassiveSlotCount());
+        d.setPlayerMaxEditSustainedPassiveSlotCount(item.getPlayerMaxEditSustainedPassiveSlotCount());
 
         ItemType type = item.getItemType();
         if (type == null) {
@@ -213,6 +216,7 @@ public class ItemDetailService {
         d.setDefaultAdvancedPassiveDescs(buildPassiveDescs(d.getItemId(), PassiveSkillType.OUT_ADVANCED, itemNameFn, skillNameFn));
         d.setDefaultAnchorPassiveDescs(buildPassiveDescs(d.getItemId(), PassiveSkillType.IN_ANCHOR, itemNameFn, skillNameFn));
         d.setDefaultPeriodicPassiveDescs(buildPassiveDescs(d.getItemId(), PassiveSkillType.IN_PERIODIC, itemNameFn, skillNameFn));
+        d.setDefaultSustainedPassiveDescs(buildPassiveDescs(d.getItemId(), PassiveSkillType.IN_SUSTAINED, itemNameFn, skillNameFn));
     }
 
     private SkillDescVo buildSkillDesc(String skillId, Function<String, String> skillNameFn) {

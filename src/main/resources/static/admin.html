@@ -6,52 +6,37 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <title>后台管理</title>
-  <link rel="stylesheet" href="/css/auth.css?v=20260805b">
-  <link rel="stylesheet" href="/css/admin.css?v=20260806a">
+  <link rel="stylesheet" href="/css/tokens.css?v=20260806b">
+  <link rel="stylesheet" href="/css/base.css?v=20260806b">
+  <link rel="stylesheet" href="/css/components.css?v=20260806b">
+  <link rel="stylesheet" href="/css/auth.css?v=20260806b">
+  <link rel="stylesheet" href="/css/admin.css?v=20260806b">
   <script src="/js/dev-live.js"></script>
   <script src="/js/vue.global.prod.js"></script>
 </head>
 <body class="admin-body">
 <div id="app" class="page admin-page">
 
-  <!-- 登录 / 注册 -->
+  <!-- 登录 -->
   <div v-if="!loggedIn" class="admin-login-wrap">
     <div class="login-panel">
       <div class="brand">
         <div class="brand-badge">A</div>
         <h1>后台管理</h1>
-        <p>{{ authMode === 'login' ? '管理员登录' : '管理员注册' }}</p>
+        <p>管理员登录</p>
       </div>
       <div class="card">
-        <div class="tabs">
-          <button type="button" class="tab" :class="{ active: authMode === 'login' }" @click="authMode = 'login'">登录</button>
-          <button type="button" class="tab" :class="{ active: authMode === 'register' }" @click="authMode = 'register'">注册</button>
-        </div>
         <div class="field">
           <label>邮箱</label>
-          <div class="input-wrap"><input v-model.trim="authForm.email" type="email" placeholder="管理员邮箱" autocomplete="email"></div>
-        </div>
-        <div class="field" v-if="authMode === 'register'">
-          <label>验证码</label>
-          <div class="input-wrap">
-            <input v-model.trim="authForm.emsCode" maxlength="6" placeholder="验证码" inputmode="numeric">
-            <button type="button" class="code-btn" :disabled="countdown > 0 || sendingCode" @click="sendCode">
-              {{ countdown > 0 ? countdown + 's' : '获取验证码' }}
-            </button>
-          </div>
+          <div class="input-wrap"><input v-model.trim="authForm.email" type="text" placeholder="管理员邮箱" autocomplete="username"></div>
         </div>
         <div class="field">
           <label>密码</label>
           <div class="input-wrap"><input v-model="authForm.password" type="password" placeholder="密码" autocomplete="current-password"></div>
         </div>
-        <div class="field" v-if="authMode === 'register'">
-          <label>确认密码</label>
-          <div class="input-wrap"><input v-model="authForm.psdAgain" type="password" placeholder="确认密码" autocomplete="new-password"></div>
-        </div>
         <button type="button" class="btn-primary" :disabled="loading" @click="submitAuth">
-          {{ loading ? '处理中...' : (authMode === 'login' ? '登录' : '注册') }}
+          {{ loading ? '处理中...' : '登录' }}
         </button>
-        <div class="tip" v-if="authMode === 'register'">开发验证码默认 <strong>123456</strong></div>
       </div>
     </div>
   </div>
@@ -181,6 +166,17 @@
               </tbody>
             </table>
           </div>
+          <div class="admin-pager" v-if="pagers.member.totalRows > 0">
+            <span>共 {{ pagers.member.totalRows }} 条</span>
+            <button type="button" :disabled="pagers.member.current <= 1" @click="changePage('member', pagers.member.current - 1)">上一页</button>
+            <span class="pager-page">{{ pagers.member.current }} / {{ pagers.member.totalPage || 1 }}</span>
+            <button type="button" :disabled="pagers.member.current >= pagers.member.totalPage" @click="changePage('member', pagers.member.current + 1)">下一页</button>
+            <select :value="pagers.member.size" @change="changePageSize('member', $event.target.value)">
+              <option :value="20">20/页</option>
+              <option :value="50">50/页</option>
+              <option :value="100">100/页</option>
+            </select>
+          </div>
         </div>
 
         <!-- 角色模板 -->
@@ -228,6 +224,17 @@
               </tbody>
             </table>
           </div>
+          <div class="admin-pager" v-if="pagers.role.totalRows > 0">
+            <span>共 {{ pagers.role.totalRows }} 条</span>
+            <button type="button" :disabled="pagers.role.current <= 1" @click="changePage('role', pagers.role.current - 1)">上一页</button>
+            <span class="pager-page">{{ pagers.role.current }} / {{ pagers.role.totalPage || 1 }}</span>
+            <button type="button" :disabled="pagers.role.current >= pagers.role.totalPage" @click="changePage('role', pagers.role.current + 1)">下一页</button>
+            <select :value="pagers.role.size" @change="changePageSize('role', $event.target.value)">
+              <option :value="20">20/页</option>
+              <option :value="50">50/页</option>
+              <option :value="100">100/页</option>
+            </select>
+          </div>
         </div>
 
         <!-- 玩家角色管理 -->
@@ -242,12 +249,12 @@
             <div class="panel-filter-fields">
               <div class="panel-filter-field panel-filter-grow">
                 <label>玩家 UID</label>
-                <input v-model.trim="playerRoleUid" placeholder="输入 uid 筛选" @keyup.enter="loadPlayerRoles">
+                <input v-model.trim="playerRoleUid" placeholder="输入 uid 筛选" @keyup.enter="pagers.playerRole.current = 1; loadPlayerRoles()">
               </div>
             </div>
             <div class="panel-filter-actions">
               <button type="button" class="btn-primary btn-mini" :disabled="playerRoleLoading" @click="loadPlayerRoles">查询</button>
-              <button type="button" class="btn-mini secondary" @click="playerRoleUid = ''; loadPlayerRoles()">清空</button>
+              <button type="button" class="btn-mini secondary" @click="playerRoleUid = ''; pagers.playerRole.current = 1; loadPlayerRoles()">清空</button>
             </div>
           </div>
           <div class="table-wrap">
@@ -281,6 +288,17 @@
                 </tr>
               </tbody>
             </table>
+          </div>
+          <div class="admin-pager" v-if="pagers.playerRole.totalRows > 0">
+            <span>共 {{ pagers.playerRole.totalRows }} 条</span>
+            <button type="button" :disabled="pagers.playerRole.current <= 1" @click="changePage('playerRole', pagers.playerRole.current - 1)">上一页</button>
+            <span class="pager-page">{{ pagers.playerRole.current }} / {{ pagers.playerRole.totalPage || 1 }}</span>
+            <button type="button" :disabled="pagers.playerRole.current >= pagers.playerRole.totalPage" @click="changePage('playerRole', pagers.playerRole.current + 1)">下一页</button>
+            <select :value="pagers.playerRole.size" @change="changePageSize('playerRole', $event.target.value)">
+              <option :value="20">20/页</option>
+              <option :value="50">50/页</option>
+              <option :value="100">100/页</option>
+            </select>
           </div>
         </div>
 
@@ -324,6 +342,17 @@
                 </tr>
               </tbody>
             </table>
+          </div>
+          <div class="admin-pager" v-if="pagers.monster.totalRows > 0">
+            <span>共 {{ pagers.monster.totalRows }} 条</span>
+            <button type="button" :disabled="pagers.monster.current <= 1" @click="changePage('monster', pagers.monster.current - 1)">上一页</button>
+            <span class="pager-page">{{ pagers.monster.current }} / {{ pagers.monster.totalPage || 1 }}</span>
+            <button type="button" :disabled="pagers.monster.current >= pagers.monster.totalPage" @click="changePage('monster', pagers.monster.current + 1)">下一页</button>
+            <select :value="pagers.monster.size" @change="changePageSize('monster', $event.target.value)">
+              <option :value="20">20/页</option>
+              <option :value="50">50/页</option>
+              <option :value="100">100/页</option>
+            </select>
           </div>
         </div>
 
@@ -488,7 +517,7 @@
             <h3>物品总表</h3>
             <div class="panel-toolbar-actions">
               <button type="button" class="btn-primary btn-mini" @click="openItemDrawer()">+ 新增物品</button>
-              <admin-select v-model="itemTypeFilter" :options="itemTypeOptions" placeholder="全部类型" clearable style="min-width:140px" @change="loadItems" />
+              <admin-select v-model="itemTypeFilter" :options="itemTypeOptions" placeholder="全部类型" clearable style="min-width:140px" @change="pagers.item.current = 1; loadItems()" />
               <button type="button" class="btn-mini secondary" :disabled="itemLoading" @click="loadItems">刷新</button>
             </div>
           </div>
@@ -525,6 +554,17 @@
                 </tr>
               </tbody>
             </table>
+          </div>
+          <div class="admin-pager" v-if="pagers.item.totalRows > 0">
+            <span>共 {{ pagers.item.totalRows }} 条</span>
+            <button type="button" :disabled="pagers.item.current <= 1" @click="changePage('item', pagers.item.current - 1)">上一页</button>
+            <span class="pager-page">{{ pagers.item.current }} / {{ pagers.item.totalPage || 1 }}</span>
+            <button type="button" :disabled="pagers.item.current >= pagers.item.totalPage" @click="changePage('item', pagers.item.current + 1)">下一页</button>
+            <select :value="pagers.item.size" @change="changePageSize('item', $event.target.value)">
+              <option :value="20">20/页</option>
+              <option :value="50">50/页</option>
+              <option :value="100">100/页</option>
+            </select>
           </div>
         </div>
 
@@ -567,6 +607,17 @@
               </tbody>
             </table>
           </div>
+          <div class="admin-pager" v-if="pagers.recipe.totalRows > 0">
+            <span>共 {{ pagers.recipe.totalRows }} 条</span>
+            <button type="button" :disabled="pagers.recipe.current <= 1" @click="changePage('recipe', pagers.recipe.current - 1)">上一页</button>
+            <span class="pager-page">{{ pagers.recipe.current }} / {{ pagers.recipe.totalPage || 1 }}</span>
+            <button type="button" :disabled="pagers.recipe.current >= pagers.recipe.totalPage" @click="changePage('recipe', pagers.recipe.current + 1)">下一页</button>
+            <select :value="pagers.recipe.size" @change="changePageSize('recipe', $event.target.value)">
+              <option :value="20">20/页</option>
+              <option :value="50">50/页</option>
+              <option :value="100">100/页</option>
+            </select>
+          </div>
         </div>
 
         <!-- 怪物掉落 -->
@@ -575,7 +626,7 @@
             <h3>怪物掉落</h3>
             <div class="panel-toolbar-actions">
               <button type="button" class="btn-primary btn-mini" @click="openDropDrawer()">+ 新增掉落</button>
-              <admin-select v-model="dropMonsterFilter" :options="monsterNameSelectOptions" placeholder="全部怪物" clearable searchable style="min-width:160px" @change="loadDrops" />
+              <admin-select v-model="dropMonsterFilter" :options="monsterNameSelectOptions" placeholder="全部怪物" clearable searchable style="min-width:160px" @change="pagers.drop.current = 1; loadDrops()" />
               <button type="button" class="btn-mini secondary" :disabled="dropLoading" @click="loadDrops">刷新</button>
             </div>
           </div>
@@ -609,6 +660,17 @@
               </tbody>
             </table>
           </div>
+          <div class="admin-pager" v-if="!dropMonsterFilter && pagers.drop.totalRows > 0">
+            <span>共 {{ pagers.drop.totalRows }} 条</span>
+            <button type="button" :disabled="pagers.drop.current <= 1" @click="changePage('drop', pagers.drop.current - 1)">上一页</button>
+            <span class="pager-page">{{ pagers.drop.current }} / {{ pagers.drop.totalPage || 1 }}</span>
+            <button type="button" :disabled="pagers.drop.current >= pagers.drop.totalPage" @click="changePage('drop', pagers.drop.current + 1)">下一页</button>
+            <select :value="pagers.drop.size" @change="changePageSize('drop', $event.target.value)">
+              <option :value="20">20/页</option>
+              <option :value="50">50/页</option>
+              <option :value="100">100/页</option>
+            </select>
+          </div>
         </div>
 
         <!-- 完整充能技能管理 -->
@@ -617,7 +679,7 @@
             <h3>完整充能技能管理</h3>
             <div class="panel-toolbar-actions">
               <button type="button" class="btn-primary btn-mini" @click="openSkillDrawer()">+ 新增技能</button>
-              <admin-select v-model="skillTypeFilter" :options="skillTypeOptions" placeholder="全部类型" clearable style="min-width:140px" @change="loadActiveSkills" />
+              <admin-select v-model="skillTypeFilter" :options="skillTypeOptions" placeholder="全部类型" clearable style="min-width:140px" @change="pagers.activeSkill.current = 1; loadActiveSkills()" />
               <button type="button" class="btn-mini secondary" :disabled="skillLoading" @click="loadActiveSkills">刷新</button>
             </div>
           </div>
@@ -652,6 +714,17 @@
                 </tr>
               </tbody>
             </table>
+          </div>
+          <div class="admin-pager" v-if="pagers.activeSkill.totalRows > 0">
+            <span>共 {{ pagers.activeSkill.totalRows }} 条</span>
+            <button type="button" :disabled="pagers.activeSkill.current <= 1" @click="changePage('activeSkill', pagers.activeSkill.current - 1)">上一页</button>
+            <span class="pager-page">{{ pagers.activeSkill.current }} / {{ pagers.activeSkill.totalPage || 1 }}</span>
+            <button type="button" :disabled="pagers.activeSkill.current >= pagers.activeSkill.totalPage" @click="changePage('activeSkill', pagers.activeSkill.current + 1)">下一页</button>
+            <select :value="pagers.activeSkill.size" @change="changePageSize('activeSkill', $event.target.value)">
+              <option :value="20">20/页</option>
+              <option :value="50">50/页</option>
+              <option :value="100">100/页</option>
+            </select>
           </div>
         </div>
 
@@ -697,6 +770,17 @@
                 </tr>
               </tbody>
             </table>
+          </div>
+          <div class="admin-pager" v-if="pagers.passiveSkill.totalRows > 0">
+            <span>共 {{ pagers.passiveSkill.totalRows }} 条</span>
+            <button type="button" :disabled="pagers.passiveSkill.current <= 1" @click="changePage('passiveSkill', pagers.passiveSkill.current - 1)">上一页</button>
+            <span class="pager-page">{{ pagers.passiveSkill.current }} / {{ pagers.passiveSkill.totalPage || 1 }}</span>
+            <button type="button" :disabled="pagers.passiveSkill.current >= pagers.passiveSkill.totalPage" @click="changePage('passiveSkill', pagers.passiveSkill.current + 1)">下一页</button>
+            <select :value="pagers.passiveSkill.size" @change="changePageSize('passiveSkill', $event.target.value)">
+              <option :value="20">20/页</option>
+              <option :value="50">50/页</option>
+              <option :value="100">100/页</option>
+            </select>
           </div>
         </div>
 
@@ -759,6 +843,7 @@
                     <button type="button" class="btn-mini secondary" @click="openDefaultPassiveDrawer(row, 'OUT_ADVANCED')">默认高级属性被动</button>
                     <button type="button" class="btn-mini secondary" @click="openDefaultPassiveDrawer(row, 'IN_ANCHOR')">默认锚点被动</button>
                     <button type="button" class="btn-mini secondary" @click="openDefaultPassiveDrawer(row, 'IN_PERIODIC')">默认周期被动</button>
+                    <button type="button" class="btn-mini secondary" @click="openDefaultPassiveDrawer(row, 'IN_SUSTAINED')">默认持续效果被动</button>
                     <button type="button" class="btn-mini danger" @click="removeEquip(row)">删除</button>
                   </td>
                 </tr>
@@ -767,6 +852,17 @@
                 </tr>
               </tbody>
             </table>
+          </div>
+          <div class="admin-pager" v-if="pagers.equip.totalRows > 0">
+            <span>共 {{ pagers.equip.totalRows }} 条</span>
+            <button type="button" :disabled="pagers.equip.current <= 1" @click="changePage('equip', pagers.equip.current - 1)">上一页</button>
+            <span class="pager-page">{{ pagers.equip.current }} / {{ pagers.equip.totalPage || 1 }}</span>
+            <button type="button" :disabled="pagers.equip.current >= pagers.equip.totalPage" @click="changePage('equip', pagers.equip.current + 1)">下一页</button>
+            <select :value="pagers.equip.size" @change="changePageSize('equip', $event.target.value)">
+              <option :value="20">20/页</option>
+              <option :value="50">50/页</option>
+              <option :value="100">100/页</option>
+            </select>
           </div>
         </div>
 
@@ -960,6 +1056,36 @@
           <div class="field"><label>基础防御力</label><input v-model.number="monsterForm.baseDef" type="number"></div>
           <div class="field"><label>基础行动值</label><input v-model.number="monsterForm.baseAction" type="number"></div>
           <div class="field"><label>排序</label><input v-model.number="monsterForm.sort" type="number"></div>
+          <div class="field full">
+            <label>普攻槽</label>
+            <admin-select
+              v-model="monsterForm.normalSkillId"
+              :options="normalSkillSelectOptions"
+              clearable
+              searchable
+              placeholder="空则用通用普攻"
+            />
+          </div>
+          <div class="field full">
+            <label>小技能槽</label>
+            <admin-select
+              v-model="monsterForm.smallSkillId"
+              :options="smallSkillSelectOptions"
+              clearable
+              searchable
+              placeholder="未配置"
+            />
+          </div>
+          <div class="field full">
+            <label>大招槽</label>
+            <admin-select
+              v-model="monsterForm.ultimateSkillId"
+              :options="ultimateSkillSelectOptions"
+              clearable
+              searchable
+              placeholder="未配置"
+            />
+          </div>
           <div class="field full"><label>备注</label><input v-model.trim="monsterForm.remark" placeholder="备注"></div>
         </div>
         <p class="muted" v-if="!isSpecialRarity">非特殊稀有度占地由系统固定：普通 1×1 / 稀有 1×2 / 史诗 2×2 / BOSS 2×4</p>
@@ -1091,6 +1217,12 @@
             <div class="field"><label>默认可编辑</label><input v-model.number="itemForm.playerDefaultEditPeriodicPassiveSlotCount" type="number" min="0" max="16"></div>
             <div class="field"><label>可编辑最大</label><input v-model.number="itemForm.playerMaxEditPeriodicPassiveSlotCount" type="number" min="0" max="16"></div>
           </div>
+          <p class="muted" style="margin:14px 0 8px;font-size:12px">持续效果被动数量</p>
+          <div class="form-grid">
+            <div class="field"><label>默认自带</label><input v-model.number="itemForm.sustainedPassiveSlotCount" type="number" min="0" max="16"></div>
+            <div class="field"><label>默认可编辑</label><input v-model.number="itemForm.playerDefaultEditSustainedPassiveSlotCount" type="number" min="0" max="16"></div>
+            <div class="field"><label>可编辑最大</label><input v-model.number="itemForm.playerMaxEditSustainedPassiveSlotCount" type="number" min="0" max="16"></div>
+          </div>
         </template>
 
         <template v-if="itemForm.itemType === 'MATERIAL' || itemForm.itemType === 'WEAPON' || itemFormShowHpDef || itemForm.itemType === 'ACCESSORY'">
@@ -1207,6 +1339,10 @@
             <span>周期被动槽</span>
             <b>自带 {{ equipDetail.periodicPassiveSlotCount }} · 默认可编辑 {{ equipDetail.playerDefaultEditPeriodicPassiveSlotCount ?? 0 }} · 最大 {{ equipDetail.playerMaxEditPeriodicPassiveSlotCount ?? 0 }}</b>
           </div>
+          <div class="equip-detail-kv" v-if="Number(equipDetail.sustainedPassiveSlotCount || 0) > 0">
+            <span>持续效果被动槽</span>
+            <b>自带 {{ equipDetail.sustainedPassiveSlotCount }} · 默认可编辑 {{ equipDetail.playerDefaultEditSustainedPassiveSlotCount ?? 0 }} · 最大 {{ equipDetail.playerMaxEditSustainedPassiveSlotCount ?? 0 }}</b>
+          </div>
         </section>
 
         <section class="equip-detail-section" v-if="equipDetail.itemType === 'WEAPON'">
@@ -1270,6 +1406,17 @@
             </div>
           </div>
           <p v-else class="muted" style="margin:0;font-size:12px">暂无默认周期被动</p>
+        </section>
+
+        <section class="equip-detail-section" v-if="Number(equipDetail.sustainedPassiveSlotCount || 0) > 0">
+          <h4>默认持续效果被动</h4>
+          <div v-if="equipDetail.defaultSustainedPassiveDescs && equipDetail.defaultSustainedPassiveDescs.length">
+            <div v-for="(ps, idx) in equipDetail.defaultSustainedPassiveDescs" :key="'edsu-' + idx" class="equip-desc-card">
+              <div class="equip-desc-slot">槽位 {{ idx + 1 }}</div>
+              <pre class="equip-desc-summary">{{ ps.summary }}</pre>
+            </div>
+          </div>
+          <p v-else class="muted" style="margin:0;font-size:12px">暂无默认持续效果被动</p>
         </section>
       </div>
       <div class="drawer-body" v-else>
@@ -1631,6 +1778,14 @@
                 <label>触发段数</label>
                 <input v-model.number="e.hitSegments" type="number" min="1" placeholder="1">
               </div>
+              <div class="field field-effect-rate">
+                <label>触发概率%</label>
+                <input v-model.number="e.triggerRate" type="number" min="0" max="100" placeholder="100">
+              </div>
+              <div class="field field-effect-rate" v-if="e.effectType === 'ATTR_MODIFY'">
+                <label>生效行动值</label>
+                <input v-model.number="e.durationAv" type="number" min="0" placeholder="0=永久">
+              </div>
               <div class="field field-effect-sort"><label>排序</label><input v-model.number="e.sort" type="number"></div>
               <div class="field field-effect-remark"><label>备注</label><input v-model.trim="e.remark" placeholder="备注"></div>
             </div>
@@ -1892,8 +2047,8 @@
           <p class="muted" style="margin:8px 0 0;font-size:12px">{{ passiveAnchorHint }}</p>
         </div>
 
-        <div class="skill-form-section" v-if="isPassiveInPeriodicTab">
-          <h4>第二部分 · 周期触发</h4>
+        <div class="skill-form-section" v-if="isPassiveFormulaConditionTab">
+          <h4>第二部分 · {{ isPassiveInSustainedTab ? '持续判定' : '周期触发' }}</h4>
           <div class="form-grid">
             <div class="field full">
               <label>触发模式</label>
@@ -1903,12 +2058,17 @@
               <label>比较符</label>
               <admin-select v-model="passiveForm.compareOp" :options="compareOpOptions" />
             </div>
-            <div class="field">
+            <div class="field" v-if="isPassiveInPeriodicTab">
               <label>本场最多触发次数</label>
               <input v-model.number="passiveForm.maxTriggerPerBattle" type="number" min="0" placeholder="0=不限">
             </div>
           </div>
-          <p class="muted" style="margin:8px 0 10px;font-size:12px">每当「上公式 比较 下公式」满足时触发；≥/&gt; 按阈值阶梯增量触发，其余比较用上升沿。0 或不填表示不限次数。</p>
+          <p class="muted" style="margin:8px 0 10px;font-size:12px" v-if="isPassiveInSustainedTab">
+            实时判定：「上公式 比较 下公式」成立则套用属性效果，不成立则取消。与周期被动不同，不会一次性永久结算。
+          </p>
+          <p class="muted" style="margin:8px 0 10px;font-size:12px" v-else>
+            每当「上公式 比较 下公式」满足时触发；≥/&gt; 按阈值阶梯增量触发，其余比较用上升沿。0 或不填表示不限次数。
+          </p>
           <div class="passive-formula-block">
             <label class="passive-formula-label">上公式</label>
             <div class="formula-palette">
@@ -2023,7 +2183,11 @@
 
         <div class="skill-form-section" v-if="isPassiveCombatEffectTab">
           <h4>第三部分 · 触发效果</h4>
-          <p class="muted" style="margin:0 0 10px;font-size:12px">{{ isPassiveInPeriodicTab ? '与锚点战斗效果相同；任意/敌方/己方模式下可选「特定目标」。' : '与充能技能效果类似；「选择目标」含通用目标 + 当前锚点专属目标；公式亦可读锚点专属数值/目标项。' }}</p>
+          <p class="muted" style="margin:0 0 10px;font-size:12px">
+            <template v-if="isPassiveInSustainedTab">持续效果仅支持属性修改；条件成立套用，不成立撤销。属性可选基础/高级。</template>
+            <template v-else-if="isPassiveInPeriodicTab">与锚点战斗效果相同；任意/敌方/己方模式下可选「特定目标」。属性修改可填生效行动值。</template>
+            <template v-else>与充能技能效果类似；「选择目标」含通用目标 + 当前锚点专属目标；公式亦可读锚点专属数值/目标项。属性修改可填生效行动值。</template>
+          </p>
           <div class="skill-inline-actions">
             <button type="button" class="btn-mini" @click="addDraftPassiveCombatEffect">添加效果</button>
           </div>
@@ -2042,7 +2206,7 @@
               <div class="field field-effect-name"><label>名称</label><input v-model.trim="e.name" placeholder="效果名"></div>
               <div class="field field-effect-type">
                 <label>触发效果</label>
-                <admin-select v-model="e.effectType" :options="effectTypeOptions" />
+                <admin-select v-model="e.effectType" :options="passiveCombatEffectTypeOptions" :disabled="isPassiveInSustainedTab" />
               </div>
               <div class="field field-effect-attr" v-if="e.effectType === 'ATTR_MODIFY'">
                 <label>属性</label>
@@ -2052,9 +2216,17 @@
                 <label>增减</label>
                 <admin-select v-model="e.attrDir" :options="attrModifyDirOptions" />
               </div>
-              <div class="field field-effect-seg" v-if="e.effectType === 'DAMAGE' || e.effectType === 'HEAL' || e.effectType === 'ATTR_MODIFY'">
+              <div class="field field-effect-seg" v-if="!isPassiveInSustainedTab && (e.effectType === 'DAMAGE' || e.effectType === 'HEAL' || e.effectType === 'ATTR_MODIFY')">
                 <label>触发段数</label>
                 <input v-model.number="e.hitSegments" type="number" min="1" placeholder="1">
+              </div>
+              <div class="field field-effect-rate">
+                <label>触发概率%</label>
+                <input v-model.number="e.triggerRate" type="number" min="0" max="100" placeholder="100">
+              </div>
+              <div class="field field-effect-rate" v-if="!isPassiveInSustainedTab && e.effectType === 'ATTR_MODIFY'">
+                <label>生效行动值</label>
+                <input v-model.number="e.durationAv" type="number" min="0" placeholder="0=永久">
               </div>
               <div class="field field-effect-sort"><label>排序</label><input v-model.number="e.sort" type="number"></div>
             </div>
@@ -2373,7 +2545,14 @@ const EFFECT_TYPE_OPTIONS = [
 const ATTR_MODIFY_KEY_OPTIONS = [
   { value: 'ATK', label: '攻击' },
   { value: 'MAX_HP', label: '最大生命' },
-  { value: 'DEF', label: '防御' }
+  { value: 'DEF', label: '防御' },
+  { value: 'LIFE_STEAL', label: '吸血%' },
+  { value: 'ATK_SPEED', label: '攻速%' },
+  { value: 'DEAL_DMG_RATIO', label: '造成伤害比例%' },
+  { value: 'TAKEN_DMG_RATIO', label: '受到伤害比例%' },
+  { value: 'FINAL_ATK', label: '最终攻击%' },
+  { value: 'FINAL_HP', label: '最终生命%' },
+  { value: 'FINAL_DEF', label: '最终防御%' }
 ];
 
 const ATTR_MODIFY_DIR_OPTIONS = [
@@ -2469,7 +2648,8 @@ const PASSIVE_SKILL_GROUPS = [
     label: '战斗内',
     items: [
       { tab: 'passiveInAnchor', label: '锚点被动', passiveType: 'IN_ANCHOR', crud: true },
-      { tab: 'passiveInPeriodic', label: '周期计算被动', passiveType: 'IN_PERIODIC', crud: true }
+      { tab: 'passiveInPeriodic', label: '周期计算被动', passiveType: 'IN_PERIODIC', crud: true },
+      { tab: 'passiveInSustained', label: '持续效果', passiveType: 'IN_SUSTAINED', crud: true }
     ]
   }
 ];
@@ -2513,7 +2693,7 @@ function emptyPassiveSkill(passiveType) {
     skillMatchMode: 'ANY',
     refSkillType: 'ULTIMATE',
     refSkillId: '',
-    periodicTriggerMode: passiveType === 'IN_PERIODIC' ? 'SELF' : null,
+    periodicTriggerMode: (passiveType === 'IN_PERIODIC' || passiveType === 'IN_SUSTAINED') ? 'SELF' : null,
     compareOp: 'GTE',
     maxTriggerPerBattle: 0,
     sort: 0,
@@ -2523,14 +2703,17 @@ function emptyPassiveSkill(passiveType) {
   };
 }
 
-function emptyDraftPassiveCombatEffect() {
+function emptyDraftPassiveCombatEffect(opts) {
+  var sustained = opts && opts.sustained;
   return {
     name: '',
     targetType: 'SELF',
-    effectType: 'DAMAGE',
+    effectType: sustained ? 'ATTR_MODIFY' : 'DAMAGE',
     attrKey: 'ATK',
     attrDir: 'INCREASE',
     hitSegments: 1,
+    triggerRate: 100,
+    durationAv: 0,
     sort: 0,
     remark: '',
     formulaTokens: []
@@ -2632,12 +2815,17 @@ function emptyRole() {
   };
 }
 
+function emptyPager() {
+  return { current: 1, size: 20, totalRows: 0, totalPage: 0 };
+}
+
 function emptyMonster() {
   return {
     id: null, name: '', rarity: 'NORMAL',
     gridH: 1, gridW: 1,
     baseAtk: 0, baseHp: 0, baseDef: 0, baseAction: 0,
-    sort: 0, remark: ''
+    sort: 0, remark: '',
+    normalSkillId: '', smallSkillId: '', ultimateSkillId: ''
   };
 }
 
@@ -2685,7 +2873,10 @@ function emptyItem() {
     playerMaxEditAnchorPassiveSlotCount: 0,
     periodicPassiveSlotCount: 0,
     playerDefaultEditPeriodicPassiveSlotCount: 0,
-    playerMaxEditPeriodicPassiveSlotCount: 0
+    playerMaxEditPeriodicPassiveSlotCount: 0,
+    sustainedPassiveSlotCount: 0,
+    playerDefaultEditSustainedPassiveSlotCount: 0,
+    playerMaxEditSustainedPassiveSlotCount: 0
   };
 }
 
@@ -2759,6 +2950,8 @@ function emptyDraftEffect() {
     formulaJson: '[]',
     formulaTokens: [],
     hitSegments: 1,
+    triggerRate: 100,
+    durationAv: 0,
     sort: 0,
     remark: '',
     more: '',
@@ -2773,12 +2966,8 @@ createApp({
     return {
       COLS, ROWS,
       loggedIn: !!AdminApi.getAdminToken(),
-      authMode: 'login',
       loading: false,
-      sendingCode: false,
-      countdown: 0,
-      timer: null,
-      authForm: { email: '', password: '', emsCode: '', psdAgain: '' },
+      authForm: { email: '', password: '' },
       toast: { show: false, text: '', type: 'error' },
 
       tab: 'member',
@@ -2813,6 +3002,23 @@ createApp({
 
       members: [],
       memberLoading: false,
+
+      /** 各表格分页：后端 WxResult.pager */
+      pagers: {
+        member: emptyPager(),
+        role: emptyPager(),
+        playerRole: emptyPager(),
+        monster: emptyPager(),
+        item: emptyPager(),
+        recipe: emptyPager(),
+        drop: emptyPager(),
+        equip: emptyPager(),
+        activeSkill: emptyPager(),
+        passiveSkill: emptyPager()
+      },
+      /** 下拉用全量缓存（与表格分页分离，size<=500） */
+      itemOptionsAll: [],
+      monsterOptionsAll: [],
 
       roleList: [],
       roleDrawerShow: false,
@@ -2897,6 +3103,7 @@ createApp({
       advancedPassiveOptions: [],
       anchorPassiveOptions: [],
       periodicPassiveOptions: [],
+      sustainedPassiveOptions: [],
       equipDetailDrawerShow: false,
       equipDetailLoading: false,
       equipDetail: null,
@@ -2984,7 +3191,7 @@ createApp({
       skillChargeMatchOptions: [
         { value: 'ANY', label: '任意' },
         { value: 'ANY_TYPE', label: '任意类型' },
-        { value: 'SPECIFIC', label: '指定一个' }
+        { value: 'SPECIFIC', label: '指定' }
       ],
       chargeScopeOptions: [{ value: 'GLOBAL', label: '全局' }],
       formulaParamModeOptions: [
@@ -3013,7 +3220,7 @@ createApp({
     formulaParamAllowSpecificTarget() {
       if (this.formulaParamCtx !== 'periodicLeft' && this.formulaParamCtx !== 'periodicRight'
         && this.formulaParamCtx !== 'passiveCombat') return false;
-      if (!this.isPassiveInPeriodicTab) return false;
+      if (!this.isPassiveFormulaConditionTab) return false;
       var m = this.passiveForm && this.passiveForm.periodicTriggerMode;
       return m === 'ANY' || m === 'ANY_ENEMY' || m === 'ANY_ALLY';
     },
@@ -3022,7 +3229,7 @@ createApp({
       if (this.formulaParamCtx === 'draft' || this.formulaParamCtx === 'passiveCombat'
         || this.formulaParamCtx === 'periodicLeft' || this.formulaParamCtx === 'periodicRight') return true;
       var t = this.currentPassiveSkill && this.currentPassiveSkill.passiveType;
-      return t === 'IN_ANCHOR' || t === 'IN_PERIODIC';
+      return t === 'IN_ANCHOR' || t === 'IN_PERIODIC' || t === 'IN_SUSTAINED';
     },
     formulaAttrKeyOptions() {
       if (this.formulaParamAllowCombatHp) return FORMULA_ATTR_KEY_OPTIONS.slice();
@@ -3064,8 +3271,20 @@ createApp({
     isPassiveInPeriodicTab() {
       return !!(this.currentPassiveSkill && this.currentPassiveSkill.passiveType === 'IN_PERIODIC');
     },
+    isPassiveInSustainedTab() {
+      return !!(this.currentPassiveSkill && this.currentPassiveSkill.passiveType === 'IN_SUSTAINED');
+    },
+    isPassiveFormulaConditionTab() {
+      return this.isPassiveInPeriodicTab || this.isPassiveInSustainedTab;
+    },
     isPassiveCombatEffectTab() {
-      return this.isPassiveInAnchorTab || this.isPassiveInPeriodicTab;
+      return this.isPassiveInAnchorTab || this.isPassiveInPeriodicTab || this.isPassiveInSustainedTab;
+    },
+    passiveCombatEffectTypeOptions() {
+      if (this.isPassiveInSustainedTab) {
+        return [{ value: 'ATTR_MODIFY', label: '属性修改' }];
+      }
+      return this.effectTypeOptions || EFFECT_TYPE_OPTIONS;
     },
     passiveAnchorNeedsSkillMatch() {
       var t = this.passiveForm && this.passiveForm.anchorType;
@@ -3084,7 +3303,7 @@ createApp({
     /** 战斗内被动效果目标 = 通用目标 + 锚点/周期专属 */
     passiveCombatEffectTargetOptions() {
       var base = EFFECT_TARGET_OPTIONS.slice();
-      if (this.isPassiveInPeriodicTab) {
+      if (this.isPassiveFormulaConditionTab) {
         var m = (this.passiveForm && this.passiveForm.periodicTriggerMode) || '';
         if (m === 'ANY' || m === 'ANY_ENEMY' || m === 'ANY_ALLY') {
           return base.concat([{ value: 'SPECIFIC_TARGET', label: '特定目标' }]);
@@ -3138,7 +3357,8 @@ createApp({
     },
     monsterSelectOptions() {
       var self = this;
-      return (this.monsters || []).map(function (m) {
+      var src = (this.monsterOptionsAll && this.monsterOptionsAll.length) ? this.monsterOptionsAll : this.monsters;
+      return (src || []).map(function (m) {
         return {
           value: m.id,
           label: m.name + '（' + self.rarityLabel(m.rarity) + ' · ' + (m.gridH || 1) + '×' + (m.gridW || 1) + '）'
@@ -3146,12 +3366,14 @@ createApp({
       });
     },
     monsterNameSelectOptions() {
-      return (this.monsters || []).map(function (m) {
+      var src = (this.monsterOptionsAll && this.monsterOptionsAll.length) ? this.monsterOptionsAll : this.monsters;
+      return (src || []).map(function (m) {
         return { value: m.id, label: m.name };
       });
     },
     itemSelectOptions() {
-      return (this.items || []).map(function (it) {
+      var src = (this.itemOptionsAll && this.itemOptionsAll.length) ? this.itemOptionsAll : this.items;
+      return (src || []).map(function (it) {
         return { value: it.id, label: it.name + '（' + (it.code || it.id) + '）' };
       });
     },
@@ -3189,15 +3411,18 @@ createApp({
         || Number(d.basicPassiveSlotCount || 0) > 0
         || Number(d.advancedPassiveSlotCount || 0) > 0
         || Number(d.anchorPassiveSlotCount || 0) > 0
-        || Number(d.periodicPassiveSlotCount || 0) > 0;
+        || Number(d.periodicPassiveSlotCount || 0) > 0
+        || Number(d.sustainedPassiveSlotCount || 0) > 0;
     },
     defaultPassiveDrawerTitle() {
+      if (this.defaultPassiveType === 'IN_SUSTAINED') return '默认持续效果被动';
       if (this.defaultPassiveType === 'IN_PERIODIC') return '默认周期被动';
       if (this.defaultPassiveType === 'IN_ANCHOR') return '默认锚点被动';
       if (this.defaultPassiveType === 'OUT_ADVANCED') return '默认高级属性被动';
       return '默认基础属性被动';
     },
     defaultPassiveSlotHint() {
+      if (this.defaultPassiveType === 'IN_SUSTAINED') return '默认自带持续效果被动数量';
       if (this.defaultPassiveType === 'IN_PERIODIC') return '默认自带周期被动数量';
       if (this.defaultPassiveType === 'IN_ANCHOR') return '默认自带锚点被动数量';
       if (this.defaultPassiveType === 'OUT_ADVANCED') return '默认自带高级属性被动数量';
@@ -3208,6 +3433,7 @@ createApp({
       if (this.defaultPassiveType === 'OUT_ADVANCED') list = this.advancedPassiveOptions;
       if (this.defaultPassiveType === 'IN_ANCHOR') list = this.anchorPassiveOptions;
       if (this.defaultPassiveType === 'IN_PERIODIC') list = this.periodicPassiveOptions;
+      if (this.defaultPassiveType === 'IN_SUSTAINED') list = this.sustainedPassiveOptions;
       return (list || []).map(function (sk) {
         return { value: sk.id, label: (sk.name || sk.id) + (sk.code ? '（' + sk.code + '）' : '') };
       });
@@ -3216,6 +3442,20 @@ createApp({
       return (this.normalSkillOptions || []).map(function (sk) {
         return { value: sk.id, label: (sk.name || sk.id) + (sk.code ? '（' + sk.code + '）' : '') };
       });
+    },
+    smallSkillSelectOptions() {
+      return (this.chargeSkillOptions || [])
+        .filter(function (sk) { return sk && sk.skillType === 'SMALL'; })
+        .map(function (sk) {
+          return { value: sk.id, label: (sk.name || sk.id) + (sk.code ? '（' + sk.code + '）' : '') };
+        });
+    },
+    ultimateSkillSelectOptions() {
+      return (this.chargeSkillOptions || [])
+        .filter(function (sk) { return sk && sk.skillType === 'ULTIMATE'; })
+        .map(function (sk) {
+          return { value: sk.id, label: (sk.name || sk.id) + (sk.code ? '（' + sk.code + '）' : '') };
+        });
     },
     activeSkillSelectOptions() {
       var self = this;
@@ -3355,11 +3595,19 @@ createApp({
       return (RARITY_META[r] && RARITY_META[r].label) || r || '普通';
     },
     switchTab(key) {
+      var prev = this.tab;
       this.tab = key;
       if (this.isRoleGroupTab) this.roleMenuOpen = true;
       if (this.isItemGroupTab) this.itemMenuOpen = true;
       if (this.isEquipGroupTab) this.equipMenuOpen = true;
       if (this.isSkillGroupTab) this.skillMenuOpen = true;
+      // 切换装备/被动子页时回到第 1 页
+      if (EQUIP_MENUS.some((e) => e.tab === key) && prev !== key) {
+        this.pagers.equip = Object.assign(emptyPager(), { size: (this.pagers.equip && this.pagers.equip.size) || 20 });
+      }
+      if (PASSIVE_SKILL_MENUS.some((e) => e.tab === key && e.crud) && prev !== key) {
+        this.pagers.passiveSkill = Object.assign(emptyPager(), { size: (this.pagers.passiveSkill && this.pagers.passiveSkill.size) || 20 });
+      }
       this.loadTabData(key);
     },
     loadTabData(key) {
@@ -3372,22 +3620,22 @@ createApp({
       if (key === 'monster') this.loadMonsters();
       if (key === 'stage') {
         this.loadStageTree();
-        if (!this.monsters.length) this.loadMonsters();
+        this.ensureMonsterOptions();
       }
       if (key === 'item') this.loadItems();
       if (key === 'recipe') {
-        this.loadItems();
+        this.ensureItemOptions();
         this.loadRecipes();
       }
       if (key === 'drop') {
-        this.loadMonsters();
-        this.loadItems();
+        this.ensureMonsterOptions();
+        this.ensureItemOptions();
         this.loadDrops();
       }
       if (key === 'activeSkill') this.loadActiveSkills();
       if (PASSIVE_SKILL_MENUS.some((e) => e.tab === key && e.crud)) {
         this.loadPassiveSkills();
-        if (!this.items.length) this.loadItems();
+        this.ensureItemOptions();
         if (!this.activeSkills.length) this.loadActiveSkills();
       }
       if (EQUIP_MENUS.some((e) => e.tab === key)) this.loadEquipList();
@@ -3400,64 +3648,31 @@ createApp({
     },
     itemName(id) {
       if (!id) return '';
-      var it = this.items.find((x) => x.id === id);
+      var it = this.items.find((x) => x.id === id)
+        || (this.itemOptionsAll || []).find((x) => x.id === id);
       return it ? it.name : '';
     },
     monsterName(id) {
       if (!id) return '—';
-      var m = this.monsters.find((x) => x.id === id);
+      var m = this.monsters.find((x) => x.id === id)
+        || (this.monsterOptionsAll || []).find((x) => x.id === id);
       return m ? m.name : id;
     },
+    /** 表格底部分页条 */
+    pagerBlock(key) {
+      return this.pagers[key] || emptyPager();
+    },
 
-    /* ---------- 登录注册 ---------- */
-    validateEmail() {
-      if (!this.authForm.email) { this.showToast('请输入邮箱'); return false; }
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.authForm.email)) {
-        this.showToast('邮箱格式不正确'); return false;
-      }
-      return true;
-    },
-    startCountdown() {
-      this.countdown = 60;
-      if (this.timer) clearInterval(this.timer);
-      this.timer = setInterval(() => {
-        this.countdown -= 1;
-        if (this.countdown <= 0) { clearInterval(this.timer); this.timer = null; }
-      }, 1000);
-    },
-    sendCode() {
-      if (!this.validateEmail() || this.countdown > 0) return;
-      this.sendingCode = true;
-      AdminApi.sendEmailCode(this.authForm.email)
-        .then(() => { this.showToast('验证码已发送', 'success'); this.startCountdown(); })
-        .catch((err) => this.showToast(err.message))
-        .finally(() => { this.sendingCode = false; });
-    },
+    /* ---------- 登录 ---------- */
     submitAuth() {
-      if (!this.validateEmail()) return;
-      if (this.authMode === 'login') {
-        if (!this.authForm.password) { this.showToast('请输入密码'); return; }
-        this.loading = true;
-        AdminApi.login(this.authForm.email, this.authForm.password)
-          .then((res) => {
-            AdminApi.saveAdminToken(res.token);
-            this.loggedIn = true;
-            this.showToast('登录成功', 'success');
-            this.loadTabData(this.tab);
-          })
-          .catch((err) => this.showToast(err.message))
-          .finally(() => { this.loading = false; });
-        return;
-      }
-      if (!this.authForm.emsCode) { this.showToast('请输入验证码'); return; }
-      if (!this.authForm.password || this.authForm.password.length < 6) { this.showToast('密码至少6位'); return; }
-      if (this.authForm.password !== this.authForm.psdAgain) { this.showToast('两次密码不一致'); return; }
+      if (!this.authForm.email) { this.showToast('请输入邮箱'); return; }
+      if (!this.authForm.password) { this.showToast('请输入密码'); return; }
       this.loading = true;
-      AdminApi.register(this.authForm.email, this.authForm.emsCode, this.authForm.password, this.authForm.psdAgain)
+      AdminApi.login(this.authForm.email, this.authForm.password)
         .then((res) => {
           AdminApi.saveAdminToken(res.token);
           this.loggedIn = true;
-          this.showToast('注册成功', 'success');
+          this.showToast('登录成功', 'success');
           this.loadTabData(this.tab);
         })
         .catch((err) => this.showToast(err.message))
@@ -3466,7 +3681,6 @@ createApp({
     logout() {
       AdminApi.clearAdminToken();
       this.loggedIn = false;
-      this.authMode = 'login';
       this.tab = 'member';
       this.members = [];
       this.roleList = [];
@@ -3479,11 +3693,77 @@ createApp({
       this.resetStagePick('root');
     },
 
+    applyPager(key, res) {
+      var p = (res && res.pager) || {};
+      var cur = this.pagers[key] || emptyPager();
+      this.pagers[key] = {
+        current: p.pageNo != null ? p.pageNo : (cur.current || 1),
+        size: p.pageSize != null ? p.pageSize : (cur.size || 20),
+        totalRows: p.totalRows != null ? p.totalRows : 0,
+        totalPage: p.totalPage != null ? p.totalPage : 0
+      };
+    },
+    changePage(key, page) {
+      var pg = this.pagers[key] || emptyPager();
+      var total = pg.totalPage || 1;
+      var next = Math.max(1, Math.min(total, Number(page) || 1));
+      pg.current = next;
+      this.pagers[key] = Object.assign({}, pg);
+      var loaders = {
+        member: this.loadMembers,
+        role: this.loadRoleList,
+        playerRole: this.loadPlayerRoles,
+        monster: this.loadMonsters,
+        item: this.loadItems,
+        recipe: this.loadRecipes,
+        drop: this.loadDrops,
+        equip: this.loadEquipList,
+        activeSkill: this.loadActiveSkills,
+        passiveSkill: this.loadPassiveSkills
+      };
+      if (loaders[key]) loaders[key].call(this);
+    },
+    changePageSize(key, size) {
+      var pg = this.pagers[key] || emptyPager();
+      pg.size = Number(size) || 20;
+      pg.current = 1;
+      this.pagers[key] = Object.assign({}, pg);
+      var loaders = {
+        member: this.loadMembers,
+        role: this.loadRoleList,
+        playerRole: this.loadPlayerRoles,
+        monster: this.loadMonsters,
+        item: this.loadItems,
+        recipe: this.loadRecipes,
+        drop: this.loadDrops,
+        equip: this.loadEquipList,
+        activeSkill: this.loadActiveSkills,
+        passiveSkill: this.loadPassiveSkills
+      };
+      if (loaders[key]) loaders[key].call(this);
+    },
+    ensureItemOptions() {
+      var self = this;
+      return AdminApi.itemList({}, { current: 1, size: 500 })
+        .then(function (res) { self.itemOptionsAll = res.data || []; })
+        .catch(function () {});
+    },
+    ensureMonsterOptions() {
+      var self = this;
+      return AdminApi.monsterList({}, { current: 1, size: 500 })
+        .then(function (res) { self.monsterOptionsAll = res.data || []; })
+        .catch(function () {});
+    },
+
     /* ---------- 玩家 ---------- */
     loadMembers() {
       this.memberLoading = true;
-      AdminApi.memberList({ memberRole: 'USER' })
-        .then((res) => { this.members = res.data || []; })
+      var pg = this.pagers.member || emptyPager();
+      AdminApi.memberList({ memberRole: 'USER' }, { current: pg.current, size: pg.size })
+        .then((res) => {
+          this.members = res.data || [];
+          this.applyPager('member', res);
+        })
         .catch((err) => this.showToast(err.message))
         .finally(() => { this.memberLoading = false; });
     },
@@ -3496,7 +3776,7 @@ createApp({
         quantity: 1
       };
       this.giftDrawerShow = true;
-      if (!this.items.length) this.loadItems();
+      this.ensureItemOptions();
     },
     submitGift() {
       if (!this.giftForm.uid) { this.showToast('玩家无效'); return; }
@@ -3518,8 +3798,12 @@ createApp({
 
     /* ---------- 角色模板 ---------- */
     loadRoleList() {
-      AdminApi.roleBaseStatList({})
-        .then((res) => { this.roleList = res.data || []; })
+      var pg = this.pagers.role || emptyPager();
+      AdminApi.roleBaseStatList({}, { current: pg.current, size: pg.size })
+        .then((res) => {
+          this.roleList = res.data || [];
+          this.applyPager('role', res);
+        })
         .catch((err) => this.showToast(err.message));
     },
     onRoleAtkSpeedInput(form) {
@@ -3587,8 +3871,12 @@ createApp({
       this.playerRoleLoading = true;
       var body = {};
       if (this.playerRoleUid) body.uid = this.playerRoleUid;
-      AdminApi.playerRoleList(body)
-        .then((res) => { this.playerRoles = res.data || []; })
+      var pg = this.pagers.playerRole || emptyPager();
+      AdminApi.playerRoleList(body, { current: pg.current, size: pg.size })
+        .then((res) => {
+          this.playerRoles = res.data || [];
+          this.applyPager('playerRole', res);
+        })
         .catch((err) => this.showToast(err.message))
         .finally(() => { this.playerRoleLoading = false; });
     },
@@ -3641,18 +3929,29 @@ createApp({
     /* ---------- 怪物 ---------- */
     loadMonsters() {
       this.monsterLoading = true;
-      AdminApi.monsterList({})
-        .then((res) => { this.monsters = res.data || []; })
+      var pg = this.pagers.monster || emptyPager();
+      AdminApi.monsterList({}, { current: pg.current, size: pg.size })
+        .then((res) => {
+          this.monsters = res.data || [];
+          this.applyPager('monster', res);
+          if (!this.monsterOptionsAll.length) this.ensureMonsterOptions();
+        })
         .catch((err) => this.showToast(err.message))
         .finally(() => { this.monsterLoading = false; });
     },
     openMonsterDrawer(m) {
       if (m) {
-        this.monsterForm = Object.assign(emptyMonster(), m);
+        this.monsterForm = Object.assign(emptyMonster(), m, {
+          normalSkillId: m.normalSkillId || '',
+          smallSkillId: m.smallSkillId || '',
+          ultimateSkillId: m.ultimateSkillId || ''
+        });
       } else {
         this.monsterForm = emptyMonster();
       }
       this.onMonsterRarityChange();
+      this.ensureNormalSkillOptions();
+      this.ensureChargeSkillOptions(true);
       this.monsterDrawerShow = true;
     },
     onMonsterRarityChange() {
@@ -3673,7 +3972,9 @@ createApp({
         .then(() => {
           this.showToast('保存成功', 'success');
           this.monsterDrawerShow = false;
+          this.monsterOptionsAll = [];
           this.loadMonsters();
+          this.ensureMonsterOptions();
         })
         .catch((err) => this.showToast(err.message))
         .finally(() => { this.monsterSaving = false; });
@@ -3683,7 +3984,9 @@ createApp({
       AdminApi.monsterRemove(m.id)
         .then(() => {
           this.showToast('已删除', 'success');
+          this.monsterOptionsAll = [];
           this.loadMonsters();
+          this.ensureMonsterOptions();
         })
         .catch((err) => this.showToast(err.message));
     },
@@ -3693,8 +3996,13 @@ createApp({
       this.itemLoading = true;
       var body = {};
       if (this.itemTypeFilter) body.itemType = this.itemTypeFilter;
-      AdminApi.itemList(body)
-        .then((res) => { this.items = res.data || []; })
+      var pg = this.pagers.item || emptyPager();
+      AdminApi.itemList(body, { current: pg.current, size: pg.size })
+        .then((res) => {
+          this.items = res.data || [];
+          this.applyPager('item', res);
+          if (!this.itemOptionsAll.length) this.ensureItemOptions();
+        })
         .catch((err) => this.showToast(err.message))
         .finally(() => { this.itemLoading = false; });
     },
@@ -3751,6 +4059,8 @@ createApp({
       return '—';
     },
     reloadAfterItemSave() {
+      this.itemOptionsAll = [];
+      this.ensureItemOptions();
       if (this.itemFromEquip || this.isEquipGroupTab) {
         this.loadEquipList();
       } else {
@@ -3809,7 +4119,7 @@ createApp({
               });
           };
           if (itemId) return finish(itemId);
-          return AdminApi.itemList(code ? { code: code } : { itemType: type })
+          return AdminApi.itemList(code ? { code: code } : { itemType: type }, { current: 1, size: 100 })
             .then((res) => {
               var list = res.data || [];
               var found = list.find((x) => x.code === code) || list.find((x) => x.name === self.itemForm.name) || list[0];
@@ -3824,7 +4134,9 @@ createApp({
       AdminApi.itemRemove(it.id)
         .then(() => {
           this.showToast('已删除', 'success');
+          this.itemOptionsAll = [];
           this.loadItems();
+          this.ensureItemOptions();
         })
         .catch((err) => this.showToast(err.message));
     },
@@ -3834,12 +4146,14 @@ createApp({
       if (!this.currentEquip) return;
       var type = this.currentEquip.type;
       this.equipLoading = true;
+      var pg = this.pagers.equip || emptyPager();
       Promise.all([
-        AdminApi.itemList({ itemType: type }),
-        AdminApi.itemExtList(type, {})
+        AdminApi.itemList({ itemType: type }, { current: pg.current, size: pg.size }),
+        AdminApi.itemExtList(type, {}, { current: 1, size: 500 })
       ])
         .then(function (results) {
           var items = (results[0] && results[0].data) || [];
+          this.applyPager('equip', results[0]);
           var exts = (results[1] && results[1].data) || [];
           var extMap = {};
           exts.forEach(function (e) { if (e && e.itemId) extMap[e.itemId] = e; });
@@ -3890,20 +4204,30 @@ createApp({
         })
         .catch((err) => this.showToast(err.message));
     },
-    ensureChargeSkillOptions() {
+    ensureChargeSkillOptions(force) {
       var self = this;
-      if (this.chargeSkillOptions.length) return Promise.resolve();
-      // list 分页默认 20，选择器用 size=100
+      // 新建大招/小技能后若不强制刷新，绑定下拉会一直缺新技能
+      if (!force && this.chargeSkillOptions.length) return Promise.resolve();
       return Promise.all([
-        AdminApi.activeSkillList({ skillType: 'ULTIMATE' }, { size: 100 }),
-        AdminApi.activeSkillList({ skillType: 'SMALL' }, { size: 100 })
+        AdminApi.activeSkillList({ skillType: 'ULTIMATE' }, { size: 500 }),
+        AdminApi.activeSkillList({ skillType: 'SMALL' }, { size: 500 })
       ]).then(function (arr) {
         var list = [];
+        var seen = {};
         arr.forEach(function (res) {
-          (res.data || []).forEach(function (sk) { list.push(sk); });
+          (res.data || []).forEach(function (sk) {
+            if (!sk || !sk.id || seen[sk.id]) return;
+            seen[sk.id] = 1;
+            list.push(sk);
+          });
         });
         self.chargeSkillOptions = list;
+      }).catch(function (err) {
+        self.showToast(err.message || String(err));
       });
+    },
+    invalidateChargeSkillOptions() {
+      this.chargeSkillOptions = [];
     },
     ensureNormalSkillOptions() {
       var self = this;
@@ -3959,7 +4283,7 @@ createApp({
       var self = this;
       this.defaultSkillItemId = row.id;
       this.defaultSkillItemName = row.name || row.code || row.id;
-      this.ensureChargeSkillOptions()
+      this.ensureChargeSkillOptions(true)
         .then(function () {
           return AdminApi.itemDefaultSkillList(row.id);
         })
@@ -4016,6 +4340,7 @@ createApp({
       if (passiveType === 'OUT_ADVANCED') cacheKey = 'advancedPassiveOptions';
       if (passiveType === 'IN_ANCHOR') cacheKey = 'anchorPassiveOptions';
       if (passiveType === 'IN_PERIODIC') cacheKey = 'periodicPassiveOptions';
+      if (passiveType === 'IN_SUSTAINED') cacheKey = 'sustainedPassiveOptions';
       if (!force && this[cacheKey] && this[cacheKey].length) return Promise.resolve();
       return AdminApi.passiveSkillList({ passiveType: passiveType }, { size: 100 })
         .then(function (res) {
@@ -4031,6 +4356,7 @@ createApp({
       if (passiveType === 'OUT_ADVANCED') type = 'OUT_ADVANCED';
       if (passiveType === 'IN_ANCHOR') type = 'IN_ANCHOR';
       if (passiveType === 'IN_PERIODIC') type = 'IN_PERIODIC';
+      if (passiveType === 'IN_SUSTAINED') type = 'IN_SUSTAINED';
       var self = this;
       this.defaultPassiveItemId = row.id;
       this.defaultPassiveItemName = row.name || row.code || row.id;
@@ -4044,11 +4370,13 @@ createApp({
           if (type === 'OUT_ADVANCED') slotCount = Number(item.advancedPassiveSlotCount || 0);
           if (type === 'IN_ANCHOR') slotCount = Number(item.anchorPassiveSlotCount || 0);
           if (type === 'IN_PERIODIC') slotCount = Number(item.periodicPassiveSlotCount || 0);
+          if (type === 'IN_SUSTAINED') slotCount = Number(item.sustainedPassiveSlotCount || 0);
           if (!slotCount || slotCount < 1) {
             var hint = '默认自带基础被动数量';
             if (type === 'OUT_ADVANCED') hint = '默认自带高级属性被动数量';
             if (type === 'IN_ANCHOR') hint = '默认自带锚点被动数量';
             if (type === 'IN_PERIODIC') hint = '默认自带周期被动数量';
+            if (type === 'IN_SUSTAINED') hint = '默认自带持续效果被动数量';
             throw new Error('请先编辑装备，设置' + hint + '（≥1）并保存');
           }
           self._pendingPassiveSlotCount = slotCount;
@@ -4108,8 +4436,12 @@ createApp({
     /* ---------- 配方 ---------- */
     loadRecipes() {
       this.recipeLoading = true;
-      AdminApi.recipeList({})
-        .then((res) => { this.recipes = res.data || []; })
+      var pg = this.pagers.recipe || emptyPager();
+      AdminApi.recipeList({}, { current: pg.current, size: pg.size })
+        .then((res) => {
+          this.recipes = res.data || [];
+          this.applyPager('recipe', res);
+        })
         .catch((err) => this.showToast(err.message))
         .finally(() => { this.recipeLoading = false; });
     },
@@ -4136,7 +4468,7 @@ createApp({
     openRecipeDrawer(r) {
       this.recipeOutputLocked = false;
       this.recipeQuickItemLabel = '';
-      if (!this.items.length) this.loadItems();
+      this.ensureItemOptions();
       if (!r || !r.id) {
         this.recipeForm = emptyRecipe();
         this.recipeDrawerShow = true;
@@ -4152,12 +4484,12 @@ createApp({
         this.showToast('请先保存装备');
         return;
       }
-      if (!this.items.length) this.loadItems();
+      this.ensureItemOptions();
       var self = this;
       var itemLabel = (row.name || '') + (row.code ? '（' + row.code + '）' : '');
       this.recipeOutputLocked = true;
       this.recipeQuickItemLabel = itemLabel || row.id;
-      AdminApi.recipeList({ outputItemId: row.id })
+      AdminApi.recipeList({ outputItemId: row.id }, { current: 1, size: 50 })
         .then(function (res) {
           var list = res.data || [];
           var hit = list.find(function (x) { return x.outputItemId === row.id; }) || list[0];
@@ -4215,11 +4547,24 @@ createApp({
     /* ---------- 怪物掉落 ---------- */
     loadDrops() {
       this.dropLoading = true;
+      var pg = this.pagers.drop || emptyPager();
       var req = this.dropMonsterFilter
         ? AdminApi.monsterDropListByMonster(this.dropMonsterFilter)
-        : AdminApi.monsterDropList({});
+        : AdminApi.monsterDropList({}, { current: pg.current, size: pg.size });
       req
-        .then((res) => { this.drops = res.data || []; })
+        .then((res) => {
+          this.drops = res.data || [];
+          if (this.dropMonsterFilter) {
+            this.pagers.drop = {
+              current: 1,
+              size: pg.size,
+              totalRows: (res.data || []).length,
+              totalPage: 1
+            };
+          } else {
+            this.applyPager('drop', res);
+          }
+        })
         .catch((err) => this.showToast(err.message))
         .finally(() => { this.dropLoading = false; });
     },
@@ -4228,8 +4573,8 @@ createApp({
       if (this.dropMonsterFilter && !this.dropForm.monsterId) {
         this.dropForm.monsterId = this.dropMonsterFilter;
       }
-      if (!this.monsters.length) this.loadMonsters();
-      if (!this.items.length) this.loadItems();
+      this.ensureMonsterOptions();
+      this.ensureItemOptions();
       this.dropDrawerShow = true;
     },
     saveDrop() {
@@ -4260,8 +4605,12 @@ createApp({
       this.skillLoading = true;
       var body = {};
       if (this.skillTypeFilter) body.skillType = this.skillTypeFilter;
-      AdminApi.activeSkillList(body)
-        .then((res) => { this.activeSkills = res.data || []; })
+      var pg = this.pagers.activeSkill || emptyPager();
+      AdminApi.activeSkillList(body, { current: pg.current, size: pg.size })
+        .then((res) => {
+          this.activeSkills = res.data || [];
+          this.applyPager('activeSkill', res);
+        })
         .catch((err) => this.showToast(err.message))
         .finally(() => { this.skillLoading = false; });
     },
@@ -4403,6 +4752,8 @@ createApp({
               row.formulaJson = e.formulaJson || '[]';
               row.formulaTokens = parseFormulaTokens(e.formulaJson);
               row.hitSegments = e.hitSegments != null ? e.hitSegments : 1;
+              row.triggerRate = e.triggerRate != null ? Number(e.triggerRate) : 100;
+              row.durationAv = e.durationAv != null ? Number(e.durationAv) : 0;
               row.sort = e.sort != null ? e.sort : 0;
               row.remark = e.remark || '';
               row.more = e.more || '';
@@ -4835,6 +5186,8 @@ createApp({
             attrDir: isAttr ? (e.attrDir || 'INCREASE') : null,
             formulaJson: serializeFormulaTokens(e.formulaTokens || []),
             hitSegments: e.hitSegments != null ? e.hitSegments : 1,
+            triggerRate: e.triggerRate != null ? Number(e.triggerRate) : 100,
+            durationAv: e.durationAv != null && e.durationAv > 0 ? Number(e.durationAv) : 0,
             sort: e.sort != null ? e.sort : 0,
             remark: e.remark || '',
             more: e.more || ''
@@ -4873,6 +5226,7 @@ createApp({
         .then(function () {
           self.showToast(bindWeapon ? '普攻已保存并绑定到武器' : '保存成功', 'success');
           self.closeSkillDrawer();
+          self.invalidateChargeSkillOptions();
           self.loadActiveSkills();
         })
         .catch(function (err) { self.showToast(err.message || String(err)); })
@@ -4883,6 +5237,7 @@ createApp({
       AdminApi.activeSkillRemove(sk.id)
         .then(() => {
           this.showToast('已删除', 'success');
+          this.invalidateChargeSkillOptions();
           this.loadActiveSkills();
         })
         .catch((err) => this.showToast(err.message));
@@ -4898,8 +5253,15 @@ createApp({
     loadPassiveSkills() {
       if (!this.currentPassiveSkill || !this.currentPassiveSkill.crud) return;
       this.passiveLoading = true;
-      AdminApi.passiveSkillList({ passiveType: this.currentPassiveSkill.passiveType })
-        .then((res) => { this.passiveSkills = res.data || []; })
+      var pg = this.pagers.passiveSkill || emptyPager();
+      AdminApi.passiveSkillList(
+        { passiveType: this.currentPassiveSkill.passiveType },
+        { current: pg.current, size: pg.size }
+      )
+        .then((res) => {
+          this.passiveSkills = res.data || [];
+          this.applyPager('passiveSkill', res);
+        })
         .catch((err) => this.showToast(err.message))
         .finally(() => { this.passiveLoading = false; });
     },
@@ -4908,10 +5270,10 @@ createApp({
     },
     openPassiveDrawer(row) {
       var type = (this.currentPassiveSkill && this.currentPassiveSkill.passiveType) || 'OUT_BASIC';
-      if (!this.items.length) this.loadItems();
+      this.ensureItemOptions();
       if (!this.activeSkills.length) this.loadActiveSkills();
       if (type === 'IN_ANCHOR') {
-        this.ensureChargeSkillOptions();
+        this.ensureChargeSkillOptions(true);
         this.ensureNormalSkillOptions();
       }
       this.pickPassiveConditionType = 'EQUIP_ITEM';
@@ -4922,7 +5284,9 @@ createApp({
             this.passiveForm = Object.assign(emptyPassiveSkill(type), data);
             if (!this.passiveForm.conditionMode) this.passiveForm.conditionMode = 'UNLIMITED';
             if (type === 'IN_ANCHOR' && !this.passiveForm.anchorType) this.passiveForm.anchorType = 'AFTER_CAST_CHARGE';
-            if (type === 'IN_PERIODIC' && !this.passiveForm.periodicTriggerMode) this.passiveForm.periodicTriggerMode = 'SELF';
+            if ((type === 'IN_PERIODIC' || type === 'IN_SUSTAINED') && !this.passiveForm.periodicTriggerMode) {
+              this.passiveForm.periodicTriggerMode = 'SELF';
+            }
             if (!this.passiveForm.skillMatchMode) this.passiveForm.skillMatchMode = 'ANY';
             if (!this.passiveForm.compareOp) this.passiveForm.compareOp = 'GTE';
             if (this.passiveForm.maxTriggerPerBattle == null) this.passiveForm.maxTriggerPerBattle = 0;
@@ -4941,9 +5305,9 @@ createApp({
               d.more = c.more || '';
               return d;
             });
-            if (type === 'IN_ANCHOR' || type === 'IN_PERIODIC') {
+            if (type === 'IN_ANCHOR' || type === 'IN_PERIODIC' || type === 'IN_SUSTAINED') {
               this.draftPassiveEffects = [];
-              if (type === 'IN_PERIODIC') {
+              if (type === 'IN_PERIODIC' || type === 'IN_SUSTAINED') {
                 this.draftPeriodicLeftTokens = this.sanitizeFormulaTokensForPeriodic(parseFormulaTokens(data.leftFormulaJson));
                 this.draftPeriodicRightTokens = this.sanitizeFormulaTokensForPeriodic(parseFormulaTokens(data.rightFormulaJson));
               } else {
@@ -4951,16 +5315,18 @@ createApp({
                 this.draftPeriodicRightTokens = [];
               }
               this.draftPassiveCombatEffects = (data.combatEffects || []).map((e, i) => {
-                var d = emptyDraftPassiveCombatEffect();
+                var d = emptyDraftPassiveCombatEffect({ sustained: type === 'IN_SUSTAINED' });
                 d.name = e.name || '';
                 d.targetType = e.targetType || 'SELF';
-                d.effectType = e.effectType || 'DAMAGE';
+                d.effectType = type === 'IN_SUSTAINED' ? 'ATTR_MODIFY' : (e.effectType || 'DAMAGE');
                 d.attrKey = e.attrKey || 'ATK';
                 d.attrDir = e.attrDir || 'INCREASE';
                 d.hitSegments = e.hitSegments != null ? Number(e.hitSegments) : 1;
+                d.triggerRate = e.triggerRate != null ? Number(e.triggerRate) : 100;
+                d.durationAv = e.durationAv != null ? Number(e.durationAv) : 0;
                 d.sort = e.sort != null ? e.sort : i;
                 d.remark = e.remark || '';
-                d.formulaTokens = type === 'IN_PERIODIC'
+                d.formulaTokens = (type === 'IN_PERIODIC' || type === 'IN_SUSTAINED')
                   ? this.sanitizeFormulaTokensForPeriodic(parseFormulaTokens(e.formulaJson))
                   : parseFormulaTokens(e.formulaJson);
                 return d;
@@ -5066,7 +5432,7 @@ createApp({
       }
     },
     addDraftPassiveCombatEffect() {
-      var row = emptyDraftPassiveCombatEffect();
+      var row = emptyDraftPassiveCombatEffect({ sustained: this.isPassiveInSustainedTab });
       row.sort = this.draftPassiveCombatEffects.length;
       this.draftPassiveCombatEffects.push(row);
     },
@@ -5129,7 +5495,7 @@ createApp({
         passiveType: type,
         conditions: conditions
       });
-      if (type === 'IN_ANCHOR' || type === 'IN_PERIODIC') {
+      if (type === 'IN_ANCHOR' || type === 'IN_PERIODIC' || type === 'IN_SUSTAINED') {
         if (type === 'IN_ANCHOR') {
           if (!this.passiveForm.anchorType) { this.showToast('请选择锚点'); return; }
           if (this.passiveAnchorNeedsSkillMatch) {
@@ -5159,8 +5525,8 @@ createApp({
           body.leftFormulaJson = serializeFormulaTokens(this.draftPeriodicLeftTokens);
           body.rightFormulaJson = serializeFormulaTokens(this.draftPeriodicRightTokens);
           body.compareOp = this.passiveForm.compareOp;
-          body.maxTriggerPerBattle = this.passiveForm.maxTriggerPerBattle != null
-            ? Number(this.passiveForm.maxTriggerPerBattle) : 0;
+          body.maxTriggerPerBattle = type === 'IN_SUSTAINED' ? 0
+            : (this.passiveForm.maxTriggerPerBattle != null ? Number(this.passiveForm.maxTriggerPerBattle) : 0);
         }
         if (!this.draftPassiveCombatEffects.length) {
           this.showToast('请至少添加一条效果');
@@ -5172,6 +5538,9 @@ createApp({
           if (!ce.name) { this.showToast('效果 #' + (k + 1) + ' 请输入名称'); return; }
           if (!ce.targetType) { this.showToast('效果 #' + (k + 1) + ' 请选择目标'); return; }
           if (!ce.effectType) { this.showToast('效果 #' + (k + 1) + ' 请选择效果类型'); return; }
+          if (type === 'IN_SUSTAINED' && ce.effectType !== 'ATTR_MODIFY') {
+            this.showToast('持续效果只能配置属性修改'); return;
+          }
           if (!ce.formulaTokens || !ce.formulaTokens.length) {
             this.showToast('效果 #' + (k + 1) + ' 请配置公式'); return;
           }
@@ -5186,6 +5555,9 @@ createApp({
             attrDir: ce.effectType === 'ATTR_MODIFY' ? ce.attrDir : null,
             formulaJson: serializeFormulaTokens(ce.formulaTokens),
             hitSegments: ce.hitSegments != null && ce.hitSegments > 0 ? Number(ce.hitSegments) : 1,
+            triggerRate: ce.triggerRate != null ? Number(ce.triggerRate) : 100,
+            durationAv: type === 'IN_SUSTAINED' ? 0
+              : (ce.durationAv != null && ce.durationAv > 0 ? Number(ce.durationAv) : 0),
             sort: k,
             remark: ce.remark || ''
           });

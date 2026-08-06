@@ -18,8 +18,8 @@ public class PageFactory {
     // 默认分页值
     private static final int DEFAULT_PAGE_NUM = 1;
     private static final int DEFAULT_PAGE_SIZE = 20;
-    // 最大页大小限制，防止内存溢出
-    private static final int MAX_PAGE_SIZE = 100;
+    // 最大页大小限制，防止内存溢出（后台下拉/选项可拉到 500）
+    private static final int MAX_PAGE_SIZE = 500;
 
     private PageFactory() {
     }
