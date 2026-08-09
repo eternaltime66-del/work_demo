@@ -207,6 +207,19 @@
           <i class="hp-ghost" :style="{ width: focusUnitView.ghostPct + '%' }"></i>
           <i class="hp-fill" :style="{ width: focusUnitView.hpPct + '%' }"></i>
         </div>
+        <div class="fb-skill-links" v-if="focusUnitView.skills.length">
+          <button
+            v-for="s in focusUnitView.skills"
+            :key="'focus-skill-' + s.skillId"
+            type="button"
+            class="fb-skill-link"
+            :class="'is-' + s.skillType"
+            @click.stop="openSkillDetail(s.skillId)"
+          >
+            <span>{{ skillTypeLabel(s.skillType) }}</span>
+            <em>{{ s.name || '技能' }}</em>
+          </button>
+        </div>
         <div
           class="fb-charges hide-scrollbar"
           v-if="focusUnitView.normalRing || focusUnitView.charges.length"
@@ -303,6 +316,19 @@
                   <i class="hp-ghost" :style="{ width: row.ghostPct + '%' }"></i>
                   <i class="hp-fill" :style="{ width: row.hpPct + '%' }"></i>
                 </div>
+                <div class="fb-skill-links" v-if="row.skills.length">
+                  <button
+                    v-for="s in row.skills"
+                    :key="'ra-skill-' + row.uid + '-' + s.skillId"
+                    type="button"
+                    class="fb-skill-link"
+                    :class="'is-' + s.skillType"
+                    @click.stop="openSkillDetail(s.skillId)"
+                  >
+                    <span>{{ skillTypeLabel(s.skillType) }}</span>
+                    <em>{{ s.name || '技能' }}</em>
+                  </button>
+                </div>
                 <div
                   class="fb-charges hide-scrollbar"
                   v-if="row.normalRing || row.charges.length"
@@ -380,6 +406,19 @@
                 <div class="hpbar">
                   <i class="hp-ghost" :style="{ width: row.ghostPct + '%' }"></i>
                   <i class="hp-fill is-enemy" :style="{ width: row.hpPct + '%' }"></i>
+                </div>
+                <div class="fb-skill-links" v-if="row.skills.length">
+                  <button
+                    v-for="s in row.skills"
+                    :key="'re-skill-' + row.uid + '-' + s.skillId"
+                    type="button"
+                    class="fb-skill-link"
+                    :class="'is-' + s.skillType"
+                    @click.stop="openSkillDetail(s.skillId)"
+                  >
+                    <span>{{ skillTypeLabel(s.skillType) }}</span>
+                    <em>{{ s.name || '技能' }}</em>
+                  </button>
                 </div>
                 <div
                   class="fb-charges hide-scrollbar"
@@ -1197,11 +1236,31 @@ createApp({
         maxHp: hp.maxHp,
         hpPct: hp.maxHp ? Math.max(0, Math.min(100, (hp.hp / hp.maxHp) * 100)) : 100,
         ghostPct: ghostPct,
+        skills: this.unitSkillList(uid),
         charges: this.focusChargeList(uid),
         normalRing: this.unitNormalRing(uid),
         buffs: this.buffMap[uid] || [],
         dead: !!this.deadUids[uid] || (hp.hp <= 0)
       };
+    },
+    /** 单位全部主动技能：按普攻、小技能、大招排序，同类型不丢失。 */
+    unitSkillList(uid) {
+      var byId = this.unitSkillById[uid] || {};
+      var typeOrder = { NORMAL: 0, SMALL: 1, ULTIMATE: 2 };
+      return Object.keys(byId).map(function (id) {
+        var s = byId[id] || {};
+        return {
+          skillId: s.skillId || id,
+          skillType: String(s.skillType || 'SMALL').toUpperCase(),
+          name: s.name || ''
+        };
+      }).filter(function (s) {
+        return !!s.skillId;
+      }).sort(function (a, b) {
+        var ao = typeOrder[a.skillType] != null ? typeOrder[a.skillType] : 9;
+        var bo = typeOrder[b.skillType] != null ? typeOrder[b.skillType] : 9;
+        return ao - bo || String(a.name).localeCompare(String(b.name), 'zh-CN');
+      });
     },
     /** 单位行动周期：快照 atkSpeed 字段实际存的是行动值 action */
     actionNeedOf(uid) {

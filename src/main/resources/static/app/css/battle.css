@@ -1033,6 +1033,57 @@
   background: rgba(0, 0, 0, 0.35);
   overflow: hidden;
 }
+.fb-skill-links {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 5px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.fb-skill-links::-webkit-scrollbar { display: none; }
+.fb-skill-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 auto;
+  max-width: 132px;
+  min-height: 24px;
+  padding: 3px 7px;
+  border: 1px solid rgba(125, 211, 252, 0.3);
+  border-radius: 7px;
+  color: #e0f2fe;
+  background: rgba(14, 116, 144, 0.14);
+  cursor: pointer;
+}
+.fb-skill-link span {
+  flex: 0 0 auto;
+  font-size: 9px;
+  font-weight: 800;
+  color: #7dd3fc;
+}
+.fb-skill-link em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 700;
+}
+.fb-skill-link.is-ULTIMATE {
+  border-color: rgba(251, 191, 36, 0.38);
+  color: #fef3c7;
+  background: rgba(180, 83, 9, 0.14);
+}
+.fb-skill-link.is-ULTIMATE span { color: #fbbf24; }
+.fb-skill-link.is-NORMAL {
+  border-color: rgba(203, 213, 225, 0.28);
+  color: #e2e8f0;
+  background: rgba(100, 116, 139, 0.14);
+}
+.fb-skill-link.is-NORMAL span { color: #cbd5e1; }
+.fb-skill-link:active { transform: scale(0.97); }
 .hp-ghost,
 .hp-fill {
   position: absolute;
