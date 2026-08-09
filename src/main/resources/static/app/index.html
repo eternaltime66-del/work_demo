@@ -2402,10 +2402,6 @@ createApp({
       }
       this.showToast(mat.sourceLabel || '敬请期待');
     },
-    formatDropRate(rate) {
-      if (rate == null) return '—';
-      return Number(rate) + '%';
-    },
     formatPlayerStageCode(code) {
       var raw = String(code || '').trim();
       var match = raw.match(/^(?:N20-)?0*(\d+)-0*(\d+)$/i);

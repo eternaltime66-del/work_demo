@@ -50,14 +50,6 @@ public final class FormulaEvalUnit {
         return evalRpn(rpn);
     }
 
-    /** @deprecated 使用带 BattleStatBoard 的重载 */
-    @Deprecated
-    public static double eval(String formulaJson, BattleRuntimeUnit self, BattleRuntimeUnit target, int elapsedActionValue) {
-        BattleStatBoard board = new BattleStatBoard();
-        board.setElapsedActionValue(elapsedActionValue);
-        return eval(formulaJson, self, target, board, null);
-    }
-
     private static List<Map<String, Object>> parse(String raw) {
         if (raw == null || raw.isBlank()) {
             return List.of();

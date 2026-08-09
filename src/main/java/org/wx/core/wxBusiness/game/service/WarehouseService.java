@@ -244,9 +244,4 @@ public class WarehouseService extends WxServiceImpl<WarehouseMapper, Warehouse> 
             }
         }
     }
-
-    /** @deprecated use fillItemDetail */
-    public void fillItemName(List<WarehouseItem> list) {
-        fillItemDetail(list);
-    }
 }

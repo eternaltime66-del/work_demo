@@ -1723,10 +1723,6 @@ createApp({
       }
       return any ? out : [];
     },
-    /** @deprecated 兼容旧调用名 → monsterSkillBars */
-    monsterSkillRings(uid) {
-      return this.monsterSkillBars(uid);
-    },
     skillChargePct(slot, axisAv) {
       if (!slot) return 0;
       var need = Math.max(0, Number(slot.need) || 0);

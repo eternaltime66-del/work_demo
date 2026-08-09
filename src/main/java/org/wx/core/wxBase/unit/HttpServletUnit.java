@@ -160,22 +160,6 @@ public final class HttpServletUnit {
         return ip == null ? LOCAL_IP_V4 : ip;
     }
 
-    /**
-     * 兼容原有方法名，避免外部修改
-     */
-    @Deprecated(since = "1.0.0", forRemoval = false)
-    public static String IP() {
-        return getClientIp();
-    }
-
-    /**
-     * 兼容原有方法名，避免外部修改
-     */
-    @Deprecated(since = "1.0.0", forRemoval = false)
-    public static String getRequestClientIp(HttpServletRequest request) {
-        return getIpAddress(request);
-    }
-
     // ===================== 私有工具方法 =====================
     /**
      * 过滤无效IP，逻辑复用
