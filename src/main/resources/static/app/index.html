@@ -51,7 +51,16 @@
   </div>
 
   <div v-if="tab === 'craft'" class="craft-topbar">
-    <div class="craft-anvil art-slot" data-art="craft/anvil-bg.jpg" aria-hidden="true"></div>
+    <div class="craft-anvil art-slot" data-art="craft/anvil-bg.jpg">
+      <div class="craft-anvil-copy">
+        <strong>流派工坊</strong>
+        <span>可合成 {{ craftRecipes.length }} · 核心 {{ craftCoreCount }}</span>
+      </div>
+      <div class="craft-anvil-actions">
+        <button type="button" @click="openBuildGuide">流派</button>
+        <button type="button" class="primary" @click="openCompendium">图鉴</button>
+      </div>
+    </div>
     <input
       class="craft-filter-input"
       v-model.trim="craftKeyword"
@@ -859,6 +868,36 @@
     <button type="button" :class="{ active: tab === 'deploy' }" @click="openDeploy">出击</button>
   </nav>
 
+  <!-- 装备图鉴 / 流派索引 -->
+  <div v-if="compendiumOpen" class="craft-detail-mask" @click.self="compendiumOpen = false">
+    <div class="craft-detail-panel compendium-panel">
+      <div class="craft-detail-head">
+        <h3>{{ buildGuideMode ? '流派路线' : '装备图鉴' }}</h3>
+        <button type="button" class="craft-detail-close hit-44" aria-label="关闭" @click="compendiumOpen = false">×</button>
+      </div>
+      <div class="compendium-tabs hide-scrollbar" v-if="!buildGuideMode">
+        <button v-for="opt in compendiumTypes" :key="opt.value" type="button" :class="{ active: compendiumFilter === opt.value }" @click="compendiumFilter = opt.value">{{ opt.label }}</button>
+      </div>
+      <div class="craft-detail-body compendium-body">
+        <div v-if="compendiumLoading" class="empty-state">正在读取图鉴…</div>
+        <template v-else-if="buildGuideMode">
+          <article v-for="(build, i) in buildGuideRows" :key="build.name" class="build-guide-card">
+            <em>路线 {{ i + 1 }}</em><strong>{{ build.name }}</strong>
+            <span>{{ build.desc }}</span><small>{{ build.core }}</small>
+          </article>
+        </template>
+        <template v-else>
+          <button v-for="item in filteredCompendiumItems" :key="item.id" type="button" class="compendium-card" :class="{ future: isFutureItem(item), core: isCoreItem(item) }" @click="openCompendiumItem(item)">
+            <span class="compendium-icon">{{ item.icon || (item.itemType === 'WEAPON' ? '⚔' : '◆') }}</span>
+            <span class="compendium-copy"><strong>{{ item.name }}</strong><small>{{ item.itemTypeLabel || itemTypeLabel(item.itemType) }}</small></span>
+            <em>{{ isFutureItem(item) ? '暂无来源' : (isCoreItem(item) ? '核心' : '查看') }}</em>
+          </button>
+          <div v-if="!filteredCompendiumItems.length" class="empty-state">暂无对应物品</div>
+        </template>
+      </div>
+    </div>
+  </div>
+
   <!-- 合成详情 -->
   <div
     v-if="craftDetail"
@@ -1517,6 +1556,24 @@ createApp({
       craftDropSources: [],
       craftDropFocusName: '',
       craftBurst: { show: false, icon: '✨' },
+      compendiumOpen: false,
+      compendiumLoading: false,
+      compendiumItems: [],
+      compendiumFilter: 'all',
+      buildGuideMode: false,
+      compendiumTypes: [
+        { value: 'all', label: '全部' }, { value: 'CORE', label: '流派核心' },
+        { value: 'WEAPON', label: '武器' }, { value: 'SKILL_STONE', label: '技能石' },
+        { value: 'DEFENSE', label: '防具' }, { value: 'ACCESSORY', label: '饰品' }
+      ],
+      buildGuideRows: [
+        { name: '电弧超导', core: '雨幕过载枪 / 零线磁轨刃', desc: '以电击技能命中与高频释放驱动连锁追击。' },
+        { name: '锈潮猎杀', core: '锈潮航标炮', desc: '依靠击杀回收、补射与物理增幅滚动清场。' },
+        { name: '熔核热链', core: '黑箱熔核刃 / 炉心蜂群枪', desc: '火焰伤害、群体连携与余热恢复构成持续压制。' },
+        { name: '白噪折镜', core: '白噪声纹杖 / 静默折镜刃', desc: '受击防护、治疗与多段折返兼顾稳定和爆发。' },
+        { name: '云墓观测', core: '天穹云墓枪 / 月潮观测炮', desc: '击杀备份与高威胁锁定共同推进后期战线。' },
+        { name: '月背共振', core: '月背共振刃', desc: '通过小技能连续触发群体伤害和自我修复。' }
+      ],
       craftTypeOptions: [
         { value: 'all', label: '全部' },
         { value: 'WEAPON', label: '武器' },
@@ -1572,6 +1629,18 @@ createApp({
         if (!kw) return true;
         var name = ((r.resultItemName || '') + ' ' + (r.name || '')).toLowerCase();
         return name.indexOf(kw) >= 0;
+      });
+    },
+    craftCoreCount() {
+      return (this.craftRecipes || []).filter((r) => this.isCoreItem(r.resultItem || { code: r.resultItemCode, name: r.resultItemName })).length;
+    },
+    filteredCompendiumItems() {
+      var filter = this.compendiumFilter;
+      return (this.compendiumItems || []).filter((item) => {
+        if (filter === 'all') return true;
+        if (filter === 'CORE') return this.isCoreItem(item);
+        if (filter === 'DEFENSE') return ['ARMOR','HELMET','GLOVES','LEGS'].indexOf(item.itemType) >= 0;
+        return item.itemType === filter;
       });
     },
     prepDisplayRole() {
@@ -2150,6 +2219,43 @@ createApp({
         return;
       }
       location.href = (APP_CONFIG.battlePage || 'battle.html') + '?mode=tower';
+    },
+    isCoreItem(item) {
+      var code = String((item && item.code) || '').toLowerCase();
+      var remark = String((item && item.remark) || '');
+      var name = String((item && item.name) || '');
+      return code.indexOf('n20_core_') === 0 || remark.indexOf('流派核心') >= 0 || /过载枪|磁轨刃|航标炮|熔核刃|蜂群枪|声纹杖|折镜刃|云墓枪|观测炮|共振刃/.test(name);
+    },
+    isFutureItem(item) {
+      return String((item && item.code) || '').toLowerCase().indexOf('n20_future_') === 0
+        || String((item && item.remark) || '').indexOf('暂无获取途径') >= 0;
+    },
+    loadCompendium() {
+      if (this.compendiumItems.length || this.compendiumLoading) return;
+      this.compendiumLoading = true;
+      GameApi.itemCompendium()
+        .then((res) => { this.compendiumItems = res.data || []; })
+        .catch((err) => this.authCatch(err))
+        .finally(() => { this.compendiumLoading = false; });
+    },
+    openCompendium() {
+      this.buildGuideMode = false;
+      this.compendiumOpen = true;
+      this.loadCompendium();
+    },
+    openBuildGuide() {
+      this.buildGuideMode = true;
+      this.compendiumOpen = true;
+    },
+    openCompendiumItem(item) {
+      this.compendiumOpen = false;
+      if (!item || !item.id) return;
+      GameApi.itemDetail(item.id)
+        .then((res) => {
+          this.armNestedDetailClickGuard();
+          this.prepItemDetail = { source: 'VIEW', data: Object.assign({}, res.data || item) };
+        })
+        .catch((err) => this.authCatch(err));
     },
     openCraft() {
       this.requestTab('craft', function () { this.loadCraft(); });

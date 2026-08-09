@@ -96,6 +96,28 @@ function battlePassive(id,name,type,itemId,sort,remark,config,outputs) {
   p(`INSERT INTO app_item_default_passive (id,item_id,passive_skill_id,passive_type,slot_no,sort,CREATE_TIME,UPDATE_TIME) VALUES (${q('IDP_'+id)},${q(itemId)},${q(id)},${q(type)},1,0,${now},${now});`);
 }
 
+function conditionedBattlePassive(id,name,type,itemId,sort,remark,config,outputs,condition) {
+  battlePassive(id,name,type,itemId,sort,remark,config,outputs);
+  p(`UPDATE app_passive_skill SET condition_mode='SELECT' WHERE id=${q(id)};`);
+  const refItem=condition.itemId?q(condition.itemId):'NULL';
+  const refSkill=condition.skillId?q(condition.skillId):'NULL';
+  const kind=condition.itemId?'EQUIP_ITEM':'EQUIP_SKILL';
+  p(`INSERT INTO app_passive_condition (id,skill_id,condition_type,ref_item_id,ref_skill_id,sort,remark,CREATE_TIME,UPDATE_TIME) VALUES (${q('PCD_'+id)},${q(id)},${q(kind)},${refItem},${refSkill},0,${q(condition.remark)},${now},${now});`);
+}
+
+const coreBuilds = [
+  ['雨幕过载枪','回响电弧','ELECTRIC','AFTER_DEAL_ACTIVE_DMG','ANY_ELEMENT','雨幕旧街信标','将电击伤害折返为连锁电弧，并回收少量生命'],
+  ['零线磁轨刃','磁轨超导','ELECTRIC','AFTER_CAST_SKILL','ANY_TYPE','地下换流井信标','普通技能驱动磁轨追击，连续释放越快收益越高'],
+  ['锈潮航标炮','锈潮猎杀','PHYSICAL','AFTER_KILL','ANY','锈潮工坊信标','击杀后回收装甲并向下一目标补射'],
+  ['黑箱熔核刃','熔核灼印','FIRE','AFTER_DEAL_ACTIVE_DMG','ANY_ELEMENT','黑箱仓库信标','火焰伤害引爆灼印，同时把余热转化为治疗'],
+  ['炉心蜂群枪','蜂群热链','FIRE','AFTER_CAST_SKILL','ANY_TYPE','炉心守门信标','小技能放出蜂群热链，对全体目标造成持续压迫'],
+  ['白噪声纹杖','白噪回生','ICE','AFTER_TAKE_ACTIVE_DMG','ANY','记忆诊所信标','受击后生成白噪护持，兼顾恢复与减伤'],
+  ['静默折镜刃','静默折返','ICE','AFTER_CAST_SKILL','ANY_TYPE','镜城中继信标','技能在镜面间折返，形成多段随机追击'],
+  ['天穹云墓枪','云墓备份','PHYSICAL','AFTER_KILL','ANY','云上墓园信标','击杀写入备份，恢复生命并提升行动效率'],
+  ['月潮观测炮','观测锁杀','ELECTRIC','AFTER_DEAL_ACTIVE_DMG','ANY_ELEMENT','零号观测站信标','电击命中后锁定高威胁目标并追加炮击'],
+  ['月背共振刃','月背共振','FIRE','AFTER_CAST_SKILL','ANY_TYPE','月背门槛信标','小技能唤起全场共振，兼具群伤与自我修复']
+];
+
 p('-- 霓虹远征第一篇章：20 大关 × 5 小关。由 tools/gen_neon_mainline_20x5.js 生成。');
 p('SET NAMES utf8mb4; SET FOREIGN_KEY_CHECKS=0; START TRANSACTION;');
 p(`DELETE FROM app_stage_first_reward WHERE stage_id IN (SELECT id FROM (SELECT s.id FROM app_stage s LEFT JOIN app_stage c ON s.parent_id=c.id WHERE s.parent_id=${q(TYPE)} OR c.parent_id=${q(TYPE)}) x);`);
@@ -112,7 +134,7 @@ p("DELETE FROM app_stage WHERE id LIKE 'SLV_N20_%'; DELETE FROM app_stage WHERE 
 p("DELETE FROM app_monster_drop WHERE id LIKE 'MDP_N20_%'; DELETE FROM app_recipe_material WHERE id LIKE 'RCM_N20_%'; DELETE FROM app_recipe WHERE id LIKE 'RCP_N20_%';");
 p("DELETE FROM app_item_default_skill WHERE id LIKE 'IDS_N20_%'; DELETE FROM app_item_default_passive WHERE id LIKE 'IDP%N20_%'; DELETE FROM app_item_weapon WHERE id LIKE 'WPN_N20_%'; DELETE FROM app_item_armor WHERE id LIKE 'ARM_N20_%'; DELETE FROM app_item_gloves WHERE id LIKE 'GLO_N20_%'; DELETE FROM app_item_helmet WHERE id LIKE 'HEL_N20_%'; DELETE FROM app_item_legs WHERE id LIKE 'LEG_N20_%'; DELETE FROM app_item_accessory WHERE id LIKE 'ACC_N20_%'; DELETE FROM app_item_material WHERE id LIKE 'MAT_N20_%';");
 p("DELETE FROM app_skill_charge WHERE skill_id LIKE 'ASK_N20_%'; DELETE FROM app_skill_effect WHERE skill_id LIKE 'ASK_N20_%'; DELETE FROM app_active_skill WHERE id LIKE 'ASK_N20_%';");
-p("DELETE FROM app_skill_output WHERE passive_skill_id LIKE 'PSK_N20_%'; DELETE FROM app_passive_effect WHERE skill_id LIKE 'PSK_N20_%'; DELETE FROM app_passive_skill WHERE id LIKE 'PSK_N20_%';");
+p("DELETE FROM app_skill_output WHERE passive_skill_id LIKE 'PSK_N20_%'; DELETE FROM app_passive_effect WHERE skill_id LIKE 'PSK_N20_%'; DELETE FROM app_passive_condition WHERE skill_id LIKE 'PSK_N20_%'; DELETE FROM app_passive_skill WHERE id LIKE 'PSK_N20_%';");
 p("DELETE FROM app_monster WHERE id LIKE 'MST_N20_%'; DELETE FROM app_item WHERE id LIKE 'ITM_N20_%';");
 p(`INSERT INTO app_stage (id,parent_id,kind,name,code,sort,enable,remark,CREATE_TIME,UPDATE_TIME) SELECT ${q(TYPE)},NULL,'TYPE','主线','MAIN',0,1,'霓虹远征',${now},${now} FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM app_stage WHERE id=${q(TYPE)});`);
 
@@ -178,6 +200,46 @@ chapters.forEach((c, ix) => {
   p(`INSERT INTO app_stage (id,parent_id,kind,name,code,sort,enable,remark,CREATE_TIME,UPDATE_TIME) VALUES (${q(chapterId)},${q(TYPE)},'CHAPTER',${q(name)},${q('N20-'+nn)},${no},1,${q(intro)},${now},${now});`);
   levels.forEach((ln,li)=>{ const lv=li+1, lid=`SLV_N20_${nn}_${lv}`; const stamina=Math.min(1+Math.floor(ix/4),5); p(`INSERT INTO app_stage (id,parent_id,kind,name,code,sort,enable,remark,stamina_cost,CREATE_TIME,UPDATE_TIME) VALUES (${q(lid)},${q(chapterId)},'LEVEL',${q(ln)},${q(`N20-${nn}-${lv}`)},${lv},1,${q(`${intro}｜节点：${ln}`)},${stamina},${now},${now});`); const specs=lv===1?[0]:lv===2?[0,1]:lv===3?[0,1,1]:lv===4?[1,2]:[3]; const spots=[[2,4],[0,4],[4,4],[1,3]]; specs.forEach((mi,si)=>{ const sp=spots[si]; p(`INSERT INTO app_stage_level_monster (id,level_id,monster_id,pos_col,pos_row,sort,CREATE_TIME,UPDATE_TIME) VALUES ('SLM_N20_${nn}_${lv}_${si+1}',${q(lid)},${q(monsterIds[mi])},${sp[0]},${sp[1]},${si},${now},${now});`); }); if(lv===5) p(`INSERT INTO app_stage_first_reward (id,stage_id,item_id,qty,sort,CREATE_TIME,UPDATE_TIME) VALUES ('SFR_N20_${nn}',${q(lid)},${q(matIds[2])},1,0,${now},${now});`); });
   story.push(`## 第${no}章　${name}`,'',intro,'',...levels.map((x,i)=>`- ${no}-${i+1} ${x}：${i===0?'进入并辨认区域规则':i===1?'遭遇基础生态与资源':i===2?'发现异常线索进一步扩大':i===3?'突破精英封锁并取得关键材料':'击败守关单位，获得前往下一章的坐标'}`),'',`怪物：${mons.join('、')}。材料：${mats.join('、')}。装备：${weaponName}、${armorName}、${glovesName}、${helmetName}、${legsName}、${name}信标。技能石【${skillName}】：${stoneStyle[6]}。`,'');
+});
+
+// 每两章解锁一件可免费合成的流派核心。高昂用量让它成为长期目标，而不是替代普通章节装备。
+coreBuilds.forEach((cfg,ix)=>{
+  const pair=ix+1, unlockNo=pair*2, nn=String(unlockNo).padStart(2,'0');
+  const prev=String(unlockNo-1).padStart(2,'0');
+  const itemId=`ITM_N20_CORE_${String(pair).padStart(2,'0')}`;
+  const skillId=`ASK_N20_CORE_${String(pair).padStart(2,'0')}`;
+  const passiveId=`PSK_N20_CORE_${String(pair).padStart(2,'0')}`;
+  const advId=`PSK_N20_CORE_ADV_${String(pair).padStart(2,'0')}`;
+  const recipeId=`RCP_N20_CORE_${String(pair).padStart(2,'0')}`;
+  const linkedAccessory=`ITM_N20_${nn}_R`;
+  const flavor=`双章流派核心·${cfg[1]}。${cfg[6]}；需同时装备第${unlockNo}章信标激活完整联动。`;
+  item(itemId,`n20_core_${pair}`,cfg[0],'WEAPON',5000+pair,flavor,1,0,1,0,1);
+  const style=['FIRST','DAMAGE',pair%3+2,pair%2?'DEAL_DAMAGE':'CAST',pair%2?'ANY_ELEMENT':'ANY_TYPE',pair%2?null:'SMALL',flavor];
+  skill(skillId,`${cfg[1]}·核心释放`,pair%2?'SMALL':'NORMAL',8+pair,1.15+pair*.12,pair%3===0?'ALL_ENEMY':pair%3===1?'RANDOM_ENEMY':'FRONT_ROW',cfg[2],5000+pair,style);
+  p(`INSERT INTO app_item_weapon (id,item_id,base_atk,atk_speed_up_ratio,atk_speed_down_ratio,normal_skill_id,CREATE_TIME,UPDATE_TIME) VALUES (${q('WPN_N20_CORE_'+pair)},${q(itemId)},${18+unlockNo*4},${cleanNumber(5+pair*.6)},0,${q(NORMAL)},${now},${now});`);
+  p(`INSERT INTO app_item_default_skill (id,item_id,skill_id,slot_no,sort,CREATE_TIME,UPDATE_TIME) VALUES (${q('IDS_N20_CORE_'+pair)},${q(itemId)},${q(skillId)},1,0,${now},${now});`);
+  advancedPassive(advId,`${cfg[1]}增幅`,'DEAL_ELEMENT_DMG_RATIO','INCREASE',8+pair*2,itemId,5000+pair,`${cfg[1]}流派的常驻高级增伤`);
+  const outputs=cfg[3]==='AFTER_KILL'
+    ? [{name:`${cfg[1]}回收`,kind:'EFFECT',target:'SELF',effect:'HEAL',mul:.5+pair*.03,rate:100},{name:`${cfg[1]}补射`,kind:'EFFECT',target:'RANDOM_ENEMY',effect:'DAMAGE',element:cfg[2],mul:.65+pair*.04,rate:100}]
+    : [{name:`${cfg[1]}连携`,kind:'EFFECT',target:pair%3===0?'ALL_ENEMY':'EVENT_HIT_TARGETS',effect:'DAMAGE',element:cfg[2],mul:.38+pair*.045,hits:pair%3+1,rate:45+pair*3},{name:`${cfg[1]}回流`,kind:'EFFECT',target:'SELF',effect:'HEAL',mul:.18+pair*.018,rate:55+pair*3}];
+  conditionedBattlePassive(passiveId,`${cfg[1]}完全联动`,'BATTLE_COMBAT',itemId,5100+pair,flavor,{event:cfg[3],match:cfg[4],refType:cfg[4]==='ANY_TYPE'?'SMALL':null,refElement:cfg[4]==='ANY_ELEMENT'?cfg[2]:null,max:8},outputs,{itemId:linkedAccessory,remark:`装备${cfg[5]}后激活完整联动`});
+  p(`INSERT INTO app_recipe (id,name,output_item_id,output_qty,unlock_chapter_id,sort,enable,remark,CREATE_TIME,UPDATE_TIME) VALUES (${q(recipeId)},${q(cfg[0]+'核心配方')},${q(itemId)},1,${q('SCP_N20_'+nn)},${6000+pair},1,${q(`通关第${unlockNo}章后解锁的平民流派核心；材料需求约为同期普通装备的 8~16 倍`)},${now},${now});`);
+  const amount=24+pair*7;
+  [[`ITM_N20_${prev}_M3`,amount],[`ITM_N20_${nn}_M2`,amount+8],[`ITM_N20_${nn}_M3`,Math.ceil(amount*.65)]].forEach((x,j)=>p(`INSERT INTO app_recipe_material (id,recipe_id,item_id,quantity,sort,CREATE_TIME,UPDATE_TIME) VALUES (${q(`RCM_N20_CORE_${pair}_${j+1}`)},${q(recipeId)},${q(x[0])},${x[1]},${j},${now},${now});`));
+});
+
+// 未来付费/活动核心：仅进入图鉴，不配置配方、掉落或首通奖励。
+[
+  ['日冕裁决器','FIRE','将燃烧层数转化为爆发窗口'],
+  ['深海零压枪','ICE','冻结受击节奏并延长防护链'],
+  ['雷池神经刃','ELECTRIC','以高频充能驱动无限趋近的电弧'],
+  ['虚空回收杖','PHYSICAL','把溢出治疗转写为追击伤害'],
+  ['终端万象炮','FIRE','混合元素队伍的终局共鸣核心']
+].forEach((cfg,ix)=>{
+  const n=ix+1, itemId=`ITM_N20_FUTURE_${String(n).padStart(2,'0')}`;
+  item(itemId,`n20_future_${n}`,cfg[0],'WEAPON',7000+n,`未来限定核心｜暂无获取途径｜${cfg[2]}`,0,0,1,0,0);
+  p(`INSERT INTO app_item_weapon (id,item_id,base_atk,atk_speed_up_ratio,atk_speed_down_ratio,normal_skill_id,CREATE_TIME,UPDATE_TIME) VALUES (${q('WPN_N20_FUTURE_'+n)},${q(itemId)},${110+n*18},${8+n},0,${q(NORMAL)},${now},${now});`);
+  advancedPassive(`PSK_N20_FUTURE_${String(n).padStart(2,'0')}`,`${cfg[0]}·限定特性`,'DEAL_ELEMENT_DMG_RATIO','INCREASE',24+n*5,itemId,7000+n,`未来限定设计预留：${cfg[2]}`);
 });
 
 p('COMMIT; SET FOREIGN_KEY_CHECKS=1;');

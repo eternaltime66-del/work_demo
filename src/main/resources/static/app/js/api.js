@@ -212,6 +212,9 @@
     itemDetail: function (itemId) {
       return request('/api/item/detail', { itemId: itemId }).then(ensureSuccess);
     },
+    itemCompendium: function () {
+      return request('/api/item/compendium', {}).then(ensureSuccess);
+    },
 
     activeSkillDetail: function (id) {
       return request('/api/active/skill/detail', { id: id }).then(ensureSuccess);
