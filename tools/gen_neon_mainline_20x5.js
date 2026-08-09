@@ -31,6 +31,30 @@ const chapters = [
   ['月背门槛','月背通讯门','观测站后的通讯门并不通向月球，而是通向一张覆盖诸城的未知网络。门后传来更多行者的心跳。',['通讯前室','引力锁','门槛回廊','未知握手','月背门扉'],['引力游丝','握手协议体','门槛纠错者','月背接引机'],['引力纤维','协议密钥','月背坐标核'],'月背共振','门槛黑刃','接引者外装']
 ];
 
+// 每章技能石的机制模板：目标、效果、段数和充能事件均服务于章节叙事。
+const stoneStyles = [
+  ['FIRST','DAMAGE',2,'CAST','ANY_TYPE','NORMAL','苏醒后的短促双斩'],
+  ['RANDOM_ENEMY','DAMAGE',3,'DEAL_DAMAGE','ANY',null,'雨滴般随机追击'],
+  ['FRONT_ROW','DAMAGE',1,'CAST','ANY_TYPE','NORMAL','沿轨道横扫前排'],
+  ['ALL_ENEMY','DAMAGE',1,'TAKE_DAMAGE','ANY',null,'受击蓄积后释放电弧'],
+  ['BACK_ROW','DAMAGE',2,'KILL','ANY',null,'航标锁定敌方后排'],
+  ['FIRST','DAMAGE',4,'CAST','ANY_TYPE','NORMAL','伺服结构连续冲压'],
+  ['FRONT_ROW','DAMAGE',2,'DEAL_DAMAGE','ANY_ELEMENT',null,'赤热铸线灼烧前排'],
+  ['RANDOM_ENEMY','DAMAGE',3,'TAKE_DAMAGE','ANY',null,'黑箱回放三段残响'],
+  ['ALL_ENEMY','DAMAGE',3,'CAST','ANY_TYPE','SMALL','蜂群协议覆盖全场'],
+  ['SELF','HEAL',1,'TAKE_DAMAGE','ANY',null,'炉压转化为自我修复'],
+  ['ALL_ENEMY','DAMAGE',1,'DEAL_DAMAGE','ANY',null,'雾镜折射扩散'],
+  ['SELF','HEAL',2,'CAST','ANY_TYPE','NORMAL','声纹回响修复躯体'],
+  ['ALLY_MIN_HP','HEAL',1,'DEAL_DAMAGE','ANY',null,'诊疗协议修复最低生命友军'],
+  ['ALL_ENEMY','DAMAGE',2,'CAST','ANY_TYPE','SMALL','静默频段震荡全场'],
+  ['RANDOM_ENEMY','DAMAGE',4,'DEAL_DAMAGE','ANY',null,'镜像在随机目标间折返'],
+  ['FIRST','DAMAGE',2,'KILL','ANY',null,'升空动能贯穿首位目标'],
+  ['ALL_ALLY','HEAL',1,'TAKE_DAMAGE','ANY',null,'备份数据修复全体己方'],
+  ['FRONT_ROW','DAMAGE',3,'CAST','ANY_TYPE','NORMAL','失重状态切开前排'],
+  ['ENEMY_MAX_ATK','DAMAGE',1,'DEAL_DAMAGE','ANY',null,'观测阵列锁定最高攻击目标'],
+  ['ALL_ENEMY','DAMAGE',2,'CAST','ANY_TYPE','SMALL','月背协议与全场共振']
+];
+
 const q = v => v == null ? 'NULL' : `'${String(v).replace(/'/g,"''")}'`;
 const cleanNumber = n => String(Number(Number(n).toFixed(8)));
 const formula = m => JSON.stringify([{kind:'PARAM',paramMode:'READ',readRole:'SELF',readCategory:'ATTR',readKey:'ATK'},{kind:'OP',op:'*'},{kind:'PARAM',paramMode:'LITERAL',value:cleanNumber(m)}]);
@@ -38,13 +62,20 @@ const lines = [];
 const p = s => lines.push(s);
 const now = 'NOW()';
 
-function item(id, code, name, type, sort, remark, chargeSlots=0) {
-  p(`INSERT INTO app_item (id,code,name,item_type,max_stack,sort,enable,remark,charge_skill_slot_count,CREATE_TIME,UPDATE_TIME) VALUES (${q(id)},${q(code)},${q(name)},${q(type)},${type==='MATERIAL'?99:1},${sort},1,${q(remark)},${chargeSlots},${now},${now});`);
+function item(id, code, name, type, sort, remark, chargeSlots=0, basicSlots=0) {
+  p(`INSERT INTO app_item (id,code,name,item_type,max_stack,sort,enable,remark,charge_skill_slot_count,basic_passive_slot_count,CREATE_TIME,UPDATE_TIME) VALUES (${q(id)},${q(code)},${q(name)},${q(type)},${type==='MATERIAL'?99:1},${sort},1,${q(remark)},${chargeSlots},${basicSlots},${now},${now});`);
 }
-function skill(id,name,type,charge,mul,target,element,sort) {
-  p(`INSERT INTO app_active_skill (id,name,skill_type,skill_school,damage_element,code,need_charge_mode,need_charge,max_cast_skill,max_cast_global,max_cast_all_means,max_cast_role,sort,enable,remark,CREATE_TIME,UPDATE_TIME) VALUES (${q(id)},${q(name)},${q(type)},'脉冲',${q(element)},${q(id)},'MANUAL',${charge},0,0,0,0,${sort},1,'霓虹远征主线技能',${now},${now});`);
-  p(`INSERT INTO app_skill_effect (id,skill_id,name,target_type,effect_type,formula_json,hit_segments,sort,CREATE_TIME,UPDATE_TIME) VALUES (${q('SEF_'+id)},${q(id)},${q(name)},${q(target)},'DAMAGE',${q(formula(mul))},1,0,${now},${now});`);
-  p(`INSERT INTO app_skill_charge (id,skill_id,name,condition_type,scope,charge_gain,skill_charge_event,skill_charge_match,match_skill_type,sort,CREATE_TIME,UPDATE_TIME) VALUES (${q('SCH_'+id)},${q(id)},'普攻充能','SKILL_CHARGE','GLOBAL',1,'CAST','ANY_TYPE','NORMAL',0,${now},${now});`);
+function skill(id,name,type,charge,mul,target,element,sort,style) {
+  const effect=style?.[1]||'DAMAGE', hits=style?.[2]||1, event=style?.[3]||'CAST';
+  const match=style?.[4]||'ANY_TYPE', matchType=style?.[5]||(style?.[4]?'':'NORMAL'), flavor=style?.[6]||'章节战斗技能';
+  p(`INSERT INTO app_active_skill (id,name,skill_type,skill_school,damage_element,code,need_charge_mode,need_charge,max_cast_skill,max_cast_global,max_cast_all_means,max_cast_role,sort,enable,remark,CREATE_TIME,UPDATE_TIME) VALUES (${q(id)},${q(name)},${q(type)},'脉冲',${q(element)},${q(id)},'MANUAL',${charge},0,0,0,0,${sort},1,${q(flavor)},${now},${now});`);
+  p(`INSERT INTO app_skill_effect (id,skill_id,name,target_type,effect_type,formula_json,hit_segments,sort,remark,CREATE_TIME,UPDATE_TIME) VALUES (${q('SEF_'+id)},${q(id)},${q(name)},${q(target)},${q(effect)},${q(formula(mul))},${hits},0,${q(flavor)},${now},${now});`);
+  p(`INSERT INTO app_skill_charge (id,skill_id,name,condition_type,scope,charge_gain,skill_charge_event,skill_charge_match,match_skill_type,match_damage_element,sort,remark,CREATE_TIME,UPDATE_TIME) VALUES (${q('SCH_'+id)},${q(id)},${q(event==='CAST'?'释放充能':event==='TAKE_DAMAGE'?'受击充能':event==='DEAL_DAMAGE'?'伤害充能':'击杀充能')},'SKILL_CHARGE','GLOBAL',1,${q(event)},${q(match)},${matchType?q(matchType):'NULL'},${match==='ANY_ELEMENT'?q(element):'NULL'},0,${q(flavor)},${now},${now});`);
+}
+function passive(id,name,key,value,itemId,sort,remark) {
+  p(`INSERT INTO app_passive_skill (id,name,code,passive_type,condition_mode,sort,enable,remark,CREATE_TIME,UPDATE_TIME) VALUES (${q(id)},${q(name)},${q(id)},'OUT_BASIC','UNLIMITED',${sort},1,${q(remark)},${now},${now});`);
+  p(`INSERT INTO app_passive_effect (id,skill_id,attr_key,attr_dir,value_num,sort,remark,CREATE_TIME,UPDATE_TIME) VALUES (${q('PSE_'+id)},${q(id)},${q(key)},'INCREASE',${value},0,${q(remark)},${now},${now});`);
+  p(`INSERT INTO app_item_default_passive (id,item_id,passive_skill_id,passive_type,slot_no,sort,CREATE_TIME,UPDATE_TIME) VALUES (${q('IDP_'+id)},${q(itemId)},${q(id)},'OUT_BASIC',1,0,${now},${now});`);
 }
 
 p('-- 霓虹远征第一篇章：20 大关 × 5 小关。由 tools/gen_neon_mainline_20x5.js 生成。');
@@ -61,8 +92,9 @@ p("DELETE FROM app_player_stage_level WHERE level_id LIKE 'SLV_N20_%';");
 p("DELETE FROM app_player_stage_chapter WHERE chapter_id LIKE 'SCP_N20_%';");
 p("DELETE FROM app_stage WHERE id LIKE 'SLV_N20_%'; DELETE FROM app_stage WHERE id LIKE 'SCP_N20_%';");
 p("DELETE FROM app_monster_drop WHERE id LIKE 'MDP_N20_%'; DELETE FROM app_recipe_material WHERE id LIKE 'RCM_N20_%'; DELETE FROM app_recipe WHERE id LIKE 'RCP_N20_%';");
-p("DELETE FROM app_item_default_skill WHERE id LIKE 'IDS_N20_%'; DELETE FROM app_item_weapon WHERE id LIKE 'WPN_N20_%'; DELETE FROM app_item_armor WHERE id LIKE 'ARM_N20_%'; DELETE FROM app_item_accessory WHERE id LIKE 'ACC_N20_%'; DELETE FROM app_item_material WHERE id LIKE 'MAT_N20_%';");
+p("DELETE FROM app_item_default_skill WHERE id LIKE 'IDS_N20_%'; DELETE FROM app_item_default_passive WHERE id LIKE 'IDP_N20_%'; DELETE FROM app_item_weapon WHERE id LIKE 'WPN_N20_%'; DELETE FROM app_item_armor WHERE id LIKE 'ARM_N20_%'; DELETE FROM app_item_gloves WHERE id LIKE 'GLO_N20_%'; DELETE FROM app_item_helmet WHERE id LIKE 'HEL_N20_%'; DELETE FROM app_item_legs WHERE id LIKE 'LEG_N20_%'; DELETE FROM app_item_accessory WHERE id LIKE 'ACC_N20_%'; DELETE FROM app_item_material WHERE id LIKE 'MAT_N20_%';");
 p("DELETE FROM app_skill_charge WHERE skill_id LIKE 'ASK_N20_%'; DELETE FROM app_skill_effect WHERE skill_id LIKE 'ASK_N20_%'; DELETE FROM app_active_skill WHERE id LIKE 'ASK_N20_%';");
+p("DELETE FROM app_passive_effect WHERE skill_id LIKE 'PSK_N20_%'; DELETE FROM app_passive_skill WHERE id LIKE 'PSK_N20_%';");
 p("DELETE FROM app_monster WHERE id LIKE 'MST_N20_%'; DELETE FROM app_item WHERE id LIKE 'ITM_N20_%';");
 p(`INSERT INTO app_stage (id,parent_id,kind,name,code,sort,enable,remark,CREATE_TIME,UPDATE_TIME) SELECT ${q(TYPE)},NULL,'TYPE','主线','MAIN',0,1,'霓虹远征',${now},${now} FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM app_stage WHERE id=${q(TYPE)});`);
 
@@ -74,28 +106,43 @@ chapters.forEach((c, ix) => {
   const [name,zone,intro,levels,mons,mats,skillName,weaponName,armorName]=c;
   const chapterId=`SCP_N20_${nn}`;
   const matIds=mats.map((m,i)=>`ITM_N20_${nn}_M${i+1}`);
-  const weapon=`ITM_N20_${nn}_W`, armor=`ITM_N20_${nn}_A`, accessory=`ITM_N20_${nn}_R`, stone=`ITM_N20_${nn}_S`;
+  const weapon=`ITM_N20_${nn}_W`, armor=`ITM_N20_${nn}_A`, gloves=`ITM_N20_${nn}_G`;
+  const helmet=`ITM_N20_${nn}_H`, legs=`ITM_N20_${nn}_L`, accessory=`ITM_N20_${nn}_R`, stone=`ITM_N20_${nn}_S`;
   const small=`ASK_N20_${nn}_S`, ult=`ASK_N20_${nn}_U`, player=`ASK_N20_${nn}_P`;
   const element=['PHYSICAL','SHOCK','BURN'][ix%3];
+  const stoneStyle=stoneStyles[ix];
   skill(small,`${zone}突击`,'SMALL',Math.min(8+Math.floor(no/3),14),1.15+no*.025,'FIRST',element,no*3);
   skill(ult,`${name}过载`,'ULTIMATE',Math.min(18+Math.floor(no/2),28),1.7+no*.045,'ALL_ENEMY',element,no*3+1);
-  skill(player,skillName,'SMALL',Math.min(5+Math.floor(no/4),10),1.25+no*.035,no%3===0?'ALL_ENEMY':'FIRST',element,no*3+2);
+  skill(player,skillName,'SMALL',Math.min(5+Math.floor(no/4),10),stoneStyle[1]==='HEAL'?0.75+no*.025:1.25+no*.035,stoneStyle[0],element,no*3+2,stoneStyle);
   mats.forEach((m,i)=>{ item(matIds[i],`n20_${nn}_m${i+1}`,m,'MATERIAL',no*100+i,`${zone}材料`); p(`INSERT INTO app_item_material (id,item_id,grade,CREATE_TIME,UPDATE_TIME) VALUES ('MAT_N20_${nn}_${i+1}',${q(matIds[i])},${1+Math.floor(ix/4)},${now},${now});`); });
-  item(weapon,`n20_${nn}_weapon`,weaponName,'WEAPON',no*100+10,`${zone}武器`);
-  item(armor,`n20_${nn}_armor`,armorName,'ARMOR',no*100+11,`${zone}护甲`);
-  item(accessory,`n20_${nn}_accessory`,`${name}信标`,'ACCESSORY',no*100+12,`${zone}饰品`);
-  item(stone,`n20_${nn}_stone`,`${skillName}技能石`,'SKILL_STONE',no*100+13,`装入技能槽后获得【${skillName}】`,1);
+  const glovesName=`${zone}触控护手`, helmetName=`${zone}感应头盔`, legsName=`${zone}稳定护腿`;
+  item(weapon,`n20_${nn}_weapon`,weaponName,'WEAPON',no*100+10,`附带充能技【${zone}突击】`,1);
+  item(armor,`n20_${nn}_armor`,armorName,'ARMOR',no*100+11,`附带生存被动`,0,1);
+  item(gloves,`n20_${nn}_gloves`,glovesName,'GLOVES',no*100+12,`附带输出被动`,0,1);
+  item(helmet,`n20_${nn}_helmet`,helmetName,'HELMET',no*100+13,`附带防护被动`,0,1);
+  item(legs,`n20_${nn}_legs`,legsName,'LEGS',no*100+14,`附带稳定被动`,0,1);
+  item(accessory,`n20_${nn}_accessory`,`${name}信标`,'ACCESSORY',no*100+15,`附带章节信标被动`,0,1);
+  item(stone,`n20_${nn}_stone`,`${skillName}技能石`,'SKILL_STONE',no*100+16,`装入技能槽后获得【${skillName}】：${stoneStyle[6]}`,1);
   p(`INSERT INTO app_item_weapon (id,item_id,base_atk,atk_speed_up_ratio,atk_speed_down_ratio,normal_skill_id,CREATE_TIME,UPDATE_TIME) VALUES ('WPN_N20_${nn}',${q(weapon)},${4+no*3},${Math.min(2+no*.2,6).toFixed(1)},0,${q(NORMAL)},${now},${now});`);
   p(`INSERT INTO app_item_armor (id,item_id,hp,defense,atk_speed_up_ratio,atk_speed_down_ratio,CREATE_TIME,UPDATE_TIME) VALUES ('ARM_N20_${nn}',${q(armor)},${25+no*18},${1+Math.floor(no*.8)},0,0,${now},${now});`);
+  p(`INSERT INTO app_item_gloves (id,item_id,hp,defense,atk_speed_up_ratio,atk_speed_down_ratio,remark,CREATE_TIME,UPDATE_TIME) VALUES ('GLO_N20_${nn}',${q(gloves)},${8+no*5},${Math.floor(no*.25)},${Math.min(1+no*.15,4).toFixed(2)},0,'章节输出护手',${now},${now});`);
+  p(`INSERT INTO app_item_helmet (id,item_id,hp,defense,atk_speed_up_ratio,atk_speed_down_ratio,remark,CREATE_TIME,UPDATE_TIME) VALUES ('HEL_N20_${nn}',${q(helmet)},${12+no*7},${1+Math.floor(no*.55)},0,0,'章节防护头盔',${now},${now});`);
+  p(`INSERT INTO app_item_legs (id,item_id,hp,defense,atk_speed_up_ratio,atk_speed_down_ratio,remark,CREATE_TIME,UPDATE_TIME) VALUES ('LEG_N20_${nn}',${q(legs)},${16+no*9},${1+Math.floor(no*.4)},0,0,'章节稳定护腿',${now},${now});`);
   p(`INSERT INTO app_item_accessory (id,item_id,remark,CREATE_TIME,UPDATE_TIME) VALUES ('ACC_N20_${nn}_R',${q(accessory)},'章节信标',${now},${now}),('ACC_N20_${nn}_S',${q(stone)},'技能石扩展复用饰品结构',${now},${now});`);
-  p(`INSERT INTO app_item_default_skill (id,item_id,skill_id,slot_no,sort,CREATE_TIME,UPDATE_TIME) VALUES ('IDS_N20_${nn}',${q(stone)},${q(player)},1,0,${now},${now});`);
-  const outs=[weapon,armor,accessory,stone];
-  outs.forEach((out,i)=>{ const rid=`RCP_N20_${nn}_${i+1}`; p(`INSERT INTO app_recipe (id,name,output_item_id,output_qty,unlock_chapter_id,sort,enable,remark,CREATE_TIME,UPDATE_TIME) VALUES (${q(rid)},${q((i===3?skillName+'技能石':[weaponName,armorName,name+'信标'][i])+'配方')},${q(out)},1,${q(chapterId)},${no*10+i},1,'随主线章节解锁',${now},${now});`); [[matIds[i%3],2+Math.floor(no/5)],[matIds[(i+1)%3],1+(i===3?1:0)]].forEach((x,j)=>p(`INSERT INTO app_recipe_material (id,recipe_id,item_id,quantity,sort,CREATE_TIME,UPDATE_TIME) VALUES ('RCM_N20_${nn}_${i+1}_${j+1}',${q(rid)},${q(x[0])},${x[1]},${j},${now},${now});`)); });
+  p(`INSERT INTO app_item_default_skill (id,item_id,skill_id,slot_no,sort,CREATE_TIME,UPDATE_TIME) VALUES ('IDS_N20_${nn}_W',${q(weapon)},${q(small)},1,0,${now},${now}),('IDS_N20_${nn}_S',${q(stone)},${q(player)},1,0,${now},${now});`);
+  passive(`PSK_N20_${nn}_A`,`${name}装甲共生`,'MAX_HP',12+no*5,armor,no*10,`${armorName}将章节材料转化为生命容量`);
+  passive(`PSK_N20_${nn}_G`,`${name}触控增幅`,'ATK',2+Math.floor(no*.7),gloves,no*10+1,`${glovesName}强化义体输出`);
+  passive(`PSK_N20_${nn}_H`,`${name}感应防壁`,'DEF',1+Math.floor(no*.45),helmet,no*10+2,`${helmetName}提前解析来袭信号`);
+  passive(`PSK_N20_${nn}_L`,`${name}步态稳定`,'MAX_HP',8+no*4,legs,no*10+3,`${legsName}维持战斗姿态`);
+  passive(`PSK_N20_${nn}_R`,`${name}信标同步`,no%2?'ATK':'DEF',1+Math.floor(no*.55),accessory,no*10+4,`${name}信标与主角义体同步`);
+  const outs=[weapon,armor,gloves,helmet,legs,accessory,stone];
+  const outNames=[weaponName,armorName,glovesName,helmetName,legsName,`${name}信标`,`${skillName}技能石`];
+  outs.forEach((out,i)=>{ const rid=`RCP_N20_${nn}_${i+1}`; p(`INSERT INTO app_recipe (id,name,output_item_id,output_qty,unlock_chapter_id,sort,enable,remark,CREATE_TIME,UPDATE_TIME) VALUES (${q(rid)},${q(outNames[i]+'配方')},${q(out)},1,${q(chapterId)},${no*10+i},1,'随主线章节解锁',${now},${now});`); [[matIds[i%3],2+Math.floor(no/5)],[matIds[(i+1)%3],1+(i===6?1:0)]].forEach((x,j)=>p(`INSERT INTO app_recipe_material (id,recipe_id,item_id,quantity,sort,CREATE_TIME,UPDATE_TIME) VALUES ('RCM_N20_${nn}_${i+1}_${j+1}',${q(rid)},${q(x[0])},${x[1]},${j},${now},${now});`)); });
   const monsterIds=mons.map((m,i)=>`MST_N20_${nn}_${i+1}`);
   mons.forEach((m,i)=>{ const rarity=i===3?'BOSS':i===2?'RARE':'NORMAL'; const mult=i===3?4.2:i===2?1.7:1; const hp=Math.round((35+no*25)*mult), atk=Math.round((5+no*2.2)*mult), def=Math.round(no*.75*mult), action=i===0?75:i===1?85:i===2?95:110; const size=rarity==='BOSS'?[2,4]:rarity==='RARE'?[1,2]:[1,1]; p(`INSERT INTO app_monster (id,name,rarity,role_category,grid_h,grid_w,base_atk,base_hp,base_def,base_action,sort,normal_skill_id,small_skill_id,ultimate_skill_id,remark,CREATE_TIME,UPDATE_TIME) VALUES (${q(monsterIds[i])},${q(m)},${q(rarity)},'MONSTER',${size[0]},${size[1]},${atk},${hp},${def},${action},${no*10+i},NULL,${i>=2?q(small):'NULL'},${i===3?q(ult):'NULL'},${q(zone+'生态单位')},${now},${now});`); const drops=i===3?[[matIds[2],100,1,2],[stone,12,1,1]]:i===2?[[matIds[1],75,1,2],[matIds[2],35,1,1]]:[[matIds[0],85,1,2],[matIds[1],30,1,1]]; drops.forEach((d,j)=>p(`INSERT INTO app_monster_drop (id,monster_id,item_id,drop_rate,min_qty,max_qty,sort,enable,remark,CREATE_TIME,UPDATE_TIME) VALUES ('MDP_N20_${nn}_${i+1}_${j+1}',${q(monsterIds[i])},${q(d[0])},${d[1]},${d[2]},${d[3]},${j},1,'章节生态掉落',${now},${now});`)); });
   p(`INSERT INTO app_stage (id,parent_id,kind,name,code,sort,enable,remark,CREATE_TIME,UPDATE_TIME) VALUES (${q(chapterId)},${q(TYPE)},'CHAPTER',${q(name)},${q('N20-'+nn)},${no},1,${q(intro)},${now},${now});`);
   levels.forEach((ln,li)=>{ const lv=li+1, lid=`SLV_N20_${nn}_${lv}`; const stamina=Math.min(1+Math.floor(ix/4),5); p(`INSERT INTO app_stage (id,parent_id,kind,name,code,sort,enable,remark,stamina_cost,CREATE_TIME,UPDATE_TIME) VALUES (${q(lid)},${q(chapterId)},'LEVEL',${q(ln)},${q(`N20-${nn}-${lv}`)},${lv},1,${q(`${intro}｜节点：${ln}`)},${stamina},${now},${now});`); const specs=lv===1?[0]:lv===2?[0,1]:lv===3?[0,1,1]:lv===4?[1,2]:[3]; const spots=[[2,4],[0,4],[4,4],[1,3]]; specs.forEach((mi,si)=>{ const sp=spots[si]; p(`INSERT INTO app_stage_level_monster (id,level_id,monster_id,pos_col,pos_row,sort,CREATE_TIME,UPDATE_TIME) VALUES ('SLM_N20_${nn}_${lv}_${si+1}',${q(lid)},${q(monsterIds[mi])},${sp[0]},${sp[1]},${si},${now},${now});`); }); if(lv===5) p(`INSERT INTO app_stage_first_reward (id,stage_id,item_id,qty,sort,CREATE_TIME,UPDATE_TIME) VALUES ('SFR_N20_${nn}',${q(lid)},${q(matIds[2])},1,0,${now},${now});`); });
-  story.push(`## 第${no}章　${name}`,'',intro,'',...levels.map((x,i)=>`- ${no}-${i+1} ${x}：${i===0?'进入并辨认区域规则':i===1?'遭遇基础生态与资源':i===2?'发现异常线索进一步扩大':i===3?'突破精英封锁并取得关键材料':'击败守关单位，获得前往下一章的坐标'}`),'',`怪物：${mons.join('、')}。材料：${mats.join('、')}。装备：${weaponName}、${armorName}、${name}信标。技能石：${skillName}。`,'');
+  story.push(`## 第${no}章　${name}`,'',intro,'',...levels.map((x,i)=>`- ${no}-${i+1} ${x}：${i===0?'进入并辨认区域规则':i===1?'遭遇基础生态与资源':i===2?'发现异常线索进一步扩大':i===3?'突破精英封锁并取得关键材料':'击败守关单位，获得前往下一章的坐标'}`),'',`怪物：${mons.join('、')}。材料：${mats.join('、')}。装备：${weaponName}、${armorName}、${glovesName}、${helmetName}、${legsName}、${name}信标。技能石【${skillName}】：${stoneStyle[6]}。`,'');
 });
 
 p('COMMIT; SET FOREIGN_KEY_CHECKS=1;');
