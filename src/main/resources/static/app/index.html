@@ -11,10 +11,10 @@
   <link rel="stylesheet" href="css/components.css">
   <link rel="stylesheet" href="css/modal.css">
   <link rel="stylesheet" href="css/auth.css">
-  <link rel="stylesheet" href="css/home.css?v=20260809a">
+  <link rel="stylesheet" href="css/home.css?v=20260809b">
   <link rel="stylesheet" href="css/layout.css">
   <link rel="stylesheet" href="css/deploy.css?v=20260809a">
-  <link rel="stylesheet" href="css/prep.css?v=20260809c">
+  <link rel="stylesheet" href="css/prep.css?v=20260809d">
   <link rel="stylesheet" href="css/warehouse.css">
   <link rel="stylesheet" href="css/craft.css">
   <script src="js/dev-live.js"></script>
@@ -30,7 +30,7 @@
 
   <header v-if="tab === 'home'" class="home-hud">
     <div class="home-hud-user" @click="openHeroDetail">
-      <div class="home-hud-avatar art-slot" data-art="char/hero-idle.png">
+      <div class="home-hud-avatar art-ready" :style="protagonistArtStyle">
         <span>{{ (hero && hero.name ? hero.name.charAt(0) : '主') }}</span>
       </div>
       <div class="home-hud-meta">
@@ -86,7 +86,7 @@
       </div>
       <div v-else-if="hero" class="stage-char">
         <div class="hero-actor" @click="openHeroDetail">
-          <div class="hero-body art-slot" data-art="char/hero-idle.png">
+          <div class="hero-body art-ready" :style="protagonistArtStyle">
             <div class="hero-head"></div>
           </div>
           <div class="stage-shadow art-slot" data-art="home/shadow.png"></div>
@@ -194,7 +194,7 @@
                 <span v-else class="equip-slot-sil art-slot" data-art="equip/slot-weapon.svg">{{ equipSilhouette('WEAPON') }}</span>
                 <span class="equip-slot-label">{{ slotItemName('WEAPON') || '武器' }}</span>
               </div>
-              <div class="equip-doll-body art-slot" style="grid-area:body" data-art="char/hero-idle.png" @click="openPrepRoleDetail">
+              <div class="equip-doll-body art-ready" :style="[protagonistArtStyle, { gridArea: 'body' }]" @click="openPrepRoleDetail">
                 <div class="equip-doll-figure">
                   <div class="hero-body"><div class="hero-head"></div></div>
                 </div>
@@ -1562,6 +1562,13 @@ createApp({
     },
     prepDisplayRole() {
       return this.prepMainRole || this.hero;
+    },
+    protagonistArtStyle() {
+      var base = (window.APP_CONFIG && window.APP_CONFIG.artBase) || 'art/';
+      return {
+        backgroundImage: 'url("' + base + 'char/hero-idle.png")',
+        backgroundRepeat: 'no-repeat'
+      };
     },
     prepSkillSlotsLeft() {
       return this.normalizePrepSkillSlots(this.prepSkillSlots).slice(0, 4);
