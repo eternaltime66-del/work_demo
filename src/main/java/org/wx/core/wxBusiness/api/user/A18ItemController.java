@@ -11,7 +11,6 @@ import org.wx.core.wxBase.factory.ErrorFactory;
 import org.wx.core.wxBusiness.account.entity.enums.MemberRole;
 import org.wx.core.wxBusiness.game.entity.vo.CraftItemDetailVo;
 import org.wx.core.wxBusiness.game.entity.Item;
-import org.wx.core.wxBusiness.game.entity.enums.ItemType;
 import org.wx.core.wxBusiness.game.service.ItemDetailService;
 import org.wx.core.wxBusiness.game.service.ItemService;
 import org.wx.core.wxBusiness.log.annotation.WxRequestLog;
@@ -39,14 +38,13 @@ public class A18ItemController {
         ErrorFactory.throwError(vo == null, "物品不存在");
         return WxResult.success(vo);
     }
-    /** 玩家图鉴：包含全部启用的非材料物品，以及尚无获取途径的预览物品。 */
+    /** 玩家图鉴：包含全部启用物品，以及尚无获取途径的预览物品。 */
     @PostMapping("/compendium")
     @WxRequestLog(recordRequest = false, recordResponse = false)
     @NeedHeader(roles = MemberRole.USER)
     public WxResult<List<Item>> compendium() {
         List<Item> rows = itemService.find()
                 .eq(org.wx.core.wxBusiness.game.entity.Item::getEnable, true)
-                .ne(org.wx.core.wxBusiness.game.entity.Item::getItemType, ItemType.MATERIAL)
                 .orderByAsc(org.wx.core.wxBusiness.game.entity.Item::getSort)
                 .list();
         return WxResult.success(rows);
