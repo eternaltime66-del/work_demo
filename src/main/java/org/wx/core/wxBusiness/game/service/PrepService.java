@@ -43,6 +43,10 @@ public class PrepService {
     private AtkSpeedService atkSpeedService;
     @Resource
     private PlayerRoleSkillService playerRoleSkillService;
+    @Resource
+    private ItemDefaultSkillService itemDefaultSkillService;
+    @Resource
+    private ActiveSkillService activeSkillService;
 
     public PrepSummaryVo getSummary(String uid) {
         playerRoleService.ensureMainRole(uid);
@@ -58,17 +62,34 @@ public class PrepService {
         vo.setBattleBag(buildBattleBagVo(uid));
         vo.setWarehouse(warehouseService.getWarehouseDetail(uid));
         // 备战 8 槽暂不展示角色/装备技能（技能改在角色详情一览）
-        vo.setSkillSlots(buildEmptySkillSlots());
+        vo.setSkillSlots(buildSkillSlots(uid));
         return vo;
     }
 
     /** 固定 8 槽：左 1~4、右 5~8；暂留空位 */
-    private List<PrepSkillSlotVo> buildEmptySkillSlots() {
+    private List<PrepSkillSlotVo> buildSkillSlots(String uid) {
+        PlayerEquip equip = playerEquipService.getOrInit(uid);
         List<PrepSkillSlotVo> slots = new ArrayList<>(8);
         for (int i = 1; i <= 8; i++) {
             PrepSkillSlotVo slot = new PrepSkillSlotVo();
             slot.setSlotNo(i);
             slot.setEmpty(true);
+            EquipSlot equipSlot = EquipSlot.valueOf("SKILL_" + i);
+            String itemId = equipSlot.getItemId(equip);
+            if (itemId != null && !itemId.isBlank()) {
+                itemDefaultSkillService.listByItemId(itemId).stream()
+                        .map(row -> activeSkillService.getById(row.getSkillId()))
+                        .filter(skill -> skill != null && Boolean.TRUE.equals(skill.getEnable()))
+                        .filter(skill -> skill.getSkillType() != null)
+                        .filter(skill -> skill.getSkillType() != org.wx.core.wxBusiness.game.entity.enums.ActiveSkillType.NORMAL)
+                        .findFirst()
+                        .ifPresent(skill -> {
+                            slot.setEmpty(false);
+                            slot.setSkillId(skill.getId());
+                            slot.setSkillName(skill.getName());
+                            slot.setSkillType(skill.getSkillType().name());
+                        });
+            }
             slots.add(slot);
         }
         return slots;

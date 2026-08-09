@@ -322,6 +322,14 @@ public class PlayerEquipService extends WxServiceImpl<PlayerEquipMapper, PlayerE
             case ACCESSORY_1 -> wrapper.set(PlayerEquip::getAccessory1ItemId, itemId);
             case ACCESSORY_2 -> wrapper.set(PlayerEquip::getAccessory2ItemId, itemId);
             case ACCESSORY_3 -> wrapper.set(PlayerEquip::getAccessory3ItemId, itemId);
+            case SKILL_1 -> wrapper.set(PlayerEquip::getSkill1ItemId, itemId);
+            case SKILL_2 -> wrapper.set(PlayerEquip::getSkill2ItemId, itemId);
+            case SKILL_3 -> wrapper.set(PlayerEquip::getSkill3ItemId, itemId);
+            case SKILL_4 -> wrapper.set(PlayerEquip::getSkill4ItemId, itemId);
+            case SKILL_5 -> wrapper.set(PlayerEquip::getSkill5ItemId, itemId);
+            case SKILL_6 -> wrapper.set(PlayerEquip::getSkill6ItemId, itemId);
+            case SKILL_7 -> wrapper.set(PlayerEquip::getSkill7ItemId, itemId);
+            case SKILL_8 -> wrapper.set(PlayerEquip::getSkill8ItemId, itemId);
         }
         this.update(wrapper);
     }

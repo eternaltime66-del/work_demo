@@ -203,6 +203,7 @@
         GLOVES: '/back/item/gloves/list',
         HELMET: '/back/item/helmet/list',
         ACCESSORY: '/back/item/accessory/list',
+        SKILL_STONE: '/back/item/accessory/list',
         LEGS: '/back/item/legs/list'
       };
       return listJson(pathMap[type], body, page || { current: 1, size: 500 });
@@ -215,6 +216,7 @@
         GLOVES: '/back/item/gloves/update',
         HELMET: '/back/item/helmet/update',
         ACCESSORY: '/back/item/accessory/update',
+        SKILL_STONE: '/back/item/accessory/update',
         LEGS: '/back/item/legs/update'
       };
       return request(pathMap[type], { json: true, body: body || {} }).then(ensureSuccess);

@@ -44,6 +44,15 @@ public class PlayerEquip extends WxBaseEntity<PlayerEquip> {
 
     private String accessory3ItemId;
 
+    private String skill1ItemId;
+    private String skill2ItemId;
+    private String skill3ItemId;
+    private String skill4ItemId;
+    private String skill5ItemId;
+    private String skill6ItemId;
+    private String skill7ItemId;
+    private String skill8ItemId;
+
     public List<String> listEquippedItemIds() {
         Set<String> ids = new LinkedHashSet<>();
         for (EquipSlot slot : EquipSlot.values()) {

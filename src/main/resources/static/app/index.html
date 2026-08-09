@@ -1525,6 +1525,7 @@ createApp({
         { value: 'GLOVES', label: '护手' },
         { value: 'LEGS', label: '护腿' },
         { value: 'ACCESSORY', label: '饰品' },
+        { value: 'SKILL_STONE', label: '技能石' },
         { value: 'MATERIAL', label: '材料' }
       ],
       accessorySlots: [
@@ -1538,7 +1539,8 @@ createApp({
         GLOVES: ['GLOVES'],
         HELMET: ['HELMET'],
         LEGS: ['LEGS'],
-        ACCESSORY: ['ACCESSORY_1', 'ACCESSORY_2', 'ACCESSORY_3']
+        ACCESSORY: ['ACCESSORY_1', 'ACCESSORY_2', 'ACCESSORY_3'],
+        SKILL_STONE: ['SKILL_1', 'SKILL_2', 'SKILL_3', 'SKILL_4', 'SKILL_5', 'SKILL_6', 'SKILL_7', 'SKILL_8']
       },
       slotLabelMap: {
         WEAPON: '武器',
@@ -1548,7 +1550,9 @@ createApp({
         HELMET: '头盔',
         ACCESSORY_1: '饰品1',
         ACCESSORY_2: '饰品2',
-        ACCESSORY_3: '饰品3'
+        ACCESSORY_3: '饰品3',
+        SKILL_1: '技能1', SKILL_2: '技能2', SKILL_3: '技能3', SKILL_4: '技能4',
+        SKILL_5: '技能5', SKILL_6: '技能6', SKILL_7: '技能7', SKILL_8: '技能8'
       },
       _dragDepth: 0
     };
@@ -3025,6 +3029,7 @@ createApp({
         GLOVES: '护手',
         HELMET: '头盔',
         ACCESSORY: '饰品',
+        SKILL_STONE: '技能石',
         LEGS: '护腿'
       }[type] || '其他物品';
     },
@@ -3217,7 +3222,9 @@ createApp({
         LEGS: '🥾',
         ACCESSORY_1: '💍',
         ACCESSORY_2: '💍',
-        ACCESSORY_3: '💍'
+        ACCESSORY_3: '💍',
+        SKILL_1: '◆', SKILL_2: '◆', SKILL_3: '◆', SKILL_4: '◆',
+        SKILL_5: '◆', SKILL_6: '◆', SKILL_7: '◆', SKILL_8: '◆'
       }[slot] || '◆';
     },
     slotRarity(slot) {

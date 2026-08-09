@@ -1,22 +1,15 @@
 package org.wx.core.wxBusiness.game.entity.enums;
 
-/**
- * 物品类型
- */
+/** 物品类型。 */
 public enum ItemType {
-    /** 材料 */
     MATERIAL,
-    /** 武器 */
     WEAPON,
-    /** 护甲 */
     ARMOR,
-    /** 护手 */
     GLOVES,
-    /** 头盔 */
     HELMET,
-    /** 饰品 */
     ACCESSORY,
-    /** 护腿 */
+    /** 装入技能槽后提供主动技能的特殊装备。 */
+    SKILL_STONE,
     LEGS;
 
     public String label() {
@@ -27,6 +20,7 @@ public enum ItemType {
             case GLOVES -> "护手";
             case HELMET -> "头盔";
             case ACCESSORY -> "饰品";
+            case SKILL_STONE -> "技能石";
             case LEGS -> "护腿";
         };
     }

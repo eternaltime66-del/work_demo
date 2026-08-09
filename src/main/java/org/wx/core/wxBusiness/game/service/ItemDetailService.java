@@ -157,6 +157,8 @@ public class ItemDetailService {
             case LEGS -> fillLegs(d, itemLegsService.getByItemId(item.getId()));
             case ACCESSORY -> {
             }
+            case SKILL_STONE -> {
+            }
             case MATERIAL -> {
                 ItemMaterial ext = itemMaterialService.getByItemId(item.getId());
                 if (ext != null) {
