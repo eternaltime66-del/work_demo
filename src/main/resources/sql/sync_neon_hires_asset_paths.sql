@@ -13,4 +13,14 @@ UPDATE app_item SET icon='art/item/hires/n20_19_helmet.png' WHERE code='n20_19_h
 UPDATE app_item SET icon='art/item/hires/n20_06_gloves.png' WHERE code='n20_06_gloves';
 UPDATE app_item SET icon='art/item/hires/n20_16_legs.png' WHERE code='n20_16_legs';
 UPDATE app_item SET icon='art/item/hires/n20_18_m2.png' WHERE code='n20_18_m2';
+UPDATE app_item SET icon='art/item/hires/n20_core_5.png' WHERE code='n20_core_5';
+UPDATE app_item SET icon='art/item/hires/n20_core_7.png' WHERE code='n20_core_7';
+UPDATE app_item SET icon='art/item/hires/n20_core_8.png' WHERE code='n20_core_8';
+UPDATE app_item SET icon='art/item/hires/n20_core_9.png' WHERE code='n20_core_9';
+UPDATE app_item SET icon='art/item/hires/n20_core_10.png' WHERE code='n20_core_10';
+UPDATE app_item SET icon='art/item/hires/n20_future_1.png' WHERE code='n20_future_1';
+UPDATE app_item SET icon='art/item/hires/n20_future_2.png' WHERE code='n20_future_2';
+UPDATE app_item SET icon='art/item/hires/n20_future_3.png' WHERE code='n20_future_3';
+UPDATE app_item SET icon='art/item/hires/n20_future_4.png' WHERE code='n20_future_4';
+UPDATE app_item SET icon='art/item/hires/n20_future_5.png' WHERE code='n20_future_5';
 COMMIT;
