@@ -80,6 +80,16 @@ function skill(id,name,type,charge,mul,target,element,sort,style) {
     p(`INSERT INTO app_skill_charge (id,skill_id,name,condition_type,scope,charge_gain,skill_charge_event,skill_charge_match,match_skill_type,match_damage_element,sort,remark,CREATE_TIME,UPDATE_TIME) VALUES (${q('SCH_'+id)},${q(id)},${q(chargeLabel)},'SKILL_CHARGE','GLOBAL',1,${q(event)},${q(match)},${matchType?q(matchType):'NULL'},${match==='ANY_ELEMENT'?q(element):'NULL'},0,${q(flavor)},${now},${now});`);
   }
 }
+function buff(id,name,kind,beneficial,stackMode,maxStacks,duration,config,sort,remark) {
+  const attr=config.attr||null, dir=config.dir||null, value=config.value;
+  const pulseEvery=config.pulseEvery||null, pulseEffect=config.pulseEffect||null;
+  const element=config.element||'PHYSICAL', pulseTarget=config.pulseTarget||null;
+  if (!VALID_DAMAGE_ELEMENTS.has(element)) throw new Error(`invalid buff DamageElement ${element} for ${id}`);
+  p(`INSERT INTO app_buff_def (id,name,code,buff_kind,beneficial,dispelable,stack_mode,max_stacks,duration_av,attr_key,attr_dir,formula_json,pulse_every_av,pulse_effect_type,damage_element,pulse_target_type,sort,enable,remark,CREATE_TIME,UPDATE_TIME) VALUES (${q(id)},${q(name)},${q(id)},${q(kind)},${beneficial?1:0},1,${q(stackMode)},${maxStacks},${duration},${attr?q(attr):'NULL'},${dir?q(dir):'NULL'},${value!=null?q(literalFormula(value)):'NULL'},${pulseEvery??'NULL'},${pulseEffect?q(pulseEffect):'NULL'},${q(element)},${pulseTarget?q(pulseTarget):'NULL'},${sort},1,${q(remark)},${now},${now});`);
+}
+function activeOutput(skillId,outputs,remark) {
+  outputs.forEach((o,i)=>p(`INSERT INTO app_skill_output (id,skill_id,passive_skill_id,name,output_kind,target_type,attr_key,attr_dir,effect_type,damage_element,formula_json,hit_segments,trigger_rate,duration_av,buff_def_id,sort,remark,CREATE_TIME,UPDATE_TIME) VALUES (${q('SOUT_'+skillId+'_'+(i+1))},${q(skillId)},NULL,${q(o.name)},${q(o.kind)},${q(o.target)},${o.attr?q(o.attr):'NULL'},${o.dir?q(o.dir):'NULL'},${o.effect?q(o.effect):'NULL'},${q(o.element||'PHYSICAL')},${o.literal!=null?q(literalFormula(o.literal)):o.mul!=null?q(formula(o.mul)):'NULL'},${o.hits||1},${o.rate??100},${o.duration||0},${o.buff?q(o.buff):'NULL'},${i},${q(remark)},${now},${now});`));
+}
 function passive(id,name,key,value,itemId,sort,remark) {
   p(`INSERT INTO app_passive_skill (id,name,code,passive_type,condition_mode,sort,enable,remark,CREATE_TIME,UPDATE_TIME) VALUES (${q(id)},${q(name)},${q(id)},'OUT_BASIC','UNLIMITED',${sort},1,${q(remark)},${now},${now});`);
   p(`INSERT INTO app_passive_effect (id,skill_id,attr_key,attr_dir,value_num,sort,remark,CREATE_TIME,UPDATE_TIME) VALUES (${q('PSE_'+id)},${q(id)},${q(key)},'INCREASE',${value},0,${q(remark)},${now},${now});`);
@@ -94,9 +104,9 @@ function battlePassive(id,name,type,itemId,sort,remark,config,outputs) {
   if (config.refElement && !VALID_DAMAGE_ELEMENTS.has(config.refElement)) throw new Error(`invalid ref DamageElement ${config.refElement} for ${id}`);
   outputs.forEach(o=>{ if (o.element && !VALID_DAMAGE_ELEMENTS.has(o.element)) throw new Error(`invalid output DamageElement ${o.element} for ${id}`); });
   const event=config.event||null, rule=config.rule||null, elapsed=config.elapsed||0, max=config.max||0;
-  const match=config.match||null, refType=config.refType||null, refElement=config.refElement||null;
-  p(`INSERT INTO app_passive_skill (id,name,code,passive_type,condition_mode,skill_match_mode,ref_skill_type,ref_damage_element,max_trigger_per_battle,combat_event,start_apply_rule,start_elapsed_av,sort,enable,remark,CREATE_TIME,UPDATE_TIME) VALUES (${q(id)},${q(name)},${q(id)},${q(type)},'UNLIMITED',${match?q(match):'NULL'},${refType?q(refType):'NULL'},${refElement?q(refElement):'NULL'},${max},${event?q(event):'NULL'},${rule?q(rule):'NULL'},${elapsed},${sort},1,${q(remark)},${now},${now});`);
-  outputs.forEach((o,i)=>p(`INSERT INTO app_skill_output (id,skill_id,passive_skill_id,name,output_kind,target_type,attr_key,attr_dir,effect_type,damage_element,formula_json,hit_segments,trigger_rate,duration_av,buff_def_id,sort,remark,CREATE_TIME,UPDATE_TIME) VALUES (${q('SOUT_'+id+'_'+(i+1))},NULL,${q(id)},${q(o.name)},${q(o.kind)},${q(o.target)},${o.attr?q(o.attr):'NULL'},${o.dir?q(o.dir):'NULL'},${o.effect?q(o.effect):'NULL'},${q(o.element||'PHYSICAL')},${o.literal!=null?q(literalFormula(o.literal)):o.mul!=null?q(formula(o.mul)):'NULL'},${o.hits||1},${o.rate??100},${o.duration||0},NULL,${i},${q(remark)},${now},${now});`));
+  const match=config.match||null, refType=config.refType||null, refElement=config.refElement||null, refSkill=config.refSkill||null;
+  p(`INSERT INTO app_passive_skill (id,name,code,passive_type,condition_mode,skill_match_mode,ref_skill_type,ref_damage_element,ref_skill_id,max_trigger_per_battle,combat_event,start_apply_rule,start_elapsed_av,sort,enable,remark,CREATE_TIME,UPDATE_TIME) VALUES (${q(id)},${q(name)},${q(id)},${q(type)},'UNLIMITED',${match?q(match):'NULL'},${refType?q(refType):'NULL'},${refElement?q(refElement):'NULL'},${refSkill?q(refSkill):'NULL'},${max},${event?q(event):'NULL'},${rule?q(rule):'NULL'},${elapsed},${sort},1,${q(remark)},${now},${now});`);
+  outputs.forEach((o,i)=>p(`INSERT INTO app_skill_output (id,skill_id,passive_skill_id,name,output_kind,target_type,attr_key,attr_dir,effect_type,damage_element,formula_json,hit_segments,trigger_rate,duration_av,buff_def_id,sort,remark,CREATE_TIME,UPDATE_TIME) VALUES (${q('SOUT_'+id+'_'+(i+1))},NULL,${q(id)},${q(o.name)},${q(o.kind)},${q(o.target)},${o.attr?q(o.attr):'NULL'},${o.dir?q(o.dir):'NULL'},${o.effect?q(o.effect):'NULL'},${q(o.element||'PHYSICAL')},${o.literal!=null?q(literalFormula(o.literal)):o.mul!=null?q(formula(o.mul)):'NULL'},${o.hits||1},${o.rate??100},${o.duration||0},${o.buff?q(o.buff):'NULL'},${i},${q(remark)},${now},${now});`));
   p(`INSERT INTO app_item_default_passive (id,item_id,passive_skill_id,passive_type,slot_no,sort,CREATE_TIME,UPDATE_TIME) VALUES (${q('IDP_'+id)},${q(itemId)},${q(id)},${q(type)},1,0,${now},${now});`);
 }
 
@@ -122,6 +132,23 @@ const coreBuilds = [
   ['月背共振刃','月背共振','BURN','AFTER_CAST_SKILL','ANY_TYPE','月背门槛信标','小技能唤起全场共振，兼具群伤与自我修复']
 ];
 
+const buildSchools = [
+  {code:'ARC',name:'电弧超导',element:'SHOCK',unlock:2,neg:'导电标记',pos:'超导回路',negKey:'TAKEN_ELEMENT_DMG_RATIO',posKey:'ATK_SPEED',negValue:7,posValue:6,desc:'叠加导电标记扩大电击伤害，释放技能建立超导攻速窗口'},
+  {code:'RUST',name:'锈潮猎杀',element:'PHYSICAL',unlock:6,neg:'装甲破译',pos:'猎杀动能',negKey:'TAKEN_PHYS_DMG_RATIO',posKey:'DEAL_PHYS_DMG_RATIO',negValue:8,posValue:7,desc:'破译敌方装甲，以击杀和物理追击滚动扩大优势'},
+  {code:'BURN',name:'熔核热链',element:'BURN',unlock:10,neg:'灼热裂口',pos:'余热循环',negKey:'TAKEN_ELEMENT_DMG_RATIO',posKey:'LIFE_STEAL',negValue:8,posValue:4,desc:'持续制造灼热裂口，并把高频火焰伤害转化为恢复'},
+  {code:'NOISE',name:'白噪折镜',element:'FREEZE',unlock:14,neg:'白噪失谐',pos:'镜面护持',negKey:'ATK_SPEED',posKey:'TAKEN_DMG_RATIO',negValue:7,posValue:6,desc:'降低敌方行动效率，通过镜面护持稳定承受伤害'},
+  {code:'CLOUD',name:'云墓观测',element:'PHYSICAL',unlock:18,neg:'观测锁定',pos:'备份协议',negKey:'TAKEN_DMG_RATIO',posKey:'FINAL_ATK',negValue:7,posValue:6,desc:'锁定高威胁目标，依靠击杀备份维持输出与恢复'},
+  {code:'MOON',name:'月背共振',element:'BURN',unlock:20,neg:'共振暴露',pos:'月背增幅',negKey:'TAKEN_ELEMENT_DMG_RATIO',posKey:'DEAL_ELEMENT_DMG_RATIO',negValue:10,posValue:9,desc:'用小技能维持共振暴露，在增幅窗口集中释放元素伤害'}
+];
+const buildFlavorNames = [
+  ['电脉引针','雷幕折返','超导线圈'],
+  ['锈蚀测绘','猎杀号令','破甲目镜'],
+  ['余烬播种','炉压回流','熔核心环'],
+  ['失谐白噪','镜面复写','折镜棱片'],
+  ['观测标定','备份唤醒','云墓记录仪'],
+  ['门槛谐振','月背回声','共振坐标环']
+];
+
 p('-- 霓虹远征第一篇章：20 大关 × 5 小关。由 tools/gen_neon_mainline_20x5.js 生成。');
 p('SET NAMES utf8mb4; SET FOREIGN_KEY_CHECKS=0; START TRANSACTION;');
 p(`DELETE FROM app_stage_first_reward WHERE stage_id IN (SELECT id FROM (SELECT s.id FROM app_stage s LEFT JOIN app_stage c ON s.parent_id=c.id WHERE s.parent_id=${q(TYPE)} OR c.parent_id=${q(TYPE)}) x);`);
@@ -137,13 +164,20 @@ p("DELETE FROM app_player_stage_chapter WHERE chapter_id LIKE 'SCP_N20_%';");
 p("DELETE FROM app_stage WHERE id LIKE 'SLV_N20_%'; DELETE FROM app_stage WHERE id LIKE 'SCP_N20_%';");
 p("DELETE FROM app_monster_drop WHERE id LIKE 'MDP_N20_%'; DELETE FROM app_recipe_material WHERE id LIKE 'RCM_N20_%'; DELETE FROM app_recipe WHERE id LIKE 'RCP_N20_%';");
 p("DELETE FROM app_item_default_skill WHERE id LIKE 'IDS_N20_%'; DELETE FROM app_item_default_passive WHERE id LIKE 'IDP%N20_%'; DELETE FROM app_item_weapon WHERE id LIKE 'WPN_N20_%'; DELETE FROM app_item_armor WHERE id LIKE 'ARM_N20_%'; DELETE FROM app_item_gloves WHERE id LIKE 'GLO_N20_%'; DELETE FROM app_item_helmet WHERE id LIKE 'HEL_N20_%'; DELETE FROM app_item_legs WHERE id LIKE 'LEG_N20_%'; DELETE FROM app_item_accessory WHERE id LIKE 'ACC_N20_%'; DELETE FROM app_item_material WHERE id LIKE 'MAT_N20_%';");
-p("DELETE FROM app_skill_charge WHERE skill_id LIKE 'ASK_N20_%'; DELETE FROM app_skill_effect WHERE skill_id LIKE 'ASK_N20_%'; DELETE FROM app_active_skill WHERE id LIKE 'ASK_N20_%';");
-p("DELETE FROM app_skill_output WHERE passive_skill_id LIKE 'PSK_N20_%'; DELETE FROM app_passive_effect WHERE skill_id LIKE 'PSK_N20_%'; DELETE FROM app_passive_condition WHERE skill_id LIKE 'PSK_N20_%'; DELETE FROM app_passive_skill WHERE id LIKE 'PSK_N20_%';");
+p("DELETE FROM app_skill_output WHERE skill_id LIKE 'ASK_N20_%' OR passive_skill_id LIKE 'PSK_N20_%'; DELETE FROM app_skill_charge WHERE skill_id LIKE 'ASK_N20_%'; DELETE FROM app_skill_effect WHERE skill_id LIKE 'ASK_N20_%'; DELETE FROM app_active_skill WHERE id LIKE 'ASK_N20_%';");
+p("DELETE FROM app_passive_effect WHERE skill_id LIKE 'PSK_N20_%'; DELETE FROM app_passive_condition WHERE skill_id LIKE 'PSK_N20_%'; DELETE FROM app_passive_skill WHERE id LIKE 'PSK_N20_%'; DELETE FROM app_buff_def WHERE id LIKE 'BFD_N20_%';");
 p("DELETE FROM app_monster WHERE id LIKE 'MST_N20_%'; DELETE FROM app_item WHERE id LIKE 'ITM_N20_%';");
 p(`INSERT INTO app_stage (id,parent_id,kind,name,code,sort,enable,remark,CREATE_TIME,UPDATE_TIME) SELECT ${q(TYPE)},NULL,'TYPE','主线','MAIN',0,1,'霓虹远征',${now},${now} FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM app_stage WHERE id=${q(TYPE)});`);
 
 const story=[];
 story.push('# 霓虹远征·第一篇章（1—20章）','', '> 本篇是可继续扩展的第一段远征：只揭开“月背网络”的入口，不揭晓主角最终身世，也不解决世界核心矛盾。','');
+
+buildSchools.forEach((b,i)=>{
+  const base=8000+i*10;
+  buff(`BFD_N20_${b.code}_NEG`,b.neg,'ATTR',false,'STACK',5,260,{attr:b.negKey,dir:b.negKey==='ATK_SPEED'?'DECREASE':'INCREASE',value:b.negValue,element:b.element},base,`${b.name}负面状态：${b.desc}`);
+  buff(`BFD_N20_${b.code}_POS`,b.pos,'ATTR',true,'STACK',4,240,{attr:b.posKey,dir:b.posKey==='TAKEN_DMG_RATIO'?'DECREASE':'INCREASE',value:b.posValue,element:b.element},base+1,`${b.name}正面状态：${b.desc}`);
+});
+buff('BFD_N20_BURN_DOT','熔核余烬','PULSE',false,'STACK',5,300,{value:7,pulseEvery:60,pulseEffect:'DAMAGE',element:'BURN',pulseTarget:'SELF'},8099,'熔核热链持续伤害；可叠层并刷新持续行动值');
 
 chapters.forEach((c, ix) => {
   const no=ix+1, nn=String(no).padStart(2,'0');
@@ -162,6 +196,16 @@ chapters.forEach((c, ix) => {
   skill(small,`${zone}突击`,'SMALL',Math.min(8+Math.floor(no/3),14),1.15+no*.025,'FIRST',element,no*3,smallStyle);
   skill(ult,`${name}过载`,'ULTIMATE',Math.min(18+Math.floor(no/2),28),1.7+no*.045,'ALL_ENEMY',element,no*3+1,ultStyle);
   skill(player,skillName,'SMALL',Math.min(5+Math.floor(no/4),10),stoneStyle[1]==='HEAL'?0.75+no*.025:1.25+no*.035,stoneStyle[0],element,no*3+2,stoneStyle);
+  const buildIndex=ix<4?0:ix<6?1:ix<10?2:ix<14?3:ix<18?4:5;
+  const school=buildSchools[buildIndex];
+  const playerMul=stoneStyle[1]==='HEAL'?0.75+no*.025:1.25+no*.035;
+  const playerOutputs=[{name:`${skillName}主效果`,kind:'EFFECT',target:stoneStyle[0],effect:stoneStyle[1],element,mul:playerMul,hits:stoneStyle[2]}];
+  if(stoneStyle[1]==='HEAL') playerOutputs.push({name:school.pos,kind:'APPEND_BUFF',target:'SELF',buff:`BFD_N20_${school.code}_POS`});
+  else {
+    playerOutputs.push({name:school.neg,kind:'APPEND_BUFF',target:stoneStyle[0],buff:`BFD_N20_${school.code}_NEG`,element:school.element});
+    if(school.code==='BURN') playerOutputs.push({name:'熔核余烬',kind:'APPEND_BUFF',target:stoneStyle[0],buff:'BFD_N20_BURN_DOT',element:'BURN',rate:65});
+  }
+  activeOutput(player,playerOutputs,`${skillName}已接入${school.name}流派循环：${school.desc}`);
   mats.forEach((m,i)=>{ item(matIds[i],`n20_${nn}_m${i+1}`,m,'MATERIAL',no*100+i,`${zone}材料`); p(`INSERT INTO app_item_material (id,item_id,grade,CREATE_TIME,UPDATE_TIME) VALUES ('MAT_N20_${nn}_${i+1}',${q(matIds[i])},${1+Math.floor(ix/4)},${now},${now});`); });
   const glovesName=`${zone}触控护手`, helmetName=`${zone}感应头盔`, legsName=`${zone}稳定护腿`;
   item(weapon,`n20_${nn}_weapon`,weaponName,'WEAPON',no*100+10,`附带充能技【${zone}突击】`,1);
@@ -207,6 +251,39 @@ chapters.forEach((c, ix) => {
 });
 
 // 每两章解锁一件可免费合成的流派核心。高昂用量让它成为长期目标，而不是替代普通章节装备。
+// 六套流派扩展包：每套两颗技能石 + 一件被动饰品，形成启动、维持、放大的完整循环。
+buildSchools.forEach((b,ix)=>{
+  const n=ix+1, tag=String(n).padStart(2,'0'), unlock=String(b.unlock).padStart(2,'0');
+  const names=buildFlavorNames[ix];
+  const stone1=`ITM_N20_BUILD_${tag}_S1`, stone2=`ITM_N20_BUILD_${tag}_S2`, accessory=`ITM_N20_BUILD_${tag}_R`;
+  const skill1=`ASK_N20_BUILD_${tag}_S1`, skill2=`ASK_N20_BUILD_${tag}_S2`;
+  item(stone1,`n20_build_${tag}_stone_1`,`${names[0]}技能石`,'SKILL_STONE',9000+n*10,`${b.name}启动石：造成${b.element}伤害并施加【${b.neg}】。${b.desc}`,1);
+  item(stone2,`n20_build_${tag}_stone_2`,`${names[1]}技能石`,'SKILL_STONE',9001+n*10,`${b.name}循环石：攻击后获得【${b.pos}】，维持流派输出窗口。`,1);
+  item(accessory,`n20_build_${tag}_accessory`,names[2],'ACCESSORY',9002+n*10,`${b.name}专属饰品：装备【${names[0]}】后，释放该技能会触发额外追击并叠加【${b.pos}】。`,0,0,0,0,1);
+  p(`INSERT INTO app_item_accessory (id,item_id,remark,CREATE_TIME,UPDATE_TIME) VALUES (${q('ACC_N20_BUILD_'+tag+'_S1')},${q(stone1)},'流派技能石扩展结构',${now},${now}),(${q('ACC_N20_BUILD_'+tag+'_S2')},${q(stone2)},'流派技能石扩展结构',${now},${now}),(${q('ACC_N20_BUILD_'+tag+'_R')},${q(accessory)},${q(b.name+'专属被动饰品')},${now},${now});`);
+  const startStyle=['FIRST','DAMAGE',2,'DEAL_DAMAGE','ANY_ELEMENT',null,`${b.name}起式：${b.desc}`];
+  const loopStyle=['RANDOM_ENEMY','DAMAGE',3,ix%2?'TAKE_DAMAGE':'CAST',ix%2?'ANY':'ANY_TYPE',ix%2?null:'SMALL',`${b.name}循环：在战斗事件中积累并释放`];
+  skill(skill1,names[0],'SMALL',7+n,1.05+n*.11,'FIRST',b.element,9000+n*10,startStyle);
+  skill(skill2,names[1],'SMALL',9+n,0.72+n*.09,'RANDOM_ENEMY',b.element,9001+n*10,loopStyle);
+  const startOutputs=[{name:names[0],kind:'EFFECT',target:'FIRST',effect:'DAMAGE',element:b.element,mul:1.05+n*.11,hits:2},{name:b.neg,kind:'APPEND_BUFF',target:'FIRST',buff:`BFD_N20_${b.code}_NEG`,element:b.element}];
+  if(b.code==='BURN') startOutputs.push({name:'熔核余烬',kind:'APPEND_BUFF',target:'FIRST',buff:'BFD_N20_BURN_DOT',element:'BURN'});
+  activeOutput(skill1,startOutputs,`${b.name}启动技能：先制造伤害入口，再叠加流派负面状态`);
+  activeOutput(skill2,[{name:names[1],kind:'EFFECT',target:'RANDOM_ENEMY',effect:'DAMAGE',element:b.element,mul:.72+n*.09,hits:3},{name:b.pos,kind:'APPEND_BUFF',target:'SELF',buff:`BFD_N20_${b.code}_POS`,element:b.element}],`${b.name}循环技能：攻击与自身增益同步推进`);
+  p(`INSERT INTO app_item_default_skill (id,item_id,skill_id,slot_no,sort,CREATE_TIME,UPDATE_TIME) VALUES (${q('IDS_N20_BUILD_'+tag+'_S1')},${q(stone1)},${q(skill1)},1,0,${now},${now}),(${q('IDS_N20_BUILD_'+tag+'_S2')},${q(stone2)},${q(skill2)},1,0,${now},${now});`);
+  conditionedBattlePassive(`PSK_N20_BUILD_${tag}_R`,`${b.name}·${names[2]}`,'BATTLE_COMBAT',accessory,9200+n,`装备${names[0]}后，释放起式触发${b.name}连携`,{event:'AFTER_CAST_SKILL',match:'SPECIFIC',refSkill:skill1,max:8},[{name:`${b.name}追击`,kind:'EFFECT',target:'EVENT_HIT_TARGETS',effect:'DAMAGE',element:b.element,mul:.34+n*.04,hits:2,rate:100},{name:b.pos,kind:'APPEND_BUFF',target:'SELF',buff:`BFD_N20_${b.code}_POS`,element:b.element}],{skillId:skill1,remark:`装备${names[0]}技能石后激活`});
+  [stone1,stone2,accessory].forEach((out,j)=>{
+    const rid=`RCP_N20_BUILD_${tag}_${j+1}`;
+    p(`INSERT INTO app_recipe (id,name,output_item_id,output_qty,unlock_chapter_id,sort,enable,remark,CREATE_TIME,UPDATE_TIME) VALUES (${q(rid)},${q((j===0?names[0]:j===1?names[1]:names[2])+'配方')},${q(out)},1,${q('SCP_N20_'+unlock)},${9100+n*10+j},1,${q(`第${b.unlock}章解锁的${b.name}流派组件`)},${now},${now});`);
+    [[`ITM_N20_${unlock}_M1`,5+n*2+j],[`ITM_N20_${unlock}_M2`,4+n+j],[`ITM_N20_${unlock}_M3`,2+n]].forEach((x,k)=>p(`INSERT INTO app_recipe_material (id,recipe_id,item_id,quantity,sort,CREATE_TIME,UPDATE_TIME) VALUES (${q(`RCM_N20_BUILD_${tag}_${j+1}_${k+1}`)},${q(rid)},${q(x[0])},${x[1]},${k},${now},${now});`));
+  });
+});
+
+story.push('# 流派扩展组件','','以下组件不替代章节装备，而是把技能石、饰品、Buff 与双章核心连接成完整战斗循环。','');
+buildSchools.forEach((b,ix)=>{
+  const names=buildFlavorNames[ix];
+  story.push(`## ${b.name}`,'',`- 战斗循环：${b.desc}`,`- 启动技能石：${names[0]}（施加【${b.neg}】）`,`- 循环技能石：${names[1]}（获得【${b.pos}】）`,`- 专属饰品：${names[2]}（要求装备启动石，释放时追加追击并强化自身）`,`- 解锁章节：第 ${b.unlock} 章`,'');
+});
+
 coreBuilds.forEach((cfg,ix)=>{
   const pair=ix+1, unlockNo=pair*2, nn=String(unlockNo).padStart(2,'0');
   const prev=String(unlockNo-1).padStart(2,'0');
@@ -250,4 +327,4 @@ p('COMMIT; SET FOREIGN_KEY_CHECKS=1;');
 p("-- 校验：CHAPTER=20，LEVEL=100，怪物=80，技能石=20。SELECT kind,COUNT(*) FROM app_stage WHERE id LIKE '%N20_%' GROUP BY kind;");
 fs.writeFileSync(OUT,lines.join('\n'),'utf8');
 fs.writeFileSync(STORY,story.join('\n'),'utf8');
-console.log(`generated ${OUT}`); console.log(`generated ${STORY}`); console.log('chapters=20 levels=100 monsters=80 skillStones=20');
+console.log(`generated ${OUT}`); console.log(`generated ${STORY}`); console.log('chapters=20 levels=100 monsters=80 skillStones=32 buildAccessories=6 buildBuffs=13');
