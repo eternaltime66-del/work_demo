@@ -11,10 +11,10 @@
   <link rel="stylesheet" href="css/components.css">
   <link rel="stylesheet" href="css/modal.css">
   <link rel="stylesheet" href="css/auth.css">
-  <link rel="stylesheet" href="css/home.css?v=20260809c">
+  <link rel="stylesheet" href="css/home.css?v=20260809d">
   <link rel="stylesheet" href="css/layout.css">
   <link rel="stylesheet" href="css/deploy.css?v=20260809a">
-  <link rel="stylesheet" href="css/prep.css?v=20260809e">
+  <link rel="stylesheet" href="css/prep.css?v=20260809f">
   <link rel="stylesheet" href="css/warehouse.css">
   <link rel="stylesheet" href="css/craft.css">
   <script src="js/dev-live.js"></script>
@@ -30,7 +30,7 @@
 
   <header v-if="tab === 'home'" class="home-hud">
     <div class="home-hud-user" @click="openHeroDetail">
-      <div class="home-hud-avatar art-ready" :style="protagonistArtStyle">
+      <div class="home-hud-avatar art-ready project-icon-avatar">
         <span>{{ (hero && hero.name ? hero.name.charAt(0) : '主') }}</span>
       </div>
       <div class="home-hud-meta">

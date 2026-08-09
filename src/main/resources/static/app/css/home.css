@@ -66,6 +66,17 @@
   background-position: center top;
 }
 
+.home-hud-avatar.project-icon-avatar {
+  background-image: url("../art/ui/game-app-icon.png");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.home-hud-avatar.project-icon-avatar > span {
+  display: none;
+}
+
 .home-hud-meta {
   min-width: 0;
   display: flex;

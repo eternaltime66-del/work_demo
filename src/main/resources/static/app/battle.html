@@ -11,7 +11,7 @@
   <link rel="stylesheet" href="css/components.css">
   <link rel="stylesheet" href="css/modal.css">
   <link rel="stylesheet" href="css/warehouse.css">
-  <link rel="stylesheet" href="css/battle.css?v=20260809b">
+  <link rel="stylesheet" href="css/battle.css?v=20260809c">
   <script src="js/dev-live.js"></script>
   <script src="js/vue.global.prod.js"></script>
   <script src="js/config.js"></script>
@@ -1138,6 +1138,8 @@ createApp({
     spriteArt(u) {
       var code = this.spriteCode(u);
       if (!code) return '';
+      // 主角使用新的透明全身素材；攻击与受击由现有战斗动画表达，不再切回旧 Q 版帧。
+      if (code === 'hero') return 'char/hero-idle.png?v=20260809b';
       var uid = this.unitUid(u);
       var pose = (uid && this.poseMap[uid]) || 'idle';
       var avail = this.poseArt[code] || {};
