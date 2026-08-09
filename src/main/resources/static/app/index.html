@@ -13,7 +13,7 @@
   <link rel="stylesheet" href="css/auth.css">
   <link rel="stylesheet" href="css/home.css">
   <link rel="stylesheet" href="css/layout.css">
-  <link rel="stylesheet" href="css/deploy.css?v=20260808a">
+  <link rel="stylesheet" href="css/deploy.css?v=20260809a">
   <link rel="stylesheet" href="css/prep.css">
   <link rel="stylesheet" href="css/warehouse.css">
   <link rel="stylesheet" href="css/craft.css">
@@ -1807,7 +1807,7 @@ createApp({
       return (this.selectedLevel && this.selectedLevel.todayAttemptCount) || 0;
     },
     boardStyle() {
-      var cell = this.previewSheetOpen ? 42 : CELL;
+      var cell = this.previewSheetOpen ? this.previewBoardCellSize() : CELL;
       var gap = this.previewSheetOpen ? 4 : GAP;
       return {
         width: (COLS * cell + (COLS - 1) * gap) + 'px',
@@ -3542,7 +3542,14 @@ createApp({
       }[r] || 'rarity-normal';
     },
     cellSize() {
-      return this.previewSheetOpen ? 42 : CELL;
+      return this.previewSheetOpen ? this.previewBoardCellSize() : CELL;
+    },
+    /** 敌方 6×5 棋盘适配窄屏弹窗，避免固定尺寸被左右裁切。 */
+    previewBoardCellSize() {
+      var viewport = typeof window !== 'undefined' ? window.innerWidth : 420;
+      var panelWidth = Math.min(420, Math.max(280, viewport - 32));
+      var boardContentWidth = panelWidth - 32 - 22;
+      return Math.max(30, Math.min(42, Math.floor((boardContentWidth - 5 * 4) / 6)));
     },
     gapSize() {
       return this.previewSheetOpen ? 4 : GAP;
