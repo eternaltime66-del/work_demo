@@ -459,20 +459,20 @@
 .level-faces {
   display: flex;
   align-items: center;
-  min-height: 20px;
+  min-height: 28px;
   max-width: 100%;
   overflow: hidden;
 }
 
 .level-face {
-  width: 20px;
-  height: 20px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   margin-left: -6px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 800;
   color: #fff;
   background: color-mix(in srgb, var(--rar) 55%, #1e293b);
@@ -499,16 +499,30 @@
   color: rgba(53, 215, 255, 0.95);
 }
 
-.level-stars {
-  display: flex;
-  gap: 1px;
+.level-clear-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   flex-shrink: 0;
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.18);
+  padding: 4px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
-.level-stars .on {
-  color: #facc15;
+.level-clear-mark i {
+  font-style: normal;
+  font-size: 9px;
+}
+
+.level-clear-mark.is-cleared {
+  color: #7dffa8;
+  border-color: rgba(125, 255, 168, 0.28);
+  background: rgba(45, 212, 143, 0.1);
 }
 
 .battle-start-btn.pulse {
@@ -565,12 +579,43 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 6px;
   overflow: hidden;
 }
 
-.level-row-meta span {
+.level-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.level-title-row strong {
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+  line-height: 1.3;
+  color: var(--text);
+}
+
+.level-title-row .level-cost {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 800;
+  color: #ffe070;
+}
+
+.level-title-row .level-cost b {
   font-size: 13px;
+  line-height: 1;
+  color: #ffd84d;
+  filter: drop-shadow(0 0 4px rgba(255, 216, 77, 0.4));
+}
+
+.level-row-meta span {
   color: var(--text);
 }
 
@@ -669,8 +714,10 @@
   .sortie-panel { padding: 10px; border-radius: 16px; }
   .chapter-row, .level-row { gap: 7px; padding: 10px 9px; }
   .chapter-thumb { width: 52px; height: 52px; font-size: 22px; }
-  .level-stars { font-size: 9px; }
+  .level-clear-mark { padding: 3px 5px; font-size: 9px; }
   .level-row-code { font-size: 13px; }
+  .level-title-row strong { font-size: 14px; }
+  .level-face { width: 26px; height: 26px; }
   .preview-sub-panel { max-width: calc(100vw - 20px); }
   .preview-entry-btn { padding: 12px; }
 }

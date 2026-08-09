@@ -13,7 +13,7 @@
   <link rel="stylesheet" href="css/auth.css">
   <link rel="stylesheet" href="css/home.css?v=20260809d">
   <link rel="stylesheet" href="css/layout.css">
-  <link rel="stylesheet" href="css/deploy.css?v=20260809b">
+  <link rel="stylesheet" href="css/deploy.css?v=20260809c">
   <link rel="stylesheet" href="css/prep.css?v=20260809f">
   <link rel="stylesheet" href="css/warehouse.css">
   <link rel="stylesheet" href="css/craft.css">
@@ -575,7 +575,12 @@
                   >
                     <div class="level-row-code">第{{ levelIndex + 1 }}关</div>
                     <div class="level-row-meta">
-                      <span class="ellipsis">{{ lv.name }}</span>
+                      <div class="level-title-row">
+                        <strong class="ellipsis">{{ lv.name }}</strong>
+                        <span class="level-cost" title="挑战体力消耗">
+                          <b aria-hidden="true">⚡</b>{{ lv.fightStaminaCost != null ? lv.fightStaminaCost : (lv.cleared ? 1 : 0) }}
+                        </span>
+                      </div>
                       <div class="level-faces">
                         <span
                           v-for="(face, fi) in levelFaces(lv.id)"
@@ -586,11 +591,13 @@
                         >{{ face.ch }}</span>
                         <em v-if="!levelFaces(lv.id).length">{{ levelMonsterCount(lv.id) }}</em>
                       </div>
-                      <span class="level-cost muted">体力 {{ lv.fightStaminaCost != null ? lv.fightStaminaCost : (lv.cleared ? 1 : 0) }}</span>
                     </div>
-                    <div class="level-stars" aria-hidden="true">
-                      <span v-for="s in 3" :key="s" :class="{ on: s <= (lv.cleared ? 3 : (lv.stars || 0)) }">★</span>
-                    </div>
+                    <span
+                      class="level-clear-mark"
+                      :class="lv.cleared ? 'is-cleared' : 'is-pending'"
+                      :title="lv.cleared ? '已通关' : '尚未通关'"
+                      :aria-label="lv.cleared ? '已通关' : '尚未通关'"
+                    ><i aria-hidden="true">{{ lv.cleared ? '◆' : '◇' }}</i>{{ lv.cleared ? '已通关' : '待通关' }}</span>
                     <span class="chapter-row-arrow">›</span>
                   </button>
                 </div>
