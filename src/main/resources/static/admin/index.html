@@ -3303,6 +3303,16 @@ function nextFormulaUid() {
   return 'ft_' + _formulaUid + '_' + Date.now();
 }
 
+/** 清理 JavaScript 浮点尾差，同时保留用户输入的非数值表达。 */
+function normalizeNumericLiteral(value) {
+  if (value == null || String(value).trim() === '') return '0';
+  var raw = String(value).trim();
+  if (!/^[+-]?(?:\d+\.?\d*|\.\d+)$/.test(raw)) return raw;
+  var num = Number(raw);
+  if (!Number.isFinite(num)) return raw;
+  return String(Number(num.toFixed(8)));
+}
+
 function parseFormulaTokens(raw) {
   if (!raw) return [];
   try {
@@ -3310,6 +3320,9 @@ function parseFormulaTokens(raw) {
     if (!Array.isArray(arr)) return [];
     return arr.map(function (t) {
       var tok = Object.assign({ uid: nextFormulaUid() }, t);
+      if (tok.kind !== 'OP' && tok.paramMode === 'LITERAL') {
+        tok.value = normalizeNumericLiteral(tok.value);
+      }
       if (tok.kind !== 'OP' && tok.paramMode === 'READ') {
         if (!tok.readRole) tok.readRole = 'SELF';
         if (tok.readRole === 'GLOBAL') {
@@ -3357,7 +3370,7 @@ function serializeFormulaTokens(tokens) {
       }
       return o;
     }
-    return { kind: 'PARAM', paramMode: 'LITERAL', value: t.value != null ? String(t.value) : '0' };
+    return { kind: 'PARAM', paramMode: 'LITERAL', value: normalizeNumericLiteral(t.value) };
   }));
 }
 

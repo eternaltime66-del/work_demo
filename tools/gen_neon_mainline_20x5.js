@@ -32,7 +32,8 @@ const chapters = [
 ];
 
 const q = v => v == null ? 'NULL' : `'${String(v).replace(/'/g,"''")}'`;
-const formula = m => JSON.stringify([{kind:'PARAM',paramMode:'READ',readRole:'SELF',readCategory:'ATTR',readKey:'ATK'},{kind:'OP',op:'*'},{kind:'PARAM',paramMode:'LITERAL',value:String(m)}]);
+const cleanNumber = n => String(Number(Number(n).toFixed(8)));
+const formula = m => JSON.stringify([{kind:'PARAM',paramMode:'READ',readRole:'SELF',readCategory:'ATTR',readKey:'ATK'},{kind:'OP',op:'*'},{kind:'PARAM',paramMode:'LITERAL',value:cleanNumber(m)}]);
 const lines = [];
 const p = s => lines.push(s);
 const now = 'NOW()';
