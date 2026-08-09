@@ -16,7 +16,7 @@
   <link rel="stylesheet" href="css/deploy.css?v=20260809d">
   <link rel="stylesheet" href="css/prep.css?v=20260809f">
   <link rel="stylesheet" href="css/warehouse.css">
-  <link rel="stylesheet" href="css/craft.css?v=20260809c">
+  <link rel="stylesheet" href="css/craft.css?v=20260809d">
   <link rel="stylesheet" href="css/player-polish.css?v=20260809a">
   <script src="js/dev-live.js"></script>
   <script src="js/vue.global.prod.js"></script>
@@ -869,7 +869,7 @@
   </nav>
 
   <!-- 装备图鉴 / 流派索引 -->
-  <div v-if="compendiumOpen" class="craft-detail-mask" @click.self="compendiumOpen = false">
+  <div v-if="compendiumOpen" class="craft-detail-mask" :class="{ 'modal-under': prepItemDetail }" @click.self="compendiumOpen = false">
     <div class="craft-detail-panel compendium-panel">
       <div class="craft-detail-head">
         <h3>{{ buildGuideMode ? '流派路线' : '装备图鉴' }}</h3>
@@ -884,6 +884,9 @@
           <article v-for="(build, i) in buildGuideRows" :key="build.name" class="build-guide-card">
             <em>路线 {{ i + 1 }}</em><strong>{{ build.name }}</strong>
             <span>{{ build.desc }}</span><small>{{ build.core }}</small>
+            <div class="build-guide-items">
+              <button v-for="item in buildGuideItems(build)" :key="item.id" type="button" @click="openCompendiumItem(item)">{{ item.name }}</button>
+            </div>
           </article>
         </template>
         <template v-else>
@@ -1571,12 +1574,12 @@ createApp({
         { value: 'MATERIAL', label: '材料' }
       ],
       buildGuideRows: [
-        { name: '电弧超导', core: '雨幕过载枪 / 零线磁轨刃', desc: '以电击技能命中与高频释放驱动连锁追击。' },
-        { name: '锈潮猎杀', core: '锈潮航标炮', desc: '依靠击杀回收、补射与物理增幅滚动清场。' },
-        { name: '熔核热链', core: '黑箱熔核刃 / 炉心蜂群枪', desc: '火焰伤害、群体连携与余热恢复构成持续压制。' },
-        { name: '白噪折镜', core: '白噪声纹杖 / 静默折镜刃', desc: '受击防护、治疗与多段折返兼顾稳定和爆发。' },
-        { name: '云墓观测', core: '天穹云墓枪 / 月潮观测炮', desc: '击杀备份与高威胁锁定共同推进后期战线。' },
-        { name: '月背共振', core: '月背共振刃', desc: '通过小技能连续触发群体伤害和自我修复。' }
+        { name: '电弧超导', core: '导电标记 / 超导回路', desc: '以电击技能命中与高频释放驱动连锁追击。', itemIds: ['ITM_N20_BUILD_01_S1','ITM_N20_BUILD_01_S2','ITM_N20_BUILD_01_R','ITM_N20_01_S','ITM_N20_02_S','ITM_N20_03_S','ITM_N20_04_S','ITM_N20_02_R','ITM_N20_04_R','ITM_N20_CORE_01','ITM_N20_CORE_02'] },
+        { name: '锈潮猎杀', core: '装甲破译 / 猎杀动能', desc: '依靠击杀回收、补射与物理增幅滚动清场。', itemIds: ['ITM_N20_BUILD_02_S1','ITM_N20_BUILD_02_S2','ITM_N20_BUILD_02_R','ITM_N20_05_S','ITM_N20_06_S','ITM_N20_06_R','ITM_N20_CORE_03'] },
+        { name: '熔核热链', core: '灼热裂口 / 熔核余烬 / 余热循环', desc: '火焰伤害、持续灼烧、群体连携与余热恢复构成压制。', itemIds: ['ITM_N20_BUILD_03_S1','ITM_N20_BUILD_03_S2','ITM_N20_BUILD_03_R','ITM_N20_07_S','ITM_N20_08_S','ITM_N20_09_S','ITM_N20_10_S','ITM_N20_08_R','ITM_N20_10_R','ITM_N20_CORE_04','ITM_N20_CORE_05'] },
+        { name: '白噪折镜', core: '白噪失谐 / 镜面护持', desc: '受击防护、敌方减速、治疗与多段折返兼顾稳定和爆发。', itemIds: ['ITM_N20_BUILD_04_S1','ITM_N20_BUILD_04_S2','ITM_N20_BUILD_04_R','ITM_N20_11_S','ITM_N20_12_S','ITM_N20_13_S','ITM_N20_14_S','ITM_N20_12_R','ITM_N20_14_R','ITM_N20_CORE_06','ITM_N20_CORE_07'] },
+        { name: '云墓观测', core: '观测锁定 / 备份协议', desc: '击杀备份、攻击增幅与高威胁锁定共同推进后期战线。', itemIds: ['ITM_N20_BUILD_05_S1','ITM_N20_BUILD_05_S2','ITM_N20_BUILD_05_R','ITM_N20_15_S','ITM_N20_16_S','ITM_N20_17_S','ITM_N20_18_S','ITM_N20_16_R','ITM_N20_18_R','ITM_N20_CORE_08','ITM_N20_CORE_09'] },
+        { name: '月背共振', core: '共振暴露 / 月背增幅', desc: '通过小技能连续触发群体伤害、元素增幅和自我修复。', itemIds: ['ITM_N20_BUILD_06_S1','ITM_N20_BUILD_06_S2','ITM_N20_BUILD_06_R','ITM_N20_19_S','ITM_N20_20_S','ITM_N20_20_R','ITM_N20_CORE_10'] }
       ],
       craftTypeOptions: [
         { value: 'all', label: '全部' },
@@ -2253,9 +2256,15 @@ createApp({
     openBuildGuide() {
       this.buildGuideMode = true;
       this.compendiumOpen = true;
+      this.loadCompendium();
+    },
+    buildGuideItems(build) {
+      var ids = (build && build.itemIds) || [];
+      var index = {};
+      (this.compendiumItems || []).forEach((item) => { index[item.id] = item; });
+      return ids.map((id) => index[id]).filter(Boolean);
     },
     openCompendiumItem(item) {
-      this.compendiumOpen = false;
       if (!item || !item.id) return;
       GameApi.itemDetail(item.id)
         .then((res) => {

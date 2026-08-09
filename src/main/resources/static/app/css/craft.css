@@ -66,6 +66,22 @@
 .build-guide-card strong { font-size: 14px; }
 .build-guide-card span { font-size: 11px; line-height: 1.5; color: rgba(255,255,255,.62); }
 .build-guide-card small { grid-column: 2; color: #ffd278; }
+.build-guide-items { grid-column: 2; display: flex; flex-wrap: wrap; gap: 5px; margin-top: 2px; }
+.build-guide-items button {
+  max-width: 100%;
+  border: 1px solid rgba(255,210,120,.22);
+  border-radius: 7px;
+  padding: 4px 7px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: rgba(255,190,76,.07);
+  color: #ffd278;
+  font-size: 10px;
+  line-height: 1.2;
+  cursor: pointer;
+}
+.build-guide-items button:active { filter: brightness(1.25); }
 
 @media (max-width: 390px) {
   .craft-detail-body.compendium-body { grid-template-columns: 1fr; }
