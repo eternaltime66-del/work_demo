@@ -1,0 +1,16 @@
+-- Second-pass high fidelity artwork. The original generated assets remain intact.
+START TRANSACTION;
+UPDATE app_item SET icon='art/item/hires/n20_core_1.png' WHERE code='n20_core_1';
+UPDATE app_item SET icon='art/item/hires/n20_core_2.png' WHERE code='n20_core_2';
+UPDATE app_item SET icon='art/item/hires/n20_core_3.png' WHERE code='n20_core_3';
+UPDATE app_item SET icon='art/item/hires/n20_core_4.png' WHERE code='n20_core_4';
+UPDATE app_item SET icon='art/item/hires/n20_core_6.png' WHERE code='n20_core_6';
+UPDATE app_item SET icon='art/item/hires/n20_15_armor.png' WHERE code='n20_15_armor';
+UPDATE app_item SET icon='art/item/hires/n20_20_stone.png' WHERE code='n20_20_stone';
+UPDATE app_item SET icon='art/item/hires/n20_13_m2.png' WHERE code='n20_13_m2';
+UPDATE app_item SET icon='art/item/hires/n20_build_05_accessory.png' WHERE code='n20_build_05_accessory';
+UPDATE app_item SET icon='art/item/hires/n20_19_helmet.png' WHERE code='n20_19_helmet';
+UPDATE app_item SET icon='art/item/hires/n20_06_gloves.png' WHERE code='n20_06_gloves';
+UPDATE app_item SET icon='art/item/hires/n20_16_legs.png' WHERE code='n20_16_legs';
+UPDATE app_item SET icon='art/item/hires/n20_18_m2.png' WHERE code='n20_18_m2';
+COMMIT;
