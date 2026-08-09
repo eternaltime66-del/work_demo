@@ -656,6 +656,32 @@
     drop-shadow(0 0 5px rgba(67, 222, 255, 0.68))
     drop-shadow(0 0 11px rgba(205, 62, 255, 0.3));
 }
+
+/* 主角待机：轻微呼吸与重心起伏，仅 idle 姿态生效。 */
+.formation-unit.player.main.is-idle .unit-sprite.art-ready,
+.formation-unit.main.side-ally.is-idle .unit-sprite.art-ready {
+  animation: heroBattleIdle 1.8s ease-in-out infinite;
+}
+
+@keyframes heroBattleIdle {
+  0%, 100% { transform: translateX(-50%) translateY(0) scale(1); }
+  50% { transform: translateX(-50%) translateY(-2px) scale(1.012); }
+}
+
+/* 专属姿态本身已有明确动作，前端只补节奏与冲击感，不再额外大角度旋转。 */
+.formation-unit.player.main.is-attacking .unit-sprite.art-ready,
+.formation-unit.main.side-ally.is-attacking .unit-sprite.art-ready {
+  animation: none;
+  transform: translateX(-50%) translateY(-2px) scale(1.12);
+  filter: brightness(1.28) saturate(1.22) drop-shadow(0 0 14px rgba(67, 222, 255, 0.72));
+}
+
+.formation-unit.player.main.is-hurt .unit-sprite.art-ready,
+.formation-unit.main.side-ally.is-hurt .unit-sprite.art-ready {
+  animation: none;
+  transform: translateX(calc(-50% + 5px)) scale(0.96);
+  filter: brightness(2.2) saturate(0.28) drop-shadow(0 0 12px rgba(255, 90, 132, 0.62));
+}
 @media (max-height: 680px) {
   .unit-sprite {
     height: calc(100% - 12px);

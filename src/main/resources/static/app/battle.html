@@ -11,7 +11,7 @@
   <link rel="stylesheet" href="css/components.css">
   <link rel="stylesheet" href="css/modal.css">
   <link rel="stylesheet" href="css/warehouse.css">
-  <link rel="stylesheet" href="css/battle.css?v=20260809e">
+  <link rel="stylesheet" href="css/battle.css?v=20260809f">
   <script src="js/dev-live.js"></script>
   <script src="js/vue.global.prod.js"></script>
   <script src="js/config.js"></script>
@@ -1138,14 +1138,13 @@ createApp({
     spriteArt(u) {
       var code = this.spriteCode(u);
       if (!code) return '';
-      // 主角使用新的透明全身素材；攻击与受击由现有战斗动画表达，不再切回旧 Q 版帧。
-      if (code === 'hero') return 'char/hero-idle.png?v=20260809b';
       var uid = this.unitUid(u);
       var pose = (uid && this.poseMap[uid]) || 'idle';
       var avail = this.poseArt[code] || {};
-      if (pose === 'attack' && avail.attack) return 'char/' + code + '/attack.png';
-      if (pose === 'hit' && avail.hit) return 'char/' + code + '/hit.png';
-      return 'char/' + code + '/idle_4.png';
+      var version = code === 'hero' ? '?v=20260809a' : '';
+      if (pose === 'attack' && avail.attack) return 'char/' + code + '/attack.png' + version;
+      if (pose === 'hit' && avail.hit) return 'char/' + code + '/hit.png' + version;
+      return 'char/' + code + '/idle_4.png' + version;
     },
     hasSprite() {
       // 实际是否显示立绘由 ArtSlots 探测后加 art-ready；勿提前 has-spr，避免素材缺失时空白
@@ -1185,6 +1184,7 @@ createApp({
         'side-' + side,
         {
           main: !!u.mainRole,
+          'is-idle': pose === 'idle',
           acting: this.actingUid === uid && pose === 'idle',
           hit: this.hitUid === uid,
           lunge: !!(uid && this.lungeMap[uid]),
@@ -1975,7 +1975,7 @@ createApp({
       if (pose === 'attack') file = 'attack.png';
       else if (pose === 'hit') file = 'hit.png';
       var root = (window.ArtSlots && ArtSlots.root) ? ArtSlots.root : 'art/';
-      return root + 'char/' + code + '/' + file;
+      return root + 'char/' + code + '/' + file + (code === 'hero' ? '?v=20260809a' : '');
     },
     /**
      * 普攻 CAST：特效层残影冲向目标 → 攻方攻击帧 + 受方受击帧。
