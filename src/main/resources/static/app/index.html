@@ -11,10 +11,10 @@
   <link rel="stylesheet" href="css/components.css">
   <link rel="stylesheet" href="css/modal.css">
   <link rel="stylesheet" href="css/auth.css">
-  <link rel="stylesheet" href="css/home.css">
+  <link rel="stylesheet" href="css/home.css?v=20260809a">
   <link rel="stylesheet" href="css/layout.css">
   <link rel="stylesheet" href="css/deploy.css?v=20260809a">
-  <link rel="stylesheet" href="css/prep.css">
+  <link rel="stylesheet" href="css/prep.css?v=20260809a">
   <link rel="stylesheet" href="css/warehouse.css">
   <link rel="stylesheet" href="css/craft.css">
   <script src="js/dev-live.js"></script>
@@ -173,6 +173,7 @@
               <div
                 class="equip-slot"
                 :class="[slotFilled('HELMET') ? 'filled' : '', rarityClass(slotRarity('HELMET'))]"
+                :title="slotItemName('HELMET') || '头盔'"
                 style="grid-area:helmet"
                 @click="onEquipSlotClick('HELMET')"
               >
@@ -180,11 +181,12 @@
                 <span v-else-if="slotDisplayIcon('HELMET').type === 'emoji'" class="equip-slot-emoji">{{ slotDisplayIcon('HELMET').text }}</span>
                 <span v-else class="equip-slot-sil art-slot" data-art="equip/slot-helmet.svg">{{ equipSilhouette('HELMET') }}</span>
                 <i v-if="slotFilled('HELMET')" class="equip-slot-dot"></i>
-                <span class="equip-slot-label">头盔</span>
+                <span class="equip-slot-label">{{ slotItemName('HELMET') || '头盔' }}</span>
               </div>
               <div
                 class="equip-slot"
                 :class="[slotFilled('WEAPON') ? 'filled' : '', rarityClass(slotRarity('WEAPON'))]"
+                :title="slotItemName('WEAPON') || '武器'"
                 style="grid-area:weapon"
                 @click="onEquipSlotClick('WEAPON')"
               >
@@ -192,7 +194,7 @@
                 <span v-else-if="slotDisplayIcon('WEAPON').type === 'emoji'" class="equip-slot-emoji">{{ slotDisplayIcon('WEAPON').text }}</span>
                 <span v-else class="equip-slot-sil art-slot" data-art="equip/slot-weapon.svg">{{ equipSilhouette('WEAPON') }}</span>
                 <i v-if="slotFilled('WEAPON')" class="equip-slot-dot"></i>
-                <span class="equip-slot-label">武器</span>
+                <span class="equip-slot-label">{{ slotItemName('WEAPON') || '武器' }}</span>
               </div>
               <div class="equip-doll-body art-slot" style="grid-area:body" data-art="char/hero-idle.png" @click="openPrepRoleDetail">
                 <div class="equip-doll-figure">
@@ -202,6 +204,7 @@
               <div
                 class="equip-slot"
                 :class="[slotFilled('ARMOR') ? 'filled' : '', rarityClass(slotRarity('ARMOR'))]"
+                :title="slotItemName('ARMOR') || '护甲'"
                 style="grid-area:armor"
                 @click="onEquipSlotClick('ARMOR')"
               >
@@ -209,11 +212,12 @@
                 <span v-else-if="slotDisplayIcon('ARMOR').type === 'emoji'" class="equip-slot-emoji">{{ slotDisplayIcon('ARMOR').text }}</span>
                 <span v-else class="equip-slot-sil art-slot" data-art="equip/slot-armor.svg">{{ equipSilhouette('ARMOR') }}</span>
                 <i v-if="slotFilled('ARMOR')" class="equip-slot-dot"></i>
-                <span class="equip-slot-label">护甲</span>
+                <span class="equip-slot-label">{{ slotItemName('ARMOR') || '护甲' }}</span>
               </div>
               <div
                 class="equip-slot"
                 :class="[slotFilled('GLOVES') ? 'filled' : '', rarityClass(slotRarity('GLOVES'))]"
+                :title="slotItemName('GLOVES') || '护手'"
                 style="grid-area:gloves"
                 @click="onEquipSlotClick('GLOVES')"
               >
@@ -221,11 +225,12 @@
                 <span v-else-if="slotDisplayIcon('GLOVES').type === 'emoji'" class="equip-slot-emoji">{{ slotDisplayIcon('GLOVES').text }}</span>
                 <span v-else class="equip-slot-sil art-slot" data-art="equip/slot-gloves.svg">{{ equipSilhouette('GLOVES') }}</span>
                 <i v-if="slotFilled('GLOVES')" class="equip-slot-dot"></i>
-                <span class="equip-slot-label">护手</span>
+                <span class="equip-slot-label">{{ slotItemName('GLOVES') || '护手' }}</span>
               </div>
               <div
                 class="equip-slot"
                 :class="[slotFilled('LEGS') ? 'filled' : '', rarityClass(slotRarity('LEGS'))]"
+                :title="slotItemName('LEGS') || '护腿'"
                 style="grid-area:legs"
                 @click="onEquipSlotClick('LEGS')"
               >
@@ -233,13 +238,14 @@
                 <span v-else-if="slotDisplayIcon('LEGS').type === 'emoji'" class="equip-slot-emoji">{{ slotDisplayIcon('LEGS').text }}</span>
                 <span v-else class="equip-slot-sil art-slot" data-art="equip/slot-legs.svg">{{ equipSilhouette('LEGS') }}</span>
                 <i v-if="slotFilled('LEGS')" class="equip-slot-dot"></i>
-                <span class="equip-slot-label">护腿</span>
+                <span class="equip-slot-label">{{ slotItemName('LEGS') || '护腿' }}</span>
               </div>
               <div
                 v-for="(acc, idx) in accessorySlots"
                 :key="acc.slot"
                 class="equip-slot"
                 :class="[slotFilled(acc.slot) ? 'filled' : '', rarityClass(slotRarity(acc.slot))]"
+                :title="slotItemName(acc.slot) || acc.label"
                 :style="{ gridArea: 'acc' + (idx + 1) }"
                 @click="onEquipSlotClick(acc.slot)"
               >
@@ -247,7 +253,7 @@
                 <span v-else-if="slotDisplayIcon(acc.slot).type === 'emoji'" class="equip-slot-emoji">{{ slotDisplayIcon(acc.slot).text }}</span>
                 <span v-else class="equip-slot-sil art-slot" data-art="equip/slot-acc.svg">{{ equipSilhouette(acc.slot) }}</span>
                 <i v-if="slotFilled(acc.slot)" class="equip-slot-dot"></i>
-                <span class="equip-slot-label">{{ acc.label }}</span>
+                <span class="equip-slot-label">{{ slotItemName(acc.slot) || acc.label }}</span>
               </div>
             </div>
               <div class="prep-skill-col is-right">
@@ -3090,7 +3096,8 @@ createApp({
       var icon = s.icon;
       if (this.itemIconIsImage(icon)) return { type: 'img', src: this.itemIconSrc(icon) };
       if (icon && String(icon).trim()) return { type: 'emoji', text: icon };
-      return { type: 'empty' };
+      // 已装备但素材库未配置图标时，也必须显示为已装备，不能退回空槽剪影。
+      return { type: 'emoji', text: this.equipSilhouette(slot) };
     },
     onEquipSlotClick(slot) {
       if (!this.slotFilled(slot) || this.prepActing) return;

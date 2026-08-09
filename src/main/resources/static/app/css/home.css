@@ -260,7 +260,13 @@
   background-color: transparent;
   background-size: contain;
   background-position: center bottom;
+  background-repeat: no-repeat !important;
   box-shadow: none;
+}
+
+.home-scene .hero-body.art-slot,
+.home-scene .hero-body.art-ready {
+  background-repeat: no-repeat !important;
 }
 
 .hero-body.art-ready .hero-head {
@@ -439,4 +445,3 @@
 .tab-panel.hidden {
   display: none;
 }
-

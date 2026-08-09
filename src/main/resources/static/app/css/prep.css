@@ -226,6 +226,7 @@
   background-color: var(--surface-1);
   background-size: contain;
   background-position: center bottom;
+  background-repeat: no-repeat !important;
 }
 
 .equip-doll-body.art-ready .equip-doll-figure {
@@ -261,8 +262,24 @@
 
 .equip-slot.filled {
   border-style: solid;
-  border-color: color-mix(in srgb, var(--rar) 45%, transparent);
-  background: color-mix(in srgb, var(--rar) 12%, var(--surface-1));
+  border-color: color-mix(in srgb, var(--rar) 72%, #fff 8%);
+  background:
+    radial-gradient(circle at 50% 34%, color-mix(in srgb, var(--rar) 26%, transparent), transparent 62%),
+    color-mix(in srgb, var(--rar) 12%, var(--surface-1));
+  box-shadow:
+    inset 0 0 12px color-mix(in srgb, var(--rar) 13%, transparent),
+    0 0 8px color-mix(in srgb, var(--rar) 22%, transparent);
+}
+
+.equip-slot.filled .equip-slot-label {
+  color: color-mix(in srgb, var(--rar) 62%, #fff 38%);
+  font-weight: 800;
+}
+
+.equip-slot.filled .equip-slot-emoji {
+  color: var(--rar);
+  opacity: 1;
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--rar) 65%, transparent));
 }
 
 .equip-slot-label {
@@ -308,12 +325,25 @@
   position: absolute;
   right: 3px;
   top: 3px;
-  width: 6px;
-  height: 6px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   background: var(--rar);
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
   z-index: 2;
+  display: grid;
+  place-items: center;
+  color: #08101d;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.equip-slot-dot::after { content: "✓"; }
+
+.equip-doll-body.art-slot,
+.equip-doll-body.art-ready {
+  background-repeat: no-repeat !important;
 }
 
 .prep-stat-brief {
