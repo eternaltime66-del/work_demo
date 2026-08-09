@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.wx.core.wxBase.base.Wx;
 import org.wx.core.wxBase.base.WxServiceImpl;
+import org.wx.core.wxBase.annotation.RedisLock;
 import org.wx.core.wxBase.factory.ErrorFactory;
 import org.wx.core.wxBusiness.game.entity.PlayerTowerRun;
 import org.wx.core.wxBusiness.game.entity.Stage;
@@ -57,10 +58,9 @@ public class TowerRunService extends WxServiceImpl<PlayerTowerRunMapper, PlayerT
         return vo;
     }
 
-    /**
-     * 进入无尽塔：始终从第一关重新开始（覆盖旧 run）。
-     */
+    /** 进入无尽塔。已有进行中的挑战直接恢复，禁止借此重置首层。 */
     @Transactional(rollbackFor = Exception.class)
+    @RedisLock(key = "uid", bindMethod = false, loading = true)
     public TowerRunVo enter(String uid) {
         ErrorFactory.throwError(Wx.isEmpty(uid), "未登录");
         Stage root = stageProgressService.requireModeRoot(StageModeCode.TOWER);
@@ -68,6 +68,9 @@ public class TowerRunService extends WxServiceImpl<PlayerTowerRunMapper, PlayerT
         ErrorFactory.throwError(ordered.isEmpty(), "无尽塔暂无关卡");
 
         PlayerTowerRun run = getByUid(uid);
+        if (run != null && run.getStatus() == TowerRunStatus.RUNNING && !Wx.isEmpty(run.getCurrentLevelId())) {
+            return status(uid);
+        }
         if (run == null) {
             run = new PlayerTowerRun();
             run.setUid(uid);

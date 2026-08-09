@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.wx.core.wxBase.base.Wx;
 import org.wx.core.wxBase.base.WxServiceImpl;
+import org.wx.core.wxBase.factory.ErrorFactory;
 import org.wx.core.wxBusiness.game.entity.Item;
 import org.wx.core.wxBusiness.game.entity.MonsterDrop;
 import org.wx.core.wxBusiness.game.entity.vo.MonsterDropResultVo;
@@ -36,6 +37,27 @@ public class MonsterDropService extends WxServiceImpl<MonsterDropMapper, Monster
                 .list();
         fillItemName(list);
         return list;
+    }
+
+    /** 后台保存前统一校验，禁止模糊概率和隐藏的零数量掉落。 */
+    public void savePrepared(MonsterDrop entity) {
+        ErrorFactory.throwError(entity == null, "掉落配置不能为空");
+        ErrorFactory.throwError(Wx.isEmpty(entity.getMonsterId()), "怪物不能为空");
+        ErrorFactory.throwError(Wx.isEmpty(entity.getItemId()), "物品不能为空");
+        BigDecimal rate = entity.getDropRate() == null ? BigDecimal.ZERO : entity.getDropRate();
+        ErrorFactory.throwError(rate.compareTo(BigDecimal.ZERO) < 0 || rate.compareTo(BigDecimal.valueOf(100)) > 0,
+                "掉落概率必须在0到100之间");
+        int min = entity.getMinQty() == null ? 1 : entity.getMinQty();
+        int max = entity.getMaxQty() == null ? min : entity.getMaxQty();
+        ErrorFactory.throwError(min < 1, "最小掉落数量必须大于0");
+        ErrorFactory.throwError(max < min, "最大掉落数量不能小于最小数量");
+        ErrorFactory.throwError(max > 100000, "单次掉落数量不能超过100000");
+        entity.setDropRate(rate);
+        entity.setMinQty(min);
+        entity.setMaxQty(max);
+        entity.setSort(entity.getSort() == null ? 0 : entity.getSort());
+        entity.setEnable(entity.getEnable() == null ? Boolean.TRUE : entity.getEnable());
+        this.saveOrUpdate(entity);
     }
 
     public List<MonsterDrop> listEnabledByMonsterId(String monsterId) {
@@ -124,14 +146,14 @@ public class MonsterDropService extends WxServiceImpl<MonsterDropMapper, Monster
      * 掉落率独立判定：100 = 100%
      */
     public static boolean rollRate(BigDecimal dropRate) {
-        int rate = dropRate == null ? 0 : dropRate.intValue();
-        if (rate <= 0) {
+        BigDecimal rate = dropRate == null ? BigDecimal.ZERO : dropRate;
+        if (rate.compareTo(BigDecimal.ZERO) <= 0) {
             return false;
         }
-        if (rate >= 100) {
+        if (rate.compareTo(BigDecimal.valueOf(100)) >= 0) {
             return true;
         }
-        return ThreadLocalRandom.current().nextInt(100) < rate;
+        return BigDecimal.valueOf(ThreadLocalRandom.current().nextDouble(100D)).compareTo(rate) < 0;
     }
 
     /**

@@ -35,6 +35,14 @@ public final class SkillV2OutputUnit {
 
         void notifyStatChanged();
 
+        /** 攻速变化后同步行动阈值；默认空实现便于独立公式测试。 */
+        default void onAttackSpeedChanged(BattleRuntimeUnit unit) {
+        }
+
+        /** 记录当前技能真正解析并执行过的目标。 */
+        default void recordAffectedTarget(BattleRuntimeUnit unit) {
+        }
+
         BuffDef buffDefOf(String buffDefId);
 
         void onDamage(
@@ -101,7 +109,11 @@ public final class SkillV2OutputUnit {
             if (target == null || !target.alive()) {
                 continue;
             }
+            host.recordAffectedTarget(target);
             for (int i = 0; i < segments; i++) {
+                if (!target.alive()) {
+                    break;
+                }
                 double raw = FormulaEvalUnit.eval(out.getFormulaJson(), owner, target, host.board(), ctx);
                 int amount = (int) Math.max(0, Math.round(raw));
                 String sourceKey = "SOUT#" + (out.getId() != null ? out.getId() : label(out))
@@ -125,7 +137,11 @@ public final class SkillV2OutputUnit {
             if (target == null || !target.alive()) {
                 continue;
             }
+            host.recordAffectedTarget(target);
             for (int i = 0; i < segments; i++) {
+                if (!target.alive()) {
+                    break;
+                }
                 double raw = FormulaEvalUnit.eval(out.getFormulaJson(), owner, target, host.board(), ctx);
                 int amount = (int) Math.max(0, Math.round(raw));
                 if (et == SkillEffectType.HEAL) {
@@ -165,6 +181,7 @@ public final class SkillV2OutputUnit {
             if (target == null || !target.alive()) {
                 continue;
             }
+            host.recordAffectedTarget(target);
             mountBuff(host, owner, target, def, prefix);
         }
     }
@@ -277,8 +294,7 @@ public final class SkillV2OutputUnit {
         if (host == null) {
             return;
         }
-        // 同轴优先：先到期，再脉冲
-        expireDueBuffs(host);
+        // 到期轴仍有效：先执行本轴最后一次脉冲，再移除到期 BUFF。
         int now = host.board().getElapsedActionValue();
         for (BattleRuntimeUnit u : host.units()) {
             if (u == null) {
@@ -297,6 +313,7 @@ public final class SkillV2OutputUnit {
                 }
             }
         }
+        expireDueBuffs(host);
     }
 
     public static void scanJudgeBuffs(Host host) {
@@ -443,7 +460,7 @@ public final class SkillV2OutputUnit {
             return;
         }
         int signed = (def.getAttrDir() == AttrModifyDirection.DECREASE ? -amount : amount) * stackDelta;
-        mutateAttr(target, key, signed, inst, stackDelta > 0);
+        mutateAttr(host, target, key, signed, inst, stackDelta > 0);
     }
 
     private static boolean isFinalPanelPercent(AttrModifyKey key) {
@@ -532,7 +549,7 @@ public final class SkillV2OutputUnit {
         TimedAttrBuff snap = new TimedAttrBuff();
         snap.setSourceKey(sourceKey);
         snap.setAttrKey(key);
-        mutateAttr(target, key, signed, snap, true);
+        mutateAttr(host, target, key, signed, snap, true);
         if (timed && sourceKey != null) {
             snap.setExpireAtElapsed(durationAv > 0 ? host.board().getElapsedActionValue() + durationAv : null);
             target.getTimedBuffs().add(snap);
@@ -548,7 +565,9 @@ public final class SkillV2OutputUnit {
         host.notifyStatChanged();
     }
 
-    private static void mutateAttr(BattleRuntimeUnit target, AttrModifyKey key, int signed, Object track, boolean applying) {
+    private static void mutateAttr(
+            Host host, BattleRuntimeUnit target, AttrModifyKey key, int signed, Object track, boolean applying
+    ) {
         if (key == null) {
             return;
         }
@@ -576,7 +595,10 @@ public final class SkillV2OutputUnit {
             case ADD_PERCENT -> {
                 switch (key) {
                     case LIFE_STEAL -> target.setLifeStealAdd(target.getLifeStealAdd() + signed);
-                    case ATK_SPEED -> target.setAtkSpeedAdd(target.getAtkSpeedAdd() + signed);
+                    case ATK_SPEED -> {
+                        target.setAtkSpeedAdd(target.getAtkSpeedAdd() + signed);
+                        host.onAttackSpeedChanged(target);
+                    }
                     case FINAL_ATK, FINAL_HP, FINAL_DEF -> {
                         // 应走 applyOrRevokeFinalPercent；此处兜底：施加记绝对值，撤回用已记值
                         if (applying) {

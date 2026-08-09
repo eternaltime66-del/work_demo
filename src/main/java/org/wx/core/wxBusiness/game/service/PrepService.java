@@ -158,7 +158,7 @@ public class PrepService {
     }
 
     @Transactional(rollbackFor = Exception.class)
-    @RedisLock(key = "uid")
+    @RedisLock(key = "uid", bindMethod = false, loading = true)
     public void batchWarehouseToBag(String uid, List<Integer> slotNos) {
         ErrorFactory.throwError(slotNos == null || slotNos.isEmpty(), "请选择仓库格子");
         Set<Integer> unique = new LinkedHashSet<>(slotNos);
@@ -168,7 +168,7 @@ public class PrepService {
     }
 
     @Transactional(rollbackFor = Exception.class)
-    @RedisLock(key = "uid")
+    @RedisLock(key = "uid", bindMethod = false, loading = true)
     public void batchBagToWarehouse(String uid, List<String> bagIds) {
         ErrorFactory.throwError(bagIds == null || bagIds.isEmpty(), "请选择背包物品");
         Set<String> unique = new LinkedHashSet<>(bagIds);
@@ -178,7 +178,7 @@ public class PrepService {
     }
 
     @Transactional(rollbackFor = Exception.class)
-    @RedisLock(key = "uid")
+    @RedisLock(key = "uid", bindMethod = false, loading = true)
     public void dragTransfer(String uid, String fromType, String fromKey, String toType, String toKey, Integer quantity) {
         ErrorFactory.notEmpty(fromType, "来源类型不能为空");
         ErrorFactory.notEmpty(toType, "目标类型不能为空");
@@ -198,7 +198,7 @@ public class PrepService {
     }
 
     @Transactional(rollbackFor = Exception.class)
-    @RedisLock(key = "uid")
+    @RedisLock(key = "uid", bindMethod = false, loading = true)
     public BattleBagVo equipSlot(String uid, String slot, String itemId) {
         EquipSlot equipSlot = EquipSlot.parse(slot);
         ErrorFactory.notNull(equipSlot, "无效的装备槽位");
@@ -207,7 +207,7 @@ public class PrepService {
     }
 
     @Transactional(rollbackFor = Exception.class)
-    @RedisLock(key = "uid")
+    @RedisLock(key = "uid", bindMethod = false, loading = true)
     public BattleBagVo unequipSlot(String uid, String slot) {
         EquipSlot equipSlot = EquipSlot.parse(slot);
         ErrorFactory.notNull(equipSlot, "无效的装备槽位");

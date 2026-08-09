@@ -1,6 +1,7 @@
 package org.wx.core.wxBase.config;
 
 import org.springframework.context.annotation.Configuration;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
@@ -12,20 +13,25 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @Configuration
 public class WebConfig implements WebMvcConfigurer {
 
+    @Value("${app.cors.allowed-origin-patterns:http://localhost:*,http://127.0.0.1:*}")
+    private String allowedOriginPatterns;
+
+    @Value("${app.upload.root-windows:D:/File/Work/Java/002_DP/}")
+    private String filepathWin;
+
+    @Value("${app.upload.root-linux:/www/wx/file/}")
+    private String filepathLinux;
+
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/**")
-                // 允许独立静态站跨域调后端 API（token 在 Header，不依赖 Cookie）
-                .allowedOriginPatterns("*")
+                .allowedOriginPatterns(java.util.Arrays.stream(allowedOriginPatterns.split(","))
+                        .map(String::trim).filter(s -> !s.isEmpty()).toArray(String[]::new))
                 .allowedHeaders("*")
                 .allowCredentials(false)
                 .allowedMethods("GET", "POST", "OPTIONS", "DELETE", "PUT", "PATCH")
                 .maxAge(3600);
     }
-
-    public final String filepathWin = "D:\\File\\Work\\Java\\002_DP\\";
-    public final String filepathLinux = "/www/wx/file/";
-
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {

@@ -67,6 +67,8 @@ public class BattleEngine implements SkillV2OutputUnit.Host {
     private CastDamageBag castBag;
     /** 当前施法技能（供 V2 伤害标签） */
     private ActiveSkill castingSkill;
+    /** 当前施法真正执行过的目标，避免随机目标在展示和结算阶段各掷一次。 */
+    private LinkedHashSet<BattleRuntimeUnit> currentCastAffectedUnits;
 
     /** 周期/持续扫描防重入 */
     private boolean scanningPeriodic;
@@ -150,6 +152,18 @@ public class BattleEngine implements SkillV2OutputUnit.Host {
     @Override
     public void notifyStatChanged() {
         notifyStatChangedInternal();
+    }
+
+    @Override
+    public void onAttackSpeedChanged(BattleRuntimeUnit unit) {
+        recalcActionFromAtkSpeed(unit);
+    }
+
+    @Override
+    public void recordAffectedTarget(BattleRuntimeUnit unit) {
+        if (unit != null && currentCastAffectedUnits != null) {
+            currentCastAffectedUnits.add(unit);
+        }
     }
 
     @Override
@@ -677,9 +691,9 @@ public class BattleEngine implements SkillV2OutputUnit.Host {
 
         castBag = new CastDamageBag();
         castingSkill = skill;
+        currentCastAffectedUnits = new LinkedHashSet<>();
         List<SkillOutput> outputs = outputsBySkill.getOrDefault(skill.getId(), List.of());
         List<SkillEffect> effects = effectsBySkill.getOrDefault(skill.getId(), List.of());
-        LinkedHashSet<String> castTargets = new LinkedHashSet<>();
         SkillEffectTarget primaryTargetType = null;
         DamageElement castElement = DamageElement.PHYSICAL;
         if (!outputs.isEmpty()) {
@@ -693,12 +707,6 @@ public class BattleEngine implements SkillV2OutputUnit.Host {
                 if (out.getDamageElement() != null) {
                     castElement = out.getDamageElement();
                 }
-                for (BattleRuntimeUnit t : SkillTargetResolver.resolveWithAnchor(
-                        out.getTargetType(), actor, units, baseEvalCtx())) {
-                    if (t != null && t.getUnitId() != null) {
-                        castTargets.add(t.getUnitId());
-                    }
-                }
             }
         } else {
             for (SkillEffect effect : effects) {
@@ -707,11 +715,6 @@ public class BattleEngine implements SkillV2OutputUnit.Host {
                 }
                 if (primaryTargetType == null && effect.getTargetType() != null) {
                     primaryTargetType = effect.getTargetType();
-                }
-                for (BattleRuntimeUnit t : SkillTargetResolver.resolve(effect.getTargetType(), actor, units)) {
-                    if (t != null && t.getUnitId() != null) {
-                        castTargets.add(t.getUnitId());
-                    }
                 }
             }
         }
@@ -722,38 +725,26 @@ public class BattleEngine implements SkillV2OutputUnit.Host {
         castEv.setSkillType(skill.getSkillType() != null ? skill.getSkillType().name() : null);
         castEv.setElement(castElement.name());
         castEv.setShape(shapeOf(primaryTargetType));
-        castEv.setTargets(new ArrayList<>(castTargets));
         // 同步充能条：释放后剩余充能（含 0），前端据此清空再涨
         castEv.setCur(actor.getCharge(skill.getId()));
         if (need > 0) {
             castEv.setMax(need);
         }
 
-        List<BattleRuntimeUnit> castHitUnits = new ArrayList<>();
-        for (String tid : castTargets) {
-            BattleRuntimeUnit t = findUnitById(tid);
-            if (t != null) {
-                castHitUnits.add(t);
-            }
-        }
         if (!outputs.isEmpty()) {
             // 主动技 V2 输出记为主动伤害，才能正确触发「造成/受到主动技能伤害后」
             SkillV2OutputUnit.applyOutputs(
                     this, actor, outputs, baseEvalCtx(), "  └ ", false, DamageSourceKind.ACTIVE_SKILL);
-            // 「释放技能后」专属目标 = 本次技能命中的所有生效目标
-            fireCombatPassives(actor, CombatEventType.AFTER_CAST_SKILL, skill, null, 0, castHitUnits);
-            for (BattleRuntimeUnit t : castHitUnits) {
-                fireCombatPassives(t, CombatEventType.AFTER_RECEIVE_SKILL, skill, actor, 0, List.of(actor));
-            }
         } else {
             for (SkillEffect effect : effects) {
                 applyEffect(actor, skill, effect, false);
             }
-            // 旧 SkillEffect 路径同样补齐战斗事件锚点
-            fireCombatPassives(actor, CombatEventType.AFTER_CAST_SKILL, skill, null, 0, castHitUnits);
-            for (BattleRuntimeUnit t : castHitUnits) {
-                fireCombatPassives(t, CombatEventType.AFTER_RECEIVE_SKILL, skill, actor, 0, List.of(actor));
-            }
+        }
+        List<BattleRuntimeUnit> castHitUnits = new ArrayList<>(currentCastAffectedUnits);
+        castEv.setTargets(castHitUnits.stream().map(BattleRuntimeUnit::getUnitId).toList());
+        fireCombatPassives(actor, CombatEventType.AFTER_CAST_SKILL, skill, null, 0, castHitUnits);
+        for (BattleRuntimeUnit t : castHitUnits) {
+            fireCombatPassives(t, CombatEventType.AFTER_RECEIVE_SKILL, skill, actor, 0, List.of(actor));
         }
 
         if (PassiveSkillMatchUnit.isChargeSkill(skill)) {
@@ -761,6 +752,7 @@ public class BattleEngine implements SkillV2OutputUnit.Host {
         }
         castBag = null;
         castingSkill = null;
+        currentCastAffectedUnits = null;
 
         accrueSkillCharges(actor, SkillChargeEvent.CAST, skill);
         notifyStatChangedInternal();
@@ -906,18 +898,24 @@ public class BattleEngine implements SkillV2OutputUnit.Host {
             if (!target.alive()) {
                 continue;
             }
+            recordAffectedTarget(target);
             for (int i = 0; i < segments; i++) {
+                if (!target.alive()) {
+                    break;
+                }
                 double raw = FormulaEvalUnit.eval(effect.getFormulaJson(), caster, target, board, evalCtx);
                 int amount = (int) Math.max(0, Math.round(raw));
                 if (effect.getEffectType() == SkillEffectType.DAMAGE) {
                     int dealt = resolveDealtDamage(caster, target, amount);
-                    applyHpDamage(caster, target, dealt, skill, effect.getTargetType(), segments, i, !fromAnchor, "  └ ");
+                    int effective = applyHpDamage(
+                            caster, target, dealt, skill, effect.getTargetType(), segments, i, !fromAnchor, "  └ "
+                    );
                     notifyStatChangedInternal();
                     if (!fromAnchor && PassiveSkillMatchUnit.isChargeSkill(skill)) {
                         if (castBag != null) {
-                            castBag.addHit(target, dealt);
+                            castBag.addHit(target, effective);
                         }
-                        triggerOnChargeDamage(caster, target, skill, dealt);
+                        triggerOnChargeDamage(caster, target, skill, effective);
                     }
                 } else if (effect.getEffectType() == SkillEffectType.HEAL) {
                     int heal = amount;
@@ -1069,6 +1067,9 @@ public class BattleEngine implements SkillV2OutputUnit.Host {
                 continue;
             }
             for (int i = 0; i < segments; i++) {
+                if (!target.alive()) {
+                    break;
+                }
                 double raw = FormulaEvalUnit.eval(effect.getFormulaJson(), owner, target, board, ctx);
                 int amount = (int) Math.max(0, Math.round(raw));
                 if (effect.getEffectType() == SkillEffectType.DAMAGE) {
@@ -1123,7 +1124,7 @@ public class BattleEngine implements SkillV2OutputUnit.Host {
         return DamageRatioUnit.finalizeDealt(raw, dealer, target, element);
     }
 
-    private void applyHpDamage(
+    private int applyHpDamage(
             BattleRuntimeUnit dealer,
             BattleRuntimeUnit target,
             int dealt,
@@ -1134,7 +1135,7 @@ public class BattleEngine implements SkillV2OutputUnit.Host {
             boolean recordReceive,
             String logPrefix
     ) {
-        applyV2Damage(
+        int effective = applyV2Damage(
                 dealer, target, dealt,
                 skill != null ? DamageSourceKind.ACTIVE_SKILL : DamageSourceKind.PASSIVE,
                 DamageElement.PHYSICAL,
@@ -1143,9 +1144,10 @@ public class BattleEngine implements SkillV2OutputUnit.Host {
         if (logPrefix != null && !logPrefix.equals("  └ ")) {
             // applyV2Damage 已写标准日志
         }
+        return effective;
     }
 
-    private void applyV2Damage(
+    private int applyV2Damage(
             BattleRuntimeUnit dealer,
             BattleRuntimeUnit target,
             int dealt,
@@ -1157,18 +1159,23 @@ public class BattleEngine implements SkillV2OutputUnit.Host {
             int segIdx,
             boolean recordReceive
     ) {
-        if (target == null || dealt <= 0) {
-            return;
+        if (target == null || !target.alive() || dealt <= 0) {
+            return 0;
         }
         DamageElement el = element == null ? DamageElement.PHYSICAL : element;
         DamageSourceKind src = kind == null ? DamageSourceKind.ACTIVE_SKILL : kind;
         // 闪避：持有闪避效果时，被匹配技能命中可将伤害置 0
         if (skill != null && tryDodge(target, skill, dealer, dealt, el, segments, segIdx)) {
-            return;
+            return 0;
         }
-        target.setHp(Math.max(0, target.getHp() - dealt));
+        int hpBefore = target.getHp();
+        target.setHp(Math.max(0, hpBefore - dealt));
+        int effectiveDamage = hpBefore - target.getHp();
         if (dealer != null) {
-            board.recordDamage(dealer.getUnitId(), target.getUnitId(), dealt, skill != null || src == DamageSourceKind.ACTIVE_SKILL);
+            board.recordDamage(
+                    dealer.getUnitId(), target.getUnitId(), effectiveDamage,
+                    skill != null || src == DamageSourceKind.ACTIVE_SKILL
+            );
         }
         if (recordReceive && skill != null) {
             board.recordReceive(target.getUnitId(), skill);
@@ -1182,8 +1189,8 @@ public class BattleEngine implements SkillV2OutputUnit.Host {
                 accrueSkillCharges(target, SkillChargeEvent.TAKE_DAMAGE, skill);
             }
         }
-        boolean killed = !target.alive();
-        logs.add("  └ 对 " + target.getName() + " 造成 " + dealt + " 伤害"
+        boolean killed = hpBefore > 0 && !target.alive();
+        logs.add("  └ 对 " + target.getName() + " 造成 " + effectiveDamage + " 伤害"
                 + (el != DamageElement.PHYSICAL ? "（" + el.name() + "）" : "")
                 + (segments > 1 ? "（第" + (segIdx + 1) + "段）" : "")
                 + (killed ? "，击杀" : ""));
@@ -1197,7 +1204,7 @@ public class BattleEngine implements SkillV2OutputUnit.Host {
         hitEv.setShape(shapeOf(targetType));
         hitEv.setSeg(segIdx + 1);
         hitEv.setSegTotal(Math.max(1, segments));
-        hitEv.setDamage(dealt);
+        hitEv.setDamage(effectiveDamage);
         hitEv.setCrit(false);
         hitEv.setHpAfter(target.getHp());
         hitEv.setMaxHp(target.getMaxHp());
@@ -1209,23 +1216,24 @@ public class BattleEngine implements SkillV2OutputUnit.Host {
                 accrueSkillCharges(dealer, SkillChargeEvent.KILL, skill);
             }
         }
-        applyLifeSteal(dealer, dealt);
+        applyLifeSteal(dealer, effectiveDamage);
         if (src == DamageSourceKind.ACTIVE_SKILL) {
             if (dealer != null) {
-                fireCombatPassives(dealer, CombatEventType.AFTER_DEAL_ACTIVE_DMG, skill, target, dealt);
+                fireCombatPassives(dealer, CombatEventType.AFTER_DEAL_ACTIVE_DMG, skill, target, effectiveDamage);
             }
-            fireCombatPassives(target, CombatEventType.AFTER_TAKE_ACTIVE_DMG, skill, dealer, dealt);
+            fireCombatPassives(target, CombatEventType.AFTER_TAKE_ACTIVE_DMG, skill, dealer, effectiveDamage);
         } else if (src == DamageSourceKind.PULSE_BUFF) {
-            fireCombatPassives(target, CombatEventType.AFTER_TAKE_PULSE_BUFF_DMG, skill, dealer, dealt);
+            fireCombatPassives(target, CombatEventType.AFTER_TAKE_PULSE_BUFF_DMG, skill, dealer, effectiveDamage);
         }
         // 击杀/被击杀：伤害事件之后同步触发（被击杀方已死亡，仍可触发其被动）
         if (killed) {
             if (dealer != null && dealer.alive()) {
-                fireCombatPassives(dealer, CombatEventType.AFTER_KILL, skill, target, dealt);
+                fireCombatPassives(dealer, CombatEventType.AFTER_KILL, skill, target, effectiveDamage);
             }
-            fireCombatPassives(target, CombatEventType.AFTER_KILLED, skill, dealer, dealt);
+            fireCombatPassives(target, CombatEventType.AFTER_KILLED, skill, dealer, effectiveDamage);
         }
         notifyStatChangedInternal();
+        return effectiveDamage;
     }
 
     private void applyLifeSteal(BattleRuntimeUnit dealer, int dealt) {
@@ -1612,7 +1620,11 @@ public class BattleEngine implements SkillV2OutputUnit.Host {
         } else if (add < 0) {
             downs.add(-add);
         }
-        unit.setAction(AtkSpeedCalcUnit.calcFinalAction(base, ups, downs));
+        int oldAction = Math.max(1, unit.getAction());
+        int oldProgress = Math.max(0, unit.getActionProgress());
+        int newAction = AtkSpeedCalcUnit.calcFinalAction(base, ups, downs);
+        unit.setAction(newAction);
+        unit.setActionProgress((int) Math.round(oldProgress * (newAction / (double) oldAction)));
     }
 
     private void scanSustainedPassives() {

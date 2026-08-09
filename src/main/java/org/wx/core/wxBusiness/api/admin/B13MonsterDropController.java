@@ -48,7 +48,7 @@ public class B13MonsterDropController {
     @NeedHeader(roles = {MemberRole.ADMIN})
     public WxResult<?> update(@RequestBody MonsterDrop entity) {
         entity.clearEmptyString();
-        monsterDropService.saveOrUpdate(entity);
+        monsterDropService.savePrepared(entity);
         return WxResult.success();
     }
 

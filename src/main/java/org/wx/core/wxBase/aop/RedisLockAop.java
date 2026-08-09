@@ -2,15 +2,15 @@ package org.wx.core.wxBase.aop;
 
 import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.annotation.TableId;
-import lombok.SneakyThrows;
 import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.Signature;
 import org.aspectj.lang.annotation.*;
 import org.aspectj.lang.reflect.MethodSignature;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.wx.core.wxBase.annotation.RedisLock;
-import org.wx.core.wxBase.exception.WxApiException;
 import org.wx.core.wxBase.factory.ErrorFactory;
 import org.wx.core.wxBase.factory.RedisFactory;
 
@@ -18,7 +18,6 @@ import jakarta.annotation.Resource;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.*;
-import java.util.concurrent.TimeUnit;
 
 /**
  * RedisLockAop 拦截器（基于自定义 RedisFactory 实现）
@@ -28,14 +27,13 @@ import java.util.concurrent.TimeUnit;
  */
 @Aspect
 @Component
+@Order(Ordered.HIGHEST_PRECEDENCE + 10)
 public class RedisLockAop {
 
     // 注入你自定义的 RedisFactory
     @Resource
     private RedisFactory redisFactory;
 
-    // 锁默认过期时间（30秒，避免死锁）
-    private static final long LOCK_EXPIRE_SECONDS = 30L;
     // 锁重试间隔（100毫秒）
     private static final long LOCK_RETRY_INTERVAL = 100L;
     // 最大重试次数（30次 = 3秒）
@@ -86,7 +84,7 @@ public class RedisLockAop {
             paramJson.put(key, val);
         }
 
-        HashMap<String, String> lockMap = new HashMap<>();
+        Map<String, String> lockMap = new LinkedHashMap<>();
         keysToBuild.forEach(item -> {
             List<String> levelKeys = Arrays.asList(item.split("\\."));
             String val = paramJson.toJSONString();
@@ -132,85 +130,36 @@ public class RedisLockAop {
         return null;
     }
 
-    /**
-     * 前置通知：获取分布式锁
-     */
-    @SneakyThrows
-    @Before("Pointcut()")
-    public void doBefore(JoinPoint joinPoint) {
-        String lockKey = getKey(joinPoint);
-        Method method = ((MethodSignature) joinPoint.getSignature()).getMethod();
-        RedisLock redisLock = method.getAnnotation(RedisLock.class);
-
-        // 尝试获取锁
-        boolean isLocked = redisFactory.tryLock(lockKey, LOCK_EXPIRE_SECONDS);
-
-        // 开启重试机制
-        if (!isLocked && redisLock.loading()) {
-            int retryCount = 0;
-            while (!isLocked && retryCount++ < MAX_RETRY_COUNT) {
-                Thread.sleep(LOCK_RETRY_INTERVAL);
-                isLocked = redisFactory.tryLock(lockKey, LOCK_EXPIRE_SECONDS);
-            }
-        }
-
-        // 仍未获取到锁，抛出异常
-        if (!isLocked) {
-            ErrorFactory.redisLockError();
-        }
-    }
-
-    /**
-     * 环绕通知：执行目标方法（仅透传，无额外逻辑）
-     */
     @Around("Pointcut()")
     public Object doAround(ProceedingJoinPoint pjp) throws Throwable {
-        return pjp.proceed();
-    }
-
-    /**
-     * 后置通知：空实现（释放锁逻辑在 AfterReturning/AfterThrowing 中）
-     */
-    @After("Pointcut()")
-    public void doAfter() {}
-
-    /**
-     * 正常返回后释放锁
-     */
-    @AfterReturning("Pointcut()")
-    public void doAfterReturning(JoinPoint joinPoint) {
-        String lockKey = getKey(joinPoint);
-        try {
-            redisFactory.unlock(lockKey);
-            // System.err.println("分布式锁释放成功: " + lockKey);
-        } catch (Exception e) {
-            // System.err.println("分布式锁释放失败: " + lockKey + ", 原因: " + e.getMessage());
-        }
-    }
-
-    /**
-     * 异常抛出后释放锁（特殊异常除外）
-     */
-    @AfterThrowing(value = "Pointcut()", throwing = "ex")
-    public void doAfterThrowing(JoinPoint joinPoint, Exception ex) {
-        System.err.println("方法执行异常，开始处理分布式锁释放逻辑");
-        boolean needUnlock = true;
-
-        // 特殊异常：6379 不释放锁
-        if (ex instanceof WxApiException exception) {
-            if ("6379".equals(exception.getCode())) {
-                needUnlock = false;
+        String lockKey = getKey(pjp);
+        Method method = ((MethodSignature) pjp.getSignature()).getMethod();
+        RedisLock lock = method.getAnnotation(RedisLock.class);
+        String ownerToken = UUID.randomUUID().toString();
+        long leaseSeconds = Math.max(1L, lock.leaseSeconds());
+        boolean acquired = redisFactory.tryLock(lockKey, ownerToken, leaseSeconds);
+        if (!acquired && lock.loading()) {
+            int retryCount = 0;
+            while (!acquired && retryCount++ < MAX_RETRY_COUNT) {
+                try {
+                    Thread.sleep(LOCK_RETRY_INTERVAL);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    ErrorFactory.redisLockError("等待业务锁时线程被中断");
+                }
+                acquired = redisFactory.tryLock(lockKey, ownerToken, leaseSeconds);
             }
         }
-
-        // 释放锁
-        if (needUnlock) {
-            String lockKey = getKey(joinPoint);
+        if (!acquired) {
+            ErrorFactory.redisLockError();
+        }
+        try {
+            return pjp.proceed();
+        } finally {
             try {
-                redisFactory.unlock(lockKey);
-                // System.err.println("异常场景下分布式锁释放成功: " + lockKey);
+                redisFactory.unlock(lockKey, ownerToken);
             } catch (Exception ignored) {
-                // 静默处理释放失败，避免影响主流程
+                // 锁有 TTL；释放异常不能覆盖原业务返回/异常。
             }
         }
     }

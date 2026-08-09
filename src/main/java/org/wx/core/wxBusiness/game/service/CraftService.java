@@ -61,7 +61,7 @@ public class CraftService {
     }
 
     @Transactional(rollbackFor = Exception.class)
-    @RedisLock(key = "uid")
+    @RedisLock(key = "uid", bindMethod = false, loading = true)
     public CraftRecipeVo craft(String uid, String recipeId) {
         ErrorFactory.throwError(Wx.isEmpty(uid), "未登录");
         Recipe recipe = getEnabled(recipeId);

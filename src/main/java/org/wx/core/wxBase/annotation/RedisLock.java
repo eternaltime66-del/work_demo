@@ -32,4 +32,7 @@ public @interface RedisLock {
      * false    直接打断没有拿到锁的方法运行
      */
     boolean loading() default false;
+
+    /** 锁租期（秒）；长耗时业务应显式设置更大的租期。 */
+    long leaseSeconds() default 30L;
 }

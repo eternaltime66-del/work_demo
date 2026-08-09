@@ -173,17 +173,6 @@ public class MemberService extends WxServiceImpl<MemberMapper, Member> {
     }
 
     @Transactional(rollbackFor = Exception.class)
-    public String superToken(String uid) {
-        Member member = getById(uid);
-        ErrorFactory.throwError(member == null, "用户不存在");
-        playerRoleService.ensureMainRole(member.getId());
-        warehouseService.ensureWarehouse(member.getId());
-        member.setToken(Member.creteToken());
-        Wx.RedisFactory.setBuyDay(member.getToken(), member.getId(), 7);
-        return member.getToken();
-    }
-
-    @Transactional(rollbackFor = Exception.class)
     public String signInAdminForPsd(
             String email,
             String password

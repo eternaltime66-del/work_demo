@@ -7,6 +7,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.util.Collections;
 import java.util.concurrent.TimeUnit;
 
 @Component
@@ -92,13 +93,23 @@ public class RedisFactory {
 
     /* ==================== Lock（简单分布式锁） ==================== */
 
-    public boolean tryLock(String key, long seconds) {
+    public boolean tryLock(String key, String ownerToken, long seconds) {
         Boolean ok = stringRedisTemplate.opsForValue()
-                .setIfAbsent(key, "1", seconds, TimeUnit.SECONDS);
+                .setIfAbsent(key, ownerToken, seconds, TimeUnit.SECONDS);
         return Boolean.TRUE.equals(ok);
     }
 
-    public void unlock(String key) {
-        stringRedisTemplate.delete(key);
+    /**
+     * 仅锁持有者可以释放，避免旧请求误删锁过期后由新请求获取的锁。
+     */
+    public boolean unlock(String key, String ownerToken) {
+        String script = "if redis.call('get', KEYS[1]) == ARGV[1] "
+                + "then return redis.call('del', KEYS[1]) else return 0 end";
+        Long deleted = stringRedisTemplate.execute(
+                new org.springframework.data.redis.core.script.DefaultRedisScript<>(script, Long.class),
+                Collections.singletonList(key),
+                ownerToken
+        );
+        return deleted != null && deleted > 0;
     }
 }

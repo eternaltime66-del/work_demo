@@ -192,13 +192,6 @@
         monsterIds: Array.isArray(monsterIds) ? monsterIds.join(',') : monsterIds
       }).then(ensureSuccess);
     },
-    /** 怪物掉落结算入仓库 */
-    monsterDropSettle: function (monsterIds) {
-      return request('/api/monster/drop/settle', {
-        monsterIds: Array.isArray(monsterIds) ? monsterIds.join(',') : monsterIds
-      }).then(ensureSuccess);
-    },
-
     /** 战斗演算（行动值）；胜利掉落入仓库；无尽塔请用 stageTowerFight */
     battleFight: function (levelId) {
       return request('/api/battle/fight', { levelId: levelId }).then(ensureSuccess);

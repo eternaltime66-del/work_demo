@@ -4,6 +4,7 @@ import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.wx.core.wxBase.base.Wx;
+import org.wx.core.wxBase.annotation.RedisLock;
 import org.wx.core.wxBase.factory.ErrorFactory;
 import org.wx.core.wxBusiness.game.battle.BattleEngine;
 import org.wx.core.wxBusiness.game.battle.BattleRuntimeUnit;
@@ -86,6 +87,7 @@ public class BattleService {
      * 主线 / 普通选关战斗（无尽塔请走 {@link #towerFight}）
      */
     @Transactional(rollbackFor = Exception.class)
+    @RedisLock(key = "uid", bindMethod = false, loading = true, leaseSeconds = 300)
     public BattleResultVo fight(String uid, String levelId) {
         ErrorFactory.throwError(Wx.isEmpty(uid), "未登录");
         ErrorFactory.throwError(Wx.isEmpty(levelId), "关卡不能为空");
@@ -123,6 +125,7 @@ public class BattleService {
      * 无尽塔：打当前层；胜利保留残血进入下一层，失败结束本次爬塔。
      */
     @Transactional(rollbackFor = Exception.class)
+    @RedisLock(key = "uid", bindMethod = false, loading = true, leaseSeconds = 300)
     public BattleResultVo towerFight(String uid) {
         ErrorFactory.throwError(Wx.isEmpty(uid), "未登录");
         PlayerTowerRun run = towerRunService.getByUid(uid);
@@ -714,8 +717,6 @@ public class BattleService {
         return v == null ? def : v;
     }
 }
-
-
 
 
 

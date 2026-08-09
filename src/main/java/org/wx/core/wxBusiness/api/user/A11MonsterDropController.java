@@ -6,7 +6,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.wx.core.wxBase.annotation.NeedHeader;
 import org.wx.core.wxBase.annotation.ParamCheck;
-import org.wx.core.wxBase.base.Wx;
 import org.wx.core.wxBase.base.WxResult;
 import org.wx.core.wxBusiness.account.entity.enums.MemberRole;
 import org.wx.core.wxBusiness.game.entity.vo.MonsterDropResultVo;
@@ -35,16 +34,6 @@ public class A11MonsterDropController {
     @NeedHeader(roles = MemberRole.USER)
     public WxResult<List<MonsterDropResultVo>> roll(@ParamCheck(msg = "怪物ID") String monsterIds) {
         return WxResult.success(monsterDropService.rollDrops(parseIds(monsterIds)));
-    }
-
-    /**
-     * 结算掉落并发放到仓库
-     */
-    @PostMapping("/settle")
-    @WxRequestLog()
-    @NeedHeader(roles = MemberRole.USER)
-    public WxResult<List<MonsterDropResultVo>> settle(@ParamCheck(msg = "怪物ID") String monsterIds) {
-        return WxResult.success(monsterDropService.rollAndGrantToWarehouse(Wx.memberId(), parseIds(monsterIds)));
     }
 
     private List<String> parseIds(String raw) {

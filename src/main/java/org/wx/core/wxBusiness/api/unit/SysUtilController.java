@@ -3,9 +3,9 @@ package org.wx.core.wxBusiness.api.unit;
 
 import cn.hutool.core.date.DateUtil;
 import com.baomidou.mybatisplus.core.metadata.IPage;
-import jakarta.servlet.ServletInputStream;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -24,8 +24,6 @@ import org.wx.core.wxBusiness.common.entity.WxSuperParam;
 import org.wx.core.wxBusiness.log.annotation.WxRequestLog;
 
 import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -43,8 +41,11 @@ public class SysUtilController {
 
 
 
-    private String filepathWin ="D:\\File\\Work\\Java\\";
-    public static String filepathLinux = "/www/wx/file/";
+    @Value("${app.upload.root-windows:D:/File/Work/Java/002_DP/}")
+    private String filepathWin;
+
+    @Value("${app.upload.root-linux:/www/wx/file/}")
+    private String filepathLinux;
 
     /**
      * 发送验证码
@@ -62,16 +63,8 @@ public class SysUtilController {
         System.err.println(phoneCode + account + "开始发送验证码");
         String keys = phoneCode + account;
         String key = "send-code-count-" + DateUtil.today() + ">>>" + keys;
-        Object obj = Wx.RedisFactory.get(key);
-        if (obj == null) {
-            Wx.RedisFactory.setBuyDay(key, 1,1);
-        } else {
-//            int integer = Integer.parseInt(obj.toString());
-//            int dayMaxSendNum = 10;
-//            ErrorFactory.throwError(integer >= dayMaxSendNum, "20小时内验证码获取次数已达上限");
-//            integer += 1;
-//            Wx.RedisFactory.setBuyDay(key, integer,1);
-        }
+        Long sendCount = Wx.RedisFactory.incr(key, 24L * 60 * 60);
+        ErrorFactory.throwError(sendCount != null && sendCount > 10, "24小时内验证码获取次数已达上限");
         String code = Wx.CodeFactory.sendCode(phoneCode,account, CodeEnum.valueOf(action));
         return WxResult.success();
     }
@@ -80,47 +73,37 @@ public class SysUtilController {
      * 上传文件
      * @param file 文件流
      * @return
-     * @throws FileNotFoundException
      */
-    @RequestMapping("upload")
+    @PostMapping("/upload")
+    @NeedHeader(roles = MemberRole.ADMIN)
     public WxResult<Object> upload(
-            @NotNull @RequestParam("file") MultipartFile file,
-            ServletInputStream stream,
-            Boolean key
-    ) throws FileNotFoundException {
-        key = key!=null && key;
-        //System.err.println(file.getOriginalFilename());
-        String fileName = key?"1.png":file.getOriginalFilename();
+            @NotNull @RequestParam("file") MultipartFile file
+    ) {
+        ErrorFactory.throwError(file.isEmpty(), "上传文件不能为空");
+        ErrorFactory.throwError(file.getSize() > 5L * 1024 * 1024, "图片不能超过5MB");
+        String fileName = file.getOriginalFilename();
+        ErrorFactory.throwError(fileName == null || fileName.isBlank(), "文件名不能为空");
         String fileType = fileName.substring(fileName.lastIndexOf(".") + 1).toLowerCase();
-        List<String> allowTypes = Arrays.asList("jpg", "png");
+        List<String> allowTypes = Arrays.asList("jpg", "jpeg", "png");
 
         ErrorFactory.throwError(!allowTypes.contains(fileType), "不支持该格式文件上传");
         ErrorFactory.throwError(fileName.chars().filter(ch -> ch == '.').count() > 1, "文件名不合法，包含多重后缀");
-
-        boolean isImg = Arrays.asList("jpg", "png").contains(fileType);
-
-        boolean errorImg = Arrays.asList("jpg", "png").contains(fileType);
-        ErrorFactory.throwError(!errorImg,"不支持该格式文件上传");
+        String contentType = file.getContentType();
+        ErrorFactory.throwError(contentType == null || !("image/jpeg".equalsIgnoreCase(contentType)
+                || "image/png".equalsIgnoreCase(contentType)), "文件内容不是受支持的图片");
         String filepath = isWinOs()?filepathWin:filepathLinux;
-        String realFilePath = isImg ? (filepath + "images/") : (filepath + "file/");
+        String realFilePath = filepath + "images/";
         File targetFile = new File(realFilePath);
         if (!targetFile.exists()) {
-            targetFile.mkdirs();
+            ErrorFactory.throwError(!targetFile.mkdirs(), "创建上传目录失败");
         }
-        String name = WordUnit.nowId(4, 1) + "." + fileType;
-        try (FileOutputStream out = new FileOutputStream(realFilePath + name);) {
-            if(key){
-                byte[] buf= new byte[1024];
-                int len ;
-                len = stream.read(buf, 0, buf.length);
-                while (len!= -1){
-                    out.write(buf,0,len);
-                }
-            }else {
-                out.write(file.getBytes());
-            }
+        String normalizedExt = "jpeg".equals(fileType) ? "jpg" : fileType;
+        String name = WordUnit.nowId(4, 1) + "." + normalizedExt;
+        File destination = new File(targetFile, name);
+        try {
+            file.transferTo(destination);
             HashMap<String,String> map = new HashMap<String,String>();
-            String url = String.format("/uploads/%s/%s", (isImg ? "images" : "file"), name);
+            String url = String.format("/uploads/images/%s", name);
             map.put("url", url);
             return WxResult.success(map);
         } catch (Exception e) {
