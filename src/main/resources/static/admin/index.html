@@ -2364,7 +2364,7 @@
           </div>
         </div>
 
-        <div class="skill-form-section" v-if="!isPassiveCombatEffectTab">
+        <div class="skill-form-section" v-if="!isPassiveBattleOutputTab">
           <h4>第二部分 · 技能效果</h4>
           <div class="passive-effect-meta">
             <div class="field" style="max-width:180px">
@@ -2404,7 +2404,7 @@
           <p v-if="!draftPassiveEffects.length" class="muted" style="margin:4px 0 0;font-size:12px">暂无效果</p>
         </div>
 
-        <div class="skill-form-section" v-if="isPassiveCombatEffectTab">
+        <div class="skill-form-section" v-if="isPassiveBattleOutputTab">
           <h4>第三部分 · 技能输出</h4>
           <p class="muted" style="margin:0 0 10px;font-size:12px">配置 SkillOutput：属性 / 效果 / 追加 BUFF。</p>
           <div class="skill-inline-actions">
@@ -3496,10 +3496,6 @@ function dodgeMatchScopeLabel(e) {
   return '任意技能';
 }
 
-function emptyDraftPassiveCombatEffect(opts) {
-  return emptyDraftSkillOutput();
-}
-
 function isBattlePassiveType(type) {
   return type === 'BATTLE_START' || type === 'BATTLE_JUDGE' || type === 'BATTLE_PULSE' || type === 'BATTLE_COMBAT';
 }
@@ -4198,13 +4194,10 @@ createApp({
     isPassiveBattleCombatTab() {
       return !!(this.currentPassiveSkill && this.currentPassiveSkill.passiveType === 'BATTLE_COMBAT');
     },
-    isPassiveInAnchorTab() { return this.isPassiveBattleCombatTab; },
-    isPassiveInPeriodicTab() { return this.isPassiveBattlePulseTab; },
-    isPassiveInSustainedTab() { return this.isPassiveBattleJudgeTab; },
     isPassiveFormulaConditionTab() {
       return this.isPassiveBattleJudgeTab || this.isPassiveBattlePulseTab;
     },
-    isPassiveCombatEffectTab() {
+    isPassiveBattleOutputTab() {
       return this.isPassiveBattleStartTab || this.isPassiveBattleJudgeTab
         || this.isPassiveBattlePulseTab || this.isPassiveBattleCombatTab;
     },
@@ -4305,9 +4298,6 @@ createApp({
         { key: 'judge', title: '判定锚点', cardClass: 'is-charge', list: d.defaultBattleJudgePassiveDescs },
         { key: 'pulse', title: '脉冲锚点', cardClass: 'is-charge', list: d.defaultBattlePulsePassiveDescs },
         { key: 'combat', title: '战斗事件', cardClass: 'is-effect', list: d.defaultBattleCombatPassiveDescs },
-        { key: 'anchor', title: '锚点被动(旧)', cardClass: 'is-charge', list: d.defaultAnchorPassiveDescs },
-        { key: 'period', title: '周期被动(旧)', cardClass: 'is-charge', list: d.defaultPeriodicPassiveDescs },
-        { key: 'sustained', title: '持续效果(旧)', cardClass: 'is-effect', list: d.defaultSustainedPassiveDescs }
       ];
       return defs.filter(function (b) { return b.list && b.list.length; });
     },
@@ -6670,8 +6660,6 @@ createApp({
     removeDraftPassiveOutput(idx) {
       this.draftPassiveOutputs.splice(idx, 1);
     },
-    addDraftPassiveCombatEffect() { this.addDraftPassiveOutput(); },
-    removeDraftPassiveCombatEffect(idx) { this.removeDraftPassiveOutput(idx); },
     onPeriodicFormulaDragStart(side, idx, e) {
       if (side === 'left') this._periodicLeftDragFrom = idx;
       else this._periodicRightDragFrom = idx;

@@ -36,8 +36,6 @@ public class PassiveSkillService extends WxServiceImpl<PassiveSkillMapper, Passi
     @Resource
     private PassiveEffectService passiveEffectService;
     @Resource
-    private PassiveCombatEffectService passiveCombatEffectService;
-    @Resource
     private SkillOutputService skillOutputService;
     @Resource
     private ItemService itemService;
@@ -59,16 +57,9 @@ public class PassiveSkillService extends WxServiceImpl<PassiveSkillMapper, Passi
         if (skill.getPassiveType() != null && skill.getPassiveType().isBattlePassive()) {
             skill.setOutputs(skillOutputService.listByPassiveSkillId(id));
             skill.setEffects(List.of());
-            skill.setCombatEffects(List.of());
-            skill.setStackModeLabel(skill.getPassiveType().label());
-        } else if (skill.getPassiveType() != null && skill.getPassiveType().isLegacyCombat()) {
-            skill.setCombatEffects(passiveCombatEffectService.listBySkillId(id));
-            skill.setOutputs(skillOutputService.listByPassiveSkillId(id));
-            skill.setEffects(List.of());
             skill.setStackModeLabel(skill.getPassiveType().label());
         } else {
             skill.setEffects(passiveEffectService.listBySkillId(id));
-            skill.setCombatEffects(List.of());
             skill.setOutputs(List.of());
             fillStackModeLabel(skill, skill.getEffects());
         }
@@ -120,7 +111,7 @@ public class PassiveSkillService extends WxServiceImpl<PassiveSkillMapper, Passi
             if (s == null) {
                 continue;
             }
-            if (s.getPassiveType() != null && (s.getPassiveType().isBattlePassive() || s.getPassiveType().isLegacyCombat())) {
+            if (s.getPassiveType() != null && s.getPassiveType().isBattlePassive()) {
                 s.setStackModeLabel(s.getPassiveType().label());
             } else {
                 fillStackModeLabel(s, bySkill.get(s.getId()));
@@ -162,7 +153,6 @@ public class PassiveSkillService extends WxServiceImpl<PassiveSkillMapper, Passi
     public void saveWithConditions(PassiveSkill entity) {
         ErrorFactory.notEmpty(entity.getName(), "请输入被动名称");
         ErrorFactory.notNull(entity.getPassiveType(), "被动类型不能为空");
-        ErrorFactory.throwError(entity.getPassiveType().isLegacyCombat(), "旧战斗被动类型已废弃，请使用开战/判定/脉冲/战斗事件");
         if (entity.getConditionMode() == null) {
             entity.setConditionMode(PassiveConditionMode.UNLIMITED);
         }
@@ -185,7 +175,6 @@ public class PassiveSkillService extends WxServiceImpl<PassiveSkillMapper, Passi
             List<SkillOutput> outputs = entity.getOutputs();
             ErrorFactory.throwError(outputs == null || outputs.isEmpty(), "请至少添加一条输出");
             validateOutputs(outputs);
-            clearLegacyAnchorFields(entity);
         } else {
             entity.setCombatEvent(null);
             entity.setStartApplyRule(null);
@@ -230,7 +219,6 @@ public class PassiveSkillService extends WxServiceImpl<PassiveSkillMapper, Passi
 
         if (battle) {
             passiveEffectService.removeBySkillId(entity.getId());
-            passiveCombatEffectService.removeBySkillId(entity.getId());
             skillOutputService.removeByPassiveSkillId(entity.getId());
             int effectSort = 0;
             for (SkillOutput e : entity.getOutputs()) {
@@ -244,7 +232,6 @@ public class PassiveSkillService extends WxServiceImpl<PassiveSkillMapper, Passi
             }
         } else {
             skillOutputService.removeByPassiveSkillId(entity.getId());
-            passiveCombatEffectService.removeBySkillId(entity.getId());
             passiveEffectService.removeBySkillId(entity.getId());
             int effectSort = 0;
             for (PassiveEffect e : entity.getEffects()) {
@@ -324,17 +311,11 @@ public class PassiveSkillService extends WxServiceImpl<PassiveSkillMapper, Passi
         skillOutputService.validateOutputs(outputs);
     }
 
-    private void clearLegacyAnchorFields(PassiveSkill entity) {
-        entity.setAnchorType(null);
-        entity.setPeriodicTriggerMode(null);
-    }
-
     @Transactional(rollbackFor = Exception.class)
     public void removeWithConditions(String id) {
         ErrorFactory.notEmpty(id, "ID不能为空");
         passiveConditionService.removeBySkillId(id);
         passiveEffectService.removeBySkillId(id);
-        passiveCombatEffectService.removeBySkillId(id);
         skillOutputService.removeByPassiveSkillId(id);
         this.removeById(id);
     }

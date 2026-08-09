@@ -115,15 +115,6 @@ public class ItemDetailService {
         d.setAdvancedPassiveSlotCount(item.getAdvancedPassiveSlotCount());
         d.setPlayerDefaultEditAdvancedPassiveSlotCount(item.getPlayerDefaultEditAdvancedPassiveSlotCount());
         d.setPlayerMaxEditAdvancedPassiveSlotCount(item.getPlayerMaxEditAdvancedPassiveSlotCount());
-        d.setAnchorPassiveSlotCount(item.getAnchorPassiveSlotCount());
-        d.setPlayerDefaultEditAnchorPassiveSlotCount(item.getPlayerDefaultEditAnchorPassiveSlotCount());
-        d.setPlayerMaxEditAnchorPassiveSlotCount(item.getPlayerMaxEditAnchorPassiveSlotCount());
-        d.setPeriodicPassiveSlotCount(item.getPeriodicPassiveSlotCount());
-        d.setPlayerDefaultEditPeriodicPassiveSlotCount(item.getPlayerDefaultEditPeriodicPassiveSlotCount());
-        d.setPlayerMaxEditPeriodicPassiveSlotCount(item.getPlayerMaxEditPeriodicPassiveSlotCount());
-        d.setSustainedPassiveSlotCount(item.getSustainedPassiveSlotCount());
-        d.setPlayerDefaultEditSustainedPassiveSlotCount(item.getPlayerDefaultEditSustainedPassiveSlotCount());
-        d.setPlayerMaxEditSustainedPassiveSlotCount(item.getPlayerMaxEditSustainedPassiveSlotCount());
 
         ItemType type = item.getItemType();
         if (type == null) {
@@ -225,9 +216,6 @@ public class ItemDetailService {
         d.setDefaultBattleJudgePassiveDescs(buildPassiveDescs(d.getItemId(), PassiveSkillType.BATTLE_JUDGE, itemNameFn, skillNameFn, buffFn));
         d.setDefaultBattlePulsePassiveDescs(buildPassiveDescs(d.getItemId(), PassiveSkillType.BATTLE_PULSE, itemNameFn, skillNameFn, buffFn));
         d.setDefaultBattleCombatPassiveDescs(buildPassiveDescs(d.getItemId(), PassiveSkillType.BATTLE_COMBAT, itemNameFn, skillNameFn, buffFn));
-        d.setDefaultAnchorPassiveDescs(buildPassiveDescs(d.getItemId(), PassiveSkillType.IN_ANCHOR, itemNameFn, skillNameFn, buffFn));
-        d.setDefaultPeriodicPassiveDescs(buildPassiveDescs(d.getItemId(), PassiveSkillType.IN_PERIODIC, itemNameFn, skillNameFn, buffFn));
-        d.setDefaultSustainedPassiveDescs(buildPassiveDescs(d.getItemId(), PassiveSkillType.IN_SUSTAINED, itemNameFn, skillNameFn, buffFn));
     }
 
     private void fillSystemDefaultNormal(CraftItemDetailVo d) {

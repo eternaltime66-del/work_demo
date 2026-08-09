@@ -70,33 +70,6 @@ public class Item extends WxBaseEntity<Item> {
     /** 可编辑最大高级属性被动数量 */
     private Integer playerMaxEditAdvancedPassiveSlotCount;
 
-    /** 默认自带锚点被动数量 */
-    private Integer anchorPassiveSlotCount;
-
-    /** 默认可编辑锚点被动数量 */
-    private Integer playerDefaultEditAnchorPassiveSlotCount;
-
-    /** 可编辑最大锚点被动数量 */
-    private Integer playerMaxEditAnchorPassiveSlotCount;
-
-    /** 默认自带周期被动数量 */
-    private Integer periodicPassiveSlotCount;
-
-    /** 默认可编辑周期被动数量 */
-    private Integer playerDefaultEditPeriodicPassiveSlotCount;
-
-    /** 可编辑最大周期被动数量 */
-    private Integer playerMaxEditPeriodicPassiveSlotCount;
-
-    /** 默认自带持续效果被动数量 */
-    private Integer sustainedPassiveSlotCount;
-
-    /** 默认可编辑持续效果被动数量 */
-    private Integer playerDefaultEditSustainedPassiveSlotCount;
-
-    /** 可编辑最大持续效果被动数量 */
-    private Integer playerMaxEditSustainedPassiveSlotCount;
-
     private Integer battleStartPassiveSlotCount;
     private Integer playerDefaultEditBattleStartPassiveSlotCount;
     private Integer playerMaxEditBattleStartPassiveSlotCount;

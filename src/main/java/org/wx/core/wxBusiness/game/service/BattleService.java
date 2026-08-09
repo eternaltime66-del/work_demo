@@ -169,9 +169,6 @@ public class BattleService {
         ActiveSkill defaultNormal = activeSkillService.ensureDefaultNormalSkill();
         ActiveSkill weaponNormal = playerEquipService.resolveWeaponNormalSkill(uid);
         List<ActiveSkill> equipChargeSkills = playerEquipService.resolveEquippedDefaultSkills(uid);
-        List<PassiveSkill> equippedAnchors = playerEquipService.resolveEquippedAnchorPassives(uid);
-        List<PassiveSkill> equippedPeriodics = playerEquipService.resolveEquippedPeriodicPassives(uid);
-        List<PassiveSkill> equippedSustained = playerEquipService.resolveEquippedSustainedPassives(uid);
         List<PassiveSkill> equippedBattleStart = playerEquipService.resolveEquippedBattleStartPassives(uid);
         List<PassiveSkill> equippedBattleJudge = playerEquipService.resolveEquippedBattleJudgePassives(uid);
         List<PassiveSkill> equippedBattlePulse = playerEquipService.resolveEquippedBattlePulsePassives(uid);
@@ -197,12 +194,6 @@ public class BattleService {
                 }
             }
         }
-        List<PassiveSkill> battleAnchors = filterEquipPassives(
-                equippedAnchors, equippedItemIds, equippedSkillIds, equippedItemTypes, equippedSkillTypes);
-        List<PassiveSkill> battlePeriodics = filterEquipPassives(
-                equippedPeriodics, equippedItemIds, equippedSkillIds, equippedItemTypes, equippedSkillTypes);
-        List<PassiveSkill> battleSustained = filterEquipPassives(
-                equippedSustained, equippedItemIds, equippedSkillIds, equippedItemTypes, equippedSkillTypes);
         List<PassiveSkill> battleStarts = filterEquipPassives(
                 equippedBattleStart, equippedItemIds, equippedSkillIds, equippedItemTypes, equippedSkillTypes);
         List<PassiveSkill> battleJudges = filterEquipPassives(
@@ -272,9 +263,6 @@ public class BattleService {
                     skillIds.add(s.getId());
                 }
             });
-            unit.getAnchorPassives().addAll(battleAnchors);
-            unit.getPeriodicPassives().addAll(battlePeriodics);
-            unit.getSustainedPassives().addAll(battleSustained);
             unit.getBattleStartPassives().addAll(battleStarts);
             unit.getBattleJudgePassives().addAll(battleJudges);
             unit.getBattlePulsePassives().addAll(battlePulses);
@@ -347,8 +335,7 @@ public class BattleService {
                 engine,
                 resolveMainAllyName(engine),
                 equipChargeSkills,
-                mergeMountPassives(battleStarts, battleJudges, battlePulses, battleCombats,
-                        battleAnchors, battlePeriodics, battleSustained)
+                mergeMountPassives(battleStarts, battleJudges, battlePulses, battleCombats)
         );
         seedV2Meta(engine, battleStarts, battleJudges, battlePulses, battleCombats);
 
@@ -716,7 +703,6 @@ public class BattleService {
         return v == null ? def : v;
     }
 }
-
 
 
 

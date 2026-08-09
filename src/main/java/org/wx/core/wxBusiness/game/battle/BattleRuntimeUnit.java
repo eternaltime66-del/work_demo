@@ -47,16 +47,6 @@ public class BattleRuntimeUnit {
 
     private final List<ActiveSkill> skills = new ArrayList<>();
 
-    /** @deprecated 旧锚点列表 */
-    @Deprecated
-    private final List<PassiveSkill> anchorPassives = new ArrayList<>();
-    /** @deprecated */
-    @Deprecated
-    private final List<PassiveSkill> periodicPassives = new ArrayList<>();
-    /** @deprecated */
-    @Deprecated
-    private final List<PassiveSkill> sustainedPassives = new ArrayList<>();
-
     /** V2 战斗型被动 */
     private final List<PassiveSkill> battleStartPassives = new ArrayList<>();
     private final List<PassiveSkill> battleJudgePassives = new ArrayList<>();
@@ -65,7 +55,6 @@ public class BattleRuntimeUnit {
 
     private final Map<String, Integer> periodicTriggerCount = new HashMap<>();
     private final Map<String, Map<String, int[]>> periodicEdgeState = new HashMap<>();
-    private final Set<String> sustainedActiveIds = new HashSet<>();
     /** 判定锚点已激活 */
     private final Set<String> judgeActiveIds = new HashSet<>();
     /** 开战时间规则已触发：passiveId -> lastStep */

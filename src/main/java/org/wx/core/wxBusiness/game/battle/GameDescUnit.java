@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.util.StringUtils;
 import org.wx.core.wxBusiness.game.entity.ActiveSkill;
 import org.wx.core.wxBusiness.game.entity.BuffDef;
-import org.wx.core.wxBusiness.game.entity.PassiveCombatEffect;
 import org.wx.core.wxBusiness.game.entity.PassiveCondition;
 import org.wx.core.wxBusiness.game.entity.PassiveEffect;
 import org.wx.core.wxBusiness.game.entity.PassiveSkill;
@@ -24,7 +23,6 @@ import org.wx.core.wxBusiness.game.entity.enums.FormulaReadKey;
 import org.wx.core.wxBusiness.game.entity.enums.FormulaReadRole;
 import org.wx.core.wxBusiness.game.entity.enums.ItemType;
 import org.wx.core.wxBusiness.game.entity.enums.NeedChargeMode;
-import org.wx.core.wxBusiness.game.entity.enums.PassiveAnchorType;
 import org.wx.core.wxBusiness.game.entity.enums.PassiveConditionMode;
 import org.wx.core.wxBusiness.game.entity.enums.PassiveConditionType;
 import org.wx.core.wxBusiness.game.entity.enums.PassiveEffectAttrKey;
@@ -405,40 +403,6 @@ public final class GameDescUnit {
         if (skill.getPassiveType() != null && skill.getPassiveType().isBattlePassive()) {
             appendBattleTriggerTexts(effectTexts, skill);
             appendOutputTexts(effectTexts, skill.getOutputs(), buffFn);
-        } else if (skill.getPassiveType() == PassiveSkillType.IN_ANCHOR) {
-            if (skill.getAnchorType() != null) {
-                effectTexts.add("锚点：" + skill.getAnchorType().getLabel()
-                        + anchorMatchSuffix(skill, skillNameFn));
-            }
-            appendCombatEffectTexts(effectTexts, skill.getCombatEffects());
-            appendOutputTexts(effectTexts, skill.getOutputs(), buffFn);
-        } else if (skill.getPassiveType() == PassiveSkillType.IN_PERIODIC
-                || skill.getPassiveType() == PassiveSkillType.IN_SUSTAINED) {
-            boolean sustained = skill.getPassiveType() == PassiveSkillType.IN_SUSTAINED;
-            if (skill.getPeriodicTriggerMode() != null) {
-                effectTexts.add((sustained ? "判定：" : "触发：") + skill.getPeriodicTriggerMode().getLabel());
-            }
-            String left = formatFormula(skill.getLeftFormulaJson());
-            String right = formatFormula(skill.getRightFormulaJson());
-            String op = skill.getCompareOp() != null ? skill.getCompareOp().symbol() : "?";
-            if (StringUtils.hasText(left) || StringUtils.hasText(right)) {
-                effectTexts.add((sustained ? "当 " : "每当 ")
-                        + (StringUtils.hasText(left) ? left : "?")
-                        + " " + op + " " + (StringUtils.hasText(right) ? right : "?")
-                        + (sustained ? " 时生效，不满足则取消" : ""));
-            }
-            if (sustained) {
-                effectTexts.add("持续效果：条件维持期间生效");
-            } else {
-                Integer max = skill.getMaxTriggerPerBattle();
-                if (max != null && max > 0) {
-                    effectTexts.add("本场最多触发 " + max + " 次");
-                } else {
-                    effectTexts.add("本场触发次数不限");
-                }
-            }
-            appendCombatEffectTexts(effectTexts, skill.getCombatEffects());
-            appendOutputTexts(effectTexts, skill.getOutputs(), buffFn);
         } else if (effects != null) {
             for (PassiveEffect e : effects) {
                 String line = passiveEffectLine(e);
@@ -669,24 +633,6 @@ public final class GameDescUnit {
         return "对 持有者 造成 " + el + "伤害" + formulaPart;
     }
 
-    public static String combatEffectLine(PassiveCombatEffect effect) {
-        if (effect == null || effect.getEffectType() == null) {
-            return "";
-        }
-        return formatOutputLike(
-                effect.getEffectType(),
-                effect.getTargetType(),
-                null,
-                effect.getAttrKey(),
-                effect.getAttrDir(),
-                effect.getFormulaJson(),
-                effect.getHitSegments(),
-                effect.getTriggerRate(),
-                effect.getDurationAv(),
-                null
-        );
-    }
-
     /**
      * 新版效果摘要：对 目标 造成 物理伤害 自己·攻击
      */
@@ -724,39 +670,6 @@ public final class GameDescUnit {
         }
         String el = damageElementLabel(damageElement);
         return rate + "对 " + target + " 造成 " + el + "伤害" + formulaPart + seg;
-    }
-
-    private static void appendCombatEffectTexts(List<String> effectTexts, List<PassiveCombatEffect> combatEffects) {
-        if (combatEffects == null || effectTexts == null) {
-            return;
-        }
-        for (PassiveCombatEffect e : combatEffects) {
-            String line = combatEffectLine(e);
-            if (StringUtils.hasText(line)) {
-                effectTexts.add(line);
-            }
-        }
-    }
-
-    private static String anchorMatchSuffix(PassiveSkill skill, Function<String, String> skillNameFn) {
-        PassiveAnchorType t = skill.getAnchorType();
-        if (t == null || !t.needsSkillMatch()) {
-            return "";
-        }
-        SkillChargeMatchMode mode = skill.getSkillMatchMode();
-        if (mode == null || mode == SkillChargeMatchMode.ANY) {
-            return " · 任意技能";
-        }
-        if (mode == SkillChargeMatchMode.ANY_TYPE) {
-            return " · " + activeSkillTypeLabel(skill.getRefSkillType()) + "类";
-        }
-        if (mode == SkillChargeMatchMode.ANY_SCHOOL) {
-            return " · 流派「" + SkillSchoolUnit.normalizeSchool(skill.getRefSkillSchool()) + "」";
-        }
-        if (mode == SkillChargeMatchMode.ANY_ELEMENT) {
-            return " · " + damageElementLabel(skill.getRefDamageElement()) + "元素";
-        }
-        return " · 「" + nameOrId(skillNameFn, skill.getRefSkillId()) + "」";
     }
 
     public static String atkSpeedText(BigDecimal up, BigDecimal down) {

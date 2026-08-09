@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS app_item_default_passive (
   id varchar(64) NOT NULL COMMENT 'ID',
   item_id varchar(64) NOT NULL COMMENT '物品主表id',
   passive_skill_id varchar(64) NOT NULL COMMENT '被动技能id',
-  passive_type varchar(32) NOT NULL COMMENT 'OUT_BASIC/OUT_ADVANCED',
+  passive_type varchar(32) NOT NULL COMMENT 'OUT_BASIC/OUT_ADVANCED/BATTLE_START/BATTLE_JUDGE/BATTLE_PULSE/BATTLE_COMBAT',
   slot_no int DEFAULT 0 COMMENT '槽位序号从0开始',
   sort int DEFAULT 0 COMMENT '排序',
   CREATE_TIME datetime DEFAULT NULL,

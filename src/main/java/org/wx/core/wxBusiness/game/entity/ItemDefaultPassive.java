@@ -26,7 +26,7 @@ public class ItemDefaultPassive extends WxBaseEntity<ItemDefaultPassive> {
 
     private String passiveSkillId;
 
-    /** OUT_BASIC / OUT_ADVANCED / IN_ANCHOR */
+    /** OUT_BASIC / OUT_ADVANCED / BATTLE_START / BATTLE_JUDGE / BATTLE_PULSE / BATTLE_COMBAT */
     private PassiveSkillType passiveType;
 
     private Integer slotNo;

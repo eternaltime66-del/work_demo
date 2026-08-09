@@ -73,7 +73,6 @@ WHERE id LIKE 'SOUT_CH1_%'
 DELETE FROM app_skill_charge WHERE id LIKE 'SCH_CH1_%' OR skill_id LIKE 'ASK_CH1_%';
 DELETE FROM app_skill_effect WHERE skill_id LIKE 'ASK_CH1_%';
 
-DELETE FROM app_passive_combat_effect WHERE skill_id LIKE 'PSK_CH1_%';
 DELETE FROM app_passive_effect WHERE id LIKE 'PSE_CH1_%' OR skill_id LIKE 'PSK_CH1_%';
 DELETE FROM app_passive_condition WHERE skill_id LIKE 'PSK_CH1_%';
 DELETE FROM app_passive_skill WHERE id LIKE 'PSK_CH1_%';

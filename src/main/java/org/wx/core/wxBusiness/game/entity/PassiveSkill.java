@@ -13,10 +13,8 @@ import org.wx.core.wxBusiness.game.entity.enums.BattleStartApplyRule;
 import org.wx.core.wxBusiness.game.entity.enums.CombatEventType;
 import org.wx.core.wxBusiness.game.entity.enums.CompareOp;
 import org.wx.core.wxBusiness.game.entity.enums.DamageElement;
-import org.wx.core.wxBusiness.game.entity.enums.PassiveAnchorType;
 import org.wx.core.wxBusiness.game.entity.enums.PassiveConditionMode;
 import org.wx.core.wxBusiness.game.entity.enums.PassiveSkillType;
-import org.wx.core.wxBusiness.game.entity.enums.PeriodicTriggerMode;
 import org.wx.core.wxBusiness.game.entity.enums.SkillChargeMatchMode;
 
 import java.util.List;
@@ -41,10 +39,6 @@ public class PassiveSkill extends WxBaseEntity<PassiveSkill> {
 
     private PassiveConditionMode conditionMode;
 
-    /** @deprecated 旧 IN_ANCHOR */
-    @Deprecated
-    private PassiveAnchorType anchorType;
-
     private SkillChargeMatchMode skillMatchMode;
 
     private ActiveSkillType refSkillType;
@@ -56,10 +50,6 @@ public class PassiveSkill extends WxBaseEntity<PassiveSkill> {
     private DamageElement refDamageElement;
 
     private String refSkillId;
-
-    /** @deprecated 旧周期模式；判定/脉冲改用 SELF 语义 */
-    @Deprecated
-    private PeriodicTriggerMode periodicTriggerMode;
 
     private String leftFormulaJson;
 
@@ -91,11 +81,6 @@ public class PassiveSkill extends WxBaseEntity<PassiveSkill> {
 
     @TableField(exist = false)
     private List<PassiveEffect> effects;
-
-    /** @deprecated 旧战斗效果；V2 用 outputs */
-    @Deprecated
-    @TableField(exist = false)
-    private List<PassiveCombatEffect> combatEffects;
 
     @TableField(exist = false)
     private List<SkillOutput> outputs;

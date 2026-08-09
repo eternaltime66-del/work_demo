@@ -2,7 +2,6 @@ package org.wx.core.wxBusiness.game.battle;
 
 import org.wx.core.wxBusiness.game.entity.ActiveSkill;
 import org.wx.core.wxBusiness.game.entity.BuffDef;
-import org.wx.core.wxBusiness.game.entity.PassiveCombatEffect;
 import org.wx.core.wxBusiness.game.entity.PassiveSkill;
 import org.wx.core.wxBusiness.game.entity.SkillCharge;
 import org.wx.core.wxBusiness.game.entity.SkillEffect;
@@ -19,8 +18,6 @@ import org.wx.core.wxBusiness.game.entity.enums.CompareOp;
 import org.wx.core.wxBusiness.game.entity.enums.DamageElement;
 import org.wx.core.wxBusiness.game.entity.enums.DamageSourceKind;
 import org.wx.core.wxBusiness.game.entity.enums.NeedChargeMode;
-import org.wx.core.wxBusiness.game.entity.enums.PassiveAnchorType;
-import org.wx.core.wxBusiness.game.entity.enums.PeriodicTriggerMode;
 import org.wx.core.wxBusiness.game.entity.enums.SkillChargeEvent;
 import org.wx.core.wxBusiness.game.entity.enums.SkillEffectTarget;
 import org.wx.core.wxBusiness.game.entity.enums.SkillEffectType;
@@ -77,8 +74,6 @@ public class BattleEngine implements SkillV2OutputUnit.Host {
     private int combatTriggerDepth;
 
     /** 周期/持续扫描防重入 */
-    private boolean scanningPeriodic;
-    private boolean scanningSustained;
     private boolean scanningV2;
     private int notifyDepth;
 
@@ -375,13 +370,11 @@ public class BattleEngine implements SkillV2OutputUnit.Host {
      * 统一战斗状态变更总线：凡可能影响公式的路径回调。
      */
     private void notifyStatChangedInternal() {
-        if (scanningPeriodic || scanningV2 || notifyDepth > 2) {
+        if (scanningV2 || notifyDepth > 2) {
             return;
         }
         notifyDepth++;
         try {
-            scanPeriodicPassives();
-            scanSustainedPassives();
             scanV2JudgeAndPulse();
         } finally {
             notifyDepth--;
@@ -399,93 +392,6 @@ public class BattleEngine implements SkillV2OutputUnit.Host {
         }
     }
 
-    private void scanPeriodicPassives() {
-        scanningPeriodic = true;
-        try {
-            Set<String> firedThisRound = new HashSet<>();
-            for (BattleRuntimeUnit owner : units) {
-                if (owner == null || !owner.alive()) {
-                    continue;
-                }
-                List<PassiveSkill> passives = owner.getPeriodicPassives();
-                if (passives == null || passives.isEmpty()) {
-                    continue;
-                }
-                for (PassiveSkill p : passives) {
-                    if (p == null || p.getId() == null) {
-                        continue;
-                    }
-                    String guard = owner.getUnitId() + "#" + p.getId();
-                    if (!firedThisRound.add(guard)) {
-                        continue;
-                    }
-                    tryFirePeriodic(owner, p);
-                }
-            }
-        } finally {
-            scanningPeriodic = false;
-        }
-    }
-
-    private void tryFirePeriodic(BattleRuntimeUnit owner, PassiveSkill p) {
-        PeriodicTriggerMode mode = p.getPeriodicTriggerMode() == null ? PeriodicTriggerMode.SELF : p.getPeriodicTriggerMode();
-        CompareOp op = p.getCompareOp() == null ? CompareOp.GTE : p.getCompareOp();
-        List<BattleRuntimeUnit> candidates = resolvePeriodicCandidates(owner, mode);
-        for (BattleRuntimeUnit cand : candidates) {
-            if (cand == null || !cand.alive()) {
-                continue;
-            }
-            if (!canTriggerMore(owner, p)) {
-                return;
-            }
-            AnchorEvalContext ctx = baseEvalCtx();
-            if (mode.hasSpecificTarget()) {
-                ctx.setSpecificTarget(cand);
-            }
-            BattleRuntimeUnit formulaTarget = mode.hasSpecificTarget() ? cand : owner;
-            double left = FormulaEvalUnit.eval(p.getLeftFormulaJson(), owner, formulaTarget, board, ctx);
-            double right = FormulaEvalUnit.eval(p.getRightFormulaJson(), owner, formulaTarget, board, ctx);
-            String candKey = mode == PeriodicTriggerMode.FORMULA ? "_FORMULA_"
-                    : (mode == PeriodicTriggerMode.SELF ? owner.getUnitId() : cand.getUnitId());
-            int fires = resolvePeriodicFires(owner, p.getId(), candKey, left, right, op);
-            for (int i = 0; i < fires; i++) {
-                if (!canTriggerMore(owner, p)) {
-                    break;
-                }
-                bumpTriggerCount(owner, p.getId());
-                int used = owner.getPeriodicTriggerCount().getOrDefault(p.getId(), 0);
-                logs.add("  └ [" + owner.getName() + "] 周期被动「"
-                        + (p.getName() != null ? p.getName() : p.getId()) + "」触发"
-                        + (mode.hasSpecificTarget() ? "（特定目标 " + cand.getName() + "）" : "")
-                        + " " + formatPeriodicTriggerCap(p, used));
-                List<PassiveCombatEffect> effects = p.getCombatEffects();
-                if (effects == null) {
-                    continue;
-                }
-                for (PassiveCombatEffect e : effects) {
-                    applyPeriodicEffect(owner, e, ctx);
-                }
-            }
-        }
-    }
-
-    private List<BattleRuntimeUnit> resolvePeriodicCandidates(BattleRuntimeUnit owner, PeriodicTriggerMode mode) {
-        if (owner == null || mode == null) {
-            return List.of();
-        }
-        return switch (mode) {
-            case SELF, FORMULA -> owner.alive() ? List.of(owner) : List.of();
-            case ANY -> units.stream().filter(u -> u != null && u.alive()).toList();
-            case ANY_ENEMY -> {
-                BattleSide foe = owner.getSide() == BattleSide.ALLY ? BattleSide.ENEMY : BattleSide.ALLY;
-                yield units.stream().filter(u -> u != null && u.alive() && u.getSide() == foe).toList();
-            }
-            case ANY_ALLY -> units.stream()
-                    .filter(u -> u != null && u.alive() && u.getSide() == owner.getSide())
-                    .toList();
-        };
-    }
-
     private boolean canTriggerMore(BattleRuntimeUnit owner, PassiveSkill p) {
         Integer max = p.getMaxTriggerPerBattle();
         if (max == null || max <= 0) {
@@ -497,14 +403,6 @@ public class BattleEngine implements SkillV2OutputUnit.Host {
 
     private void bumpTriggerCount(BattleRuntimeUnit owner, String passiveId) {
         owner.getPeriodicTriggerCount().merge(passiveId, 1, Integer::sum);
-    }
-
-    private static String formatPeriodicTriggerCap(PassiveSkill p, int used) {
-        Integer max = p == null ? null : p.getMaxTriggerPerBattle();
-        if (max == null || max <= 0) {
-            return "[不限次数]";
-        }
-        return "[已生效 " + used + " / " + max + "]";
     }
 
     /**
@@ -723,7 +621,6 @@ public class BattleEngine implements SkillV2OutputUnit.Host {
         }
 
         if (PassiveSkillMatchUnit.isChargeSkill(skill)) {
-            triggerAfterCast(actor, skill);
         }
         castBag = null;
         castingSkill = null;
@@ -866,7 +763,6 @@ public class BattleEngine implements SkillV2OutputUnit.Host {
                         if (castBag != null) {
                             castBag.addHit(target, effective);
                         }
-                        triggerOnChargeDamage(caster, target, skill, effective);
                     }
                 } else if (effect.getEffectType() == SkillEffectType.HEAL) {
                     int heal = amount;
@@ -896,162 +792,6 @@ public class BattleEngine implements SkillV2OutputUnit.Host {
                             false
                     );
                     notifyStatChangedInternal();
-                }
-            }
-        }
-    }
-
-    private void triggerOnChargeDamage(BattleRuntimeUnit caster, BattleRuntimeUnit target, ActiveSkill skill, int dealt) {
-        AnchorEvalContext ctx = baseEvalCtx();
-        ctx.setHitDamage(dealt);
-        ctx.setSkillDamage(dealt);
-        ctx.setCaster(caster);
-        ctx.setDamageSource(caster);
-        ctx.setHitTarget(target);
-
-        fireAnchors(caster, PassiveAnchorType.AFTER_DEAL_CHARGE_DMG, skill, ctx);
-        fireAnchors(target, PassiveAnchorType.AFTER_TAKE_CHARGE_DMG, skill, ctx);
-        fireAnchors(target, PassiveAnchorType.AFTER_RECEIVE_CHARGE, skill, ctx);
-    }
-
-    private void triggerAfterCast(BattleRuntimeUnit caster, ActiveSkill skill) {
-        if (castBag == null) {
-            return;
-        }
-        int total = castBag.totalDamage;
-        List<BattleRuntimeUnit> hits = new ArrayList<>(castBag.hitDamageByUnit.keySet());
-        if (hits.isEmpty()) {
-            AnchorEvalContext ctx = baseEvalCtx();
-            ctx.setHitDamage(0);
-            ctx.setSkillDamage(0);
-            ctx.setCaster(caster);
-            ctx.setDamageSource(caster);
-            fireAnchors(caster, PassiveAnchorType.AFTER_CAST_CHARGE, skill, ctx);
-            return;
-        }
-        for (BattleRuntimeUnit hit : hits) {
-            AnchorEvalContext ctx = baseEvalCtx();
-            ctx.setHitDamage(castBag.hitDamageByUnit.getOrDefault(hit, 0));
-            ctx.setSkillDamage(total);
-            ctx.setCaster(caster);
-            ctx.setDamageSource(caster);
-            ctx.setHitTarget(hit);
-            fireAnchors(caster, PassiveAnchorType.AFTER_CAST_CHARGE, skill, ctx);
-        }
-    }
-
-    private void fireAnchors(
-            BattleRuntimeUnit owner,
-            PassiveAnchorType type,
-            ActiveSkill trigger,
-            AnchorEvalContext ctx
-    ) {
-        if (owner == null || !owner.alive() || type == null) {
-            return;
-        }
-        if (ctx.getAllUnits() == null) {
-            ctx.setAllUnits(units);
-        }
-        List<PassiveSkill> passives = owner.getAnchorPassives();
-        if (passives == null || passives.isEmpty()) {
-            return;
-        }
-        for (PassiveSkill p : passives) {
-            if (p == null || p.getAnchorType() != type) {
-                continue;
-            }
-            if (!PassiveSkillMatchUnit.matchTriggerSkill(p, trigger)) {
-                continue;
-            }
-            if (!PassiveConditionEvalUnit.matchFormulaConditions(p, owner, board, ctx)) {
-                continue;
-            }
-            logs.add("  └ [" + owner.getName() + "] 锚点被动「"
-                    + (p.getName() != null ? p.getName() : p.getId()) + "」触发（" + type.getLabel() + "）");
-            List<PassiveCombatEffect> effects = p.getCombatEffects();
-            if (effects == null) {
-                continue;
-            }
-            for (PassiveCombatEffect e : effects) {
-                applyAnchorEffect(owner, e, ctx);
-            }
-        }
-    }
-
-    private void applyAnchorEffect(BattleRuntimeUnit owner, PassiveCombatEffect effect, AnchorEvalContext ctx) {
-        applyCombatPassiveEffect(owner, effect, ctx, "    └ ");
-    }
-
-    private void applyPeriodicEffect(BattleRuntimeUnit owner, PassiveCombatEffect effect, AnchorEvalContext ctx) {
-        applyCombatPassiveEffect(owner, effect, ctx, "    └ ");
-    }
-
-    /** 锚点/周期战斗效果：伤害不计主动技能次数，且不二次触发锚点伤害类 */
-    private void applyCombatPassiveEffect(
-            BattleRuntimeUnit owner,
-            PassiveCombatEffect effect,
-            AnchorEvalContext ctx,
-            String logPrefix
-    ) {
-        if (effect == null || effect.getEffectType() == null) {
-            return;
-        }
-        if (!rollTriggerRate(effect.getTriggerRate())) {
-            String label = effect.getName() != null && !effect.getName().isBlank()
-                    ? effect.getName() : "效果";
-            int rate = effect.getTriggerRate() == null ? 100 : effect.getTriggerRate();
-            logs.add(logPrefix + "「" + label + "」未触发（概率 " + rate + "%）");
-            return;
-        }
-        if (ctx != null && ctx.getAllUnits() == null) {
-            ctx.setAllUnits(units);
-        }
-        SkillEffectTarget targetType = effect.getTargetType() != null ? effect.getTargetType() : SkillEffectTarget.SELF;
-        List<BattleRuntimeUnit> targets = SkillTargetResolver.resolveWithAnchor(targetType, owner, units, ctx);
-        if (targets.isEmpty()) {
-            logs.add(logPrefix + "无目标（" + effect.getName() + "）");
-            return;
-        }
-        int segments = effect.getHitSegments() == null || effect.getHitSegments() < 1 ? 1 : effect.getHitSegments();
-        for (BattleRuntimeUnit target : targets) {
-            if (!target.alive()) {
-                continue;
-            }
-            for (int i = 0; i < segments; i++) {
-                if (!target.alive()) {
-                    break;
-                }
-                double raw = FormulaEvalUnit.eval(effect.getFormulaJson(), owner, target, board, ctx);
-                int amount = (int) Math.max(0, Math.round(raw));
-                if (effect.getEffectType() == SkillEffectType.DAMAGE) {
-                    int dealt = resolveDealtDamage(owner, target, amount);
-                    applyHpDamage(owner, target, dealt, null, targetType, segments, i, false, logPrefix);
-                } else if (effect.getEffectType() == SkillEffectType.HEAL) {
-                    int heal = amount;
-                    target.setHp(Math.min(target.getMaxHp(), target.getHp() + heal));
-                    logs.add(logPrefix + "治疗 " + target.getName() + " " + heal
-                            + (segments > 1 ? "（第" + (i + 1) + "段）" : ""));
-                    BattleEventVo healEv = emitInternal("HEAL");
-                    healEv.setUid(owner.getUnitId());
-                    healEv.setTarget(target.getUnitId());
-                    healEv.setValue(heal);
-                    healEv.setSeg(i + 1);
-                    healEv.setSegTotal(segments);
-                    healEv.setHpAfter(target.getHp());
-                    healEv.setMaxHp(target.getMaxHp());
-                } else if (effect.getEffectType() == SkillEffectType.ATTR_MODIFY) {
-                    applyAttrModify(
-                            target,
-                            effect.getAttrKey(),
-                            effect.getAttrDir(),
-                            amount,
-                            segments,
-                            i,
-                            effect.getName(),
-                            buffSourceKey("PCE", effect.getId()),
-                            effect.getDurationAv(),
-                            false
-                    );
                 }
             }
         }
@@ -1573,126 +1313,6 @@ public class BattleEngine implements SkillV2OutputUnit.Host {
         }
         int newAction = AtkSpeedCalcUnit.calcFinalAction(base, ups, downs);
         unit.setAction(newAction);
-    }
-
-    private void scanSustainedPassives() {
-        if (scanningSustained) {
-            return;
-        }
-        scanningSustained = true;
-        try {
-            for (BattleRuntimeUnit owner : units) {
-                if (owner == null || !owner.alive()) {
-                    continue;
-                }
-                List<PassiveSkill> passives = owner.getSustainedPassives();
-                if (passives == null || passives.isEmpty()) {
-                    continue;
-                }
-                for (PassiveSkill p : passives) {
-                    if (p == null || p.getId() == null) {
-                        continue;
-                    }
-                    syncSustainedPassive(owner, p);
-                }
-            }
-        } finally {
-            scanningSustained = false;
-        }
-    }
-
-    private void syncSustainedPassive(BattleRuntimeUnit owner, PassiveSkill p) {
-        PeriodicTriggerMode mode = p.getPeriodicTriggerMode() == null ? PeriodicTriggerMode.SELF : p.getPeriodicTriggerMode();
-        CompareOp op = p.getCompareOp() == null ? CompareOp.GTE : p.getCompareOp();
-        List<BattleRuntimeUnit> candidates = resolvePeriodicCandidates(owner, mode);
-        boolean conditionMet = false;
-        AnchorEvalContext ctx = baseEvalCtx();
-        for (BattleRuntimeUnit cand : candidates) {
-            if (cand == null || !cand.alive()) {
-                continue;
-            }
-            if (mode.hasSpecificTarget()) {
-                ctx.setSpecificTarget(cand);
-            }
-            BattleRuntimeUnit formulaTarget = mode.hasSpecificTarget() ? cand : owner;
-            double left = FormulaEvalUnit.eval(p.getLeftFormulaJson(), owner, formulaTarget, board, ctx);
-            double right = FormulaEvalUnit.eval(p.getRightFormulaJson(), owner, formulaTarget, board, ctx);
-            if (compare(left, op, right)) {
-                conditionMet = true;
-                break;
-            }
-        }
-        boolean active = owner.getSustainedActiveIds().contains(p.getId());
-        if (conditionMet && !active) {
-            activateSustained(owner, p, ctx);
-        } else if (!conditionMet && active) {
-            deactivateSustained(owner, p);
-        }
-    }
-
-    private void activateSustained(BattleRuntimeUnit owner, PassiveSkill p, AnchorEvalContext ctx) {
-        List<PassiveCombatEffect> effects = p.getCombatEffects();
-        if (effects == null || effects.isEmpty()) {
-            return;
-        }
-        logs.add("  └ [" + owner.getName() + "] 持续效果「"
-                + (p.getName() != null ? p.getName() : p.getId()) + "」生效");
-        boolean any = false;
-        for (PassiveCombatEffect e : effects) {
-            if (e == null || e.getEffectType() != SkillEffectType.ATTR_MODIFY) {
-                continue;
-            }
-            if (!rollTriggerRate(e.getTriggerRate())) {
-                continue;
-            }
-            SkillEffectTarget targetType = e.getTargetType() != null ? e.getTargetType() : SkillEffectTarget.SELF;
-            List<BattleRuntimeUnit> targets = SkillTargetResolver.resolveWithAnchor(targetType, owner, units, ctx);
-            for (BattleRuntimeUnit target : targets) {
-                if (target == null || !target.alive()) {
-                    continue;
-                }
-                double raw = FormulaEvalUnit.eval(e.getFormulaJson(), owner, target, board, ctx);
-                int amount = (int) Math.max(0, Math.round(raw));
-                applyAttrModify(
-                        target,
-                        e.getAttrKey(),
-                        e.getAttrDir(),
-                        amount,
-                        1,
-                        0,
-                        e.getName(),
-                        sustainedBuffKey(p.getId(), e.getId()),
-                        null,
-                        true
-                );
-                any = true;
-            }
-        }
-        if (any) {
-            owner.getSustainedActiveIds().add(p.getId());
-        }
-    }
-
-    private void deactivateSustained(BattleRuntimeUnit owner, PassiveSkill p) {
-        String prefix = "SUS#" + p.getId() + "#";
-        for (BattleRuntimeUnit u : units) {
-            if (u == null) {
-                continue;
-            }
-            List<TimedAttrBuff> copy = new ArrayList<>(u.getTimedBuffs());
-            for (TimedAttrBuff b : copy) {
-                if (b != null && b.getSourceKey() != null && b.getSourceKey().startsWith(prefix)) {
-                    revokeBuff(u, b, "条件解除");
-                }
-            }
-        }
-        owner.getSustainedActiveIds().remove(p.getId());
-        logs.add("  └ [" + owner.getName() + "] 持续效果「"
-                + (p.getName() != null ? p.getName() : p.getId()) + "」取消");
-    }
-
-    private static String sustainedBuffKey(String passiveId, String effectId) {
-        return "SUS#" + passiveId + "#" + (effectId != null ? effectId : "0");
     }
 
     private BattleRuntimeUnit findUnitById(String unitId) {

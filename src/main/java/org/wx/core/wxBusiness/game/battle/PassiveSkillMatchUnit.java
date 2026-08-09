@@ -22,16 +22,6 @@ public final class PassiveSkillMatchUnit {
         return skill != null && skill.getSkillType() != null;
     }
 
-    public static boolean matchTriggerSkill(PassiveSkill passive, ActiveSkill trigger) {
-        if (passive == null || !isChargeSkill(trigger)) {
-            return false;
-        }
-        if (passive.getAnchorType() == null || !passive.getAnchorType().needsSkillMatch()) {
-            return true;
-        }
-        return matchesSkillRef(passive, trigger);
-    }
-
     /** V2 战斗事件：按 skillMatchMode 过滤触发技能 */
     public static boolean matchesSkillRef(PassiveSkill passive, ActiveSkill trigger) {
         if (passive == null) {

@@ -90,9 +90,7 @@ public final class SkillTargetResolver {
     ) {
         SkillEffectTarget type = targetType == null ? SkillEffectTarget.SELF : targetType;
         if (type.isEventExclusive() || type.isPeriodicExclusive()) {
-            if (type == SkillEffectTarget.EVENT_HIT_TARGETS
-                    || type == SkillEffectTarget.EACH_DAMAGED_TARGET
-                    || type == SkillEffectTarget.ANCHOR_HIT_TARGET) {
+            if (type == SkillEffectTarget.EVENT_HIT_TARGETS) {
                 if (anchor != null && anchor.getHitTargets() != null && !anchor.getHitTargets().isEmpty()) {
                     return anchor.getHitTargets().stream().filter(u -> u != null && u.alive()).toList();
                 }
@@ -100,8 +98,8 @@ public final class SkillTargetResolver {
                 return u != null && u.alive() ? List.of(u) : List.of();
             }
             BattleRuntimeUnit u = switch (type) {
-                case EVENT_CASTER, ANCHOR_CASTER -> anchor != null ? anchor.getCaster() : null;
-                case EVENT_DAMAGE_SOURCE, DAMAGE_SOURCE -> anchor != null ? anchor.getDamageSource() : null;
+                case EVENT_CASTER -> anchor != null ? anchor.getCaster() : null;
+                case EVENT_DAMAGE_SOURCE -> anchor != null ? anchor.getDamageSource() : null;
                 case EVENT_PULSE_CASTER -> anchor != null ? anchor.getPulseCaster() : null;
                 case EVENT_KILLER -> anchor != null ? anchor.getKiller() : null;
                 case EVENT_KILLED -> anchor != null ? anchor.getKilled() : null;

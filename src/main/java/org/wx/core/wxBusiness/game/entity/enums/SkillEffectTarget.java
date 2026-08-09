@@ -65,20 +65,7 @@ public enum SkillEffectTarget {
     EVENT_PULSE_CASTER("脉冲BUFF施法者"),
     EVENT_KILLER("击杀方"),
     EVENT_KILLED("被击杀方"),
-    SPECIFIC_TARGET("特定目标"),
-
-    /** @deprecated 兼容旧配置 */
-    @Deprecated
-    ANCHOR_HIT_TARGET("每个受击目标(旧)"),
-    /** @deprecated */
-    @Deprecated
-    ANCHOR_CASTER("施法目标(旧)"),
-    /** @deprecated */
-    @Deprecated
-    DAMAGE_SOURCE("伤害来源目标(旧)"),
-    /** @deprecated */
-    @Deprecated
-    EACH_DAMAGED_TARGET("每一个被伤害的目标(旧)");
+    SPECIFIC_TARGET("特定目标");
 
     private final String label;
 
@@ -97,23 +84,7 @@ public enum SkillEffectTarget {
                 || this == EVENT_PULSE_CASTER
                 || this == EVENT_KILLER
                 || this == EVENT_KILLED
-                || this == SPECIFIC_TARGET
-                || isAnchorExclusive();
-    }
-
-    /** @deprecated use {@link #isEventExclusive()} */
-    @Deprecated
-    public boolean isAnchorExclusive() {
-        return this == ANCHOR_HIT_TARGET
-                || this == ANCHOR_CASTER
-                || this == DAMAGE_SOURCE
-                || this == EACH_DAMAGED_TARGET
-                || this == EVENT_HIT_TARGETS
-                || this == EVENT_CASTER
-                || this == EVENT_DAMAGE_SOURCE
-                || this == EVENT_PULSE_CASTER
-                || this == EVENT_KILLER
-                || this == EVENT_KILLED;
+                || this == SPECIFIC_TARGET;
     }
 
     public boolean isPeriodicExclusive() {

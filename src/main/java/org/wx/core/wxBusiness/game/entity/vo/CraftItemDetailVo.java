@@ -30,15 +30,6 @@ public class CraftItemDetailVo {
     private Integer advancedPassiveSlotCount;
     private Integer playerDefaultEditAdvancedPassiveSlotCount;
     private Integer playerMaxEditAdvancedPassiveSlotCount;
-    private Integer anchorPassiveSlotCount;
-    private Integer playerDefaultEditAnchorPassiveSlotCount;
-    private Integer playerMaxEditAnchorPassiveSlotCount;
-    private Integer periodicPassiveSlotCount;
-    private Integer playerDefaultEditPeriodicPassiveSlotCount;
-    private Integer playerMaxEditPeriodicPassiveSlotCount;
-    private Integer sustainedPassiveSlotCount;
-    private Integer playerDefaultEditSustainedPassiveSlotCount;
-    private Integer playerMaxEditSustainedPassiveSlotCount;
 
     /** 武器 */
     private Integer baseAtk;
@@ -79,15 +70,6 @@ public class CraftItemDetailVo {
 
     /** 默认高级属性被动描述 */
     private List<PassiveDescVo> defaultAdvancedPassiveDescs = new ArrayList<>();
-
-    /** 默认锚点被动描述 */
-    private List<PassiveDescVo> defaultAnchorPassiveDescs = new ArrayList<>();
-
-    /** 默认周期被动描述 */
-    private List<PassiveDescVo> defaultPeriodicPassiveDescs = new ArrayList<>();
-
-    /** 默认持续效果被动描述（旧） */
-    private List<PassiveDescVo> defaultSustainedPassiveDescs = new ArrayList<>();
 
     /** 战斗锚点：开战 / 判定 / 脉冲 / 战斗事件 */
     private List<PassiveDescVo> defaultBattleStartPassiveDescs = new ArrayList<>();

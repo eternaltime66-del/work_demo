@@ -63,7 +63,7 @@ ALTER TABLE app_active_skill
   ADD COLUMN need_charge_formula_json text COMMENT '充能阈值公式' AFTER need_charge;
 
 ALTER TABLE app_item
-  ADD COLUMN battle_start_passive_slot_count int DEFAULT 0 AFTER sustained_passive_slot_count,
+  ADD COLUMN battle_start_passive_slot_count int DEFAULT 0 AFTER player_max_edit_advanced_passive_slot_count,
   ADD COLUMN player_default_edit_battle_start_passive_slot_count int DEFAULT 0 AFTER battle_start_passive_slot_count,
   ADD COLUMN player_max_edit_battle_start_passive_slot_count int DEFAULT 0 AFTER player_default_edit_battle_start_passive_slot_count,
   ADD COLUMN battle_judge_passive_slot_count int DEFAULT 0 AFTER player_max_edit_battle_start_passive_slot_count,
@@ -75,7 +75,3 @@ ALTER TABLE app_item
   ADD COLUMN battle_combat_passive_slot_count int DEFAULT 0 AFTER player_max_edit_battle_pulse_passive_slot_count,
   ADD COLUMN player_default_edit_battle_combat_passive_slot_count int DEFAULT 0 AFTER battle_combat_passive_slot_count,
   ADD COLUMN player_max_edit_battle_combat_passive_slot_count int DEFAULT 0 AFTER player_default_edit_battle_combat_passive_slot_count;
-
--- 旧战斗被动禁用（推倒重来）
-UPDATE app_passive_skill SET enable = 0
-WHERE passive_type IN ('IN_ANCHOR', 'IN_PERIODIC', 'IN_SUSTAINED') AND (enable IS NULL OR enable = 1);

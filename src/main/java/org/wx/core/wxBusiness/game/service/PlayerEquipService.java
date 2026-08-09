@@ -129,27 +129,6 @@ public class PlayerEquipService extends WxServiceImpl<PlayerEquipMapper, PlayerE
         return list;
     }
 
-    /**
-     * 当前穿戴装备上的默认锚点被动（去重），含完整条件与战斗效果。
-     */
-    public List<PassiveSkill> resolveEquippedAnchorPassives(String uid) {
-        return resolveEquippedCombatPassives(uid, PassiveSkillType.IN_ANCHOR);
-    }
-
-    /**
-     * 当前穿戴装备上的默认周期被动（去重），含完整条件与战斗效果。
-     */
-    public List<PassiveSkill> resolveEquippedPeriodicPassives(String uid) {
-        return resolveEquippedCombatPassives(uid, PassiveSkillType.IN_PERIODIC);
-    }
-
-    /**
-     * 当前穿戴装备上的默认持续效果被动（去重），含完整条件与战斗效果。
-     */
-    public List<PassiveSkill> resolveEquippedSustainedPassives(String uid) {
-        return resolveEquippedCombatPassives(uid, PassiveSkillType.IN_SUSTAINED);
-    }
-
     public List<PassiveSkill> resolveEquippedBattleStartPassives(String uid) {
         return resolveEquippedCombatPassives(uid, PassiveSkillType.BATTLE_START);
     }

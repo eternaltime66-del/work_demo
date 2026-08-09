@@ -19,17 +19,7 @@ public enum PassiveSkillType {
     /** 战斗型 · 脉冲锚点 */
     BATTLE_PULSE,
     /** 战斗型 · 战斗事件 */
-    BATTLE_COMBAT,
-
-    /** @deprecated V2 废弃，仅兼容旧数据 */
-    @Deprecated
-    IN_ANCHOR,
-    /** @deprecated V2 废弃 */
-    @Deprecated
-    IN_PERIODIC,
-    /** @deprecated V2 废弃 */
-    @Deprecated
-    IN_SUSTAINED;
+    BATTLE_COMBAT;
 
     public String label() {
         return switch (this) {
@@ -39,9 +29,6 @@ public enum PassiveSkillType {
             case BATTLE_JUDGE -> "战斗锚点型·判定锚点";
             case BATTLE_PULSE -> "战斗锚点型·脉冲锚点";
             case BATTLE_COMBAT -> "战斗锚点型·战斗事件";
-            case IN_ANCHOR -> "锚点被动(旧)";
-            case IN_PERIODIC -> "周期被动(旧)";
-            case IN_SUSTAINED -> "持续效果(旧)";
         };
     }
 
@@ -54,9 +41,6 @@ public enum PassiveSkillType {
             case BATTLE_JUDGE -> "判定锚点";
             case BATTLE_PULSE -> "脉冲锚点";
             case BATTLE_COMBAT -> "战斗事件";
-            case IN_ANCHOR -> "锚点被动";
-            case IN_PERIODIC -> "周期被动";
-            case IN_SUSTAINED -> "持续效果";
         };
     }
 
@@ -71,15 +55,10 @@ public enum PassiveSkillType {
     }
 
     public boolean isInCombat() {
-        return isBattlePassive() || this == IN_ANCHOR || this == IN_PERIODIC || this == IN_SUSTAINED;
+        return isBattlePassive();
     }
 
     public boolean usesPeriodicFormula() {
-        return this == BATTLE_JUDGE || this == BATTLE_PULSE
-                || this == IN_PERIODIC || this == IN_SUSTAINED;
-    }
-
-    public boolean isLegacyCombat() {
-        return this == IN_ANCHOR || this == IN_PERIODIC || this == IN_SUSTAINED;
+        return this == BATTLE_JUDGE || this == BATTLE_PULSE;
     }
 }

@@ -1748,9 +1748,6 @@ createApp({
         defaultBattleJudgePassiveDescs: detail.defaultBattleJudgePassiveDescs || raw.defaultBattleJudgePassiveDescs || [],
         defaultBattlePulsePassiveDescs: detail.defaultBattlePulsePassiveDescs || raw.defaultBattlePulsePassiveDescs || [],
         defaultBattleCombatPassiveDescs: detail.defaultBattleCombatPassiveDescs || raw.defaultBattleCombatPassiveDescs || [],
-        defaultAnchorPassiveDescs: detail.defaultAnchorPassiveDescs || raw.defaultAnchorPassiveDescs || [],
-        defaultPeriodicPassiveDescs: detail.defaultPeriodicPassiveDescs || raw.defaultPeriodicPassiveDescs || [],
-        defaultSustainedPassiveDescs: detail.defaultSustainedPassiveDescs || raw.defaultSustainedPassiveDescs || [],
         remark: detail.remark || raw.remark
       };
     },
@@ -1800,10 +1797,7 @@ createApp({
         v.defaultBattleStartPassiveDescs,
         v.defaultBattleJudgePassiveDescs,
         v.defaultBattlePulsePassiveDescs,
-        v.defaultBattleCombatPassiveDescs,
-        v.defaultAnchorPassiveDescs,
-        v.defaultPeriodicPassiveDescs,
-        v.defaultSustainedPassiveDescs
+        v.defaultBattleCombatPassiveDescs
       ];
       var out = [];
       lists.forEach(function (arr) {
@@ -2807,10 +2801,7 @@ createApp({
         BATTLE_START: '战斗锚点型·开战锚点',
         BATTLE_JUDGE: '战斗锚点型·判定锚点',
         BATTLE_PULSE: '战斗锚点型·脉冲锚点',
-        BATTLE_COMBAT: '战斗锚点型·战斗事件',
-        IN_ANCHOR: '锚点被动(旧)',
-        IN_PERIODIC: '周期被动(旧)',
-        IN_SUSTAINED: '持续效果(旧)'
+        BATTLE_COMBAT: '战斗锚点型·战斗事件'
       }[v] || '其他被动类型';
     },
     passiveAttrLabel(v) {
