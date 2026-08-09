@@ -50,45 +50,63 @@ public class BattleRuntimeUnit {
 
     private final List<ActiveSkill> skills = new ArrayList<>();
 
-    /** 开战已挂载的锚点被动（含条件与 combatEffects） */
+    /** @deprecated 旧锚点列表 */
+    @Deprecated
     private final List<PassiveSkill> anchorPassives = new ArrayList<>();
-
-    /** 开战已挂载的周期被动 */
+    /** @deprecated */
+    @Deprecated
     private final List<PassiveSkill> periodicPassives = new ArrayList<>();
-
-    /** 开战已挂载的持续效果被动 */
+    /** @deprecated */
+    @Deprecated
     private final List<PassiveSkill> sustainedPassives = new ArrayList<>();
 
-    /** 周期被动本场触发次数：passiveId -> count */
+    /** V2 战斗型被动 */
+    private final List<PassiveSkill> battleStartPassives = new ArrayList<>();
+    private final List<PassiveSkill> battleJudgePassives = new ArrayList<>();
+    private final List<PassiveSkill> battlePulsePassives = new ArrayList<>();
+    private final List<PassiveSkill> battleCombatPassives = new ArrayList<>();
+
     private final Map<String, Integer> periodicTriggerCount = new HashMap<>();
-
-    /**
-     * 周期阶梯/边沿状态：passiveId -> candidateKey -> [lastStep, wasTrue(0/1)]
-     */
     private final Map<String, Map<String, int[]>> periodicEdgeState = new HashMap<>();
-
-    /** 已激活的持续效果被动 id */
     private final Set<String> sustainedActiveIds = new HashSet<>();
+    /** 判定锚点已激活 */
+    private final Set<String> judgeActiveIds = new HashSet<>();
+    /** 开战时间规则已触发：passiveId -> lastStep */
+    private final Map<String, Integer> startRuleState = new HashMap<>();
 
-    /** 可撤销属性 buff */
     private final List<TimedAttrBuff> timedBuffs = new ArrayList<>();
+    private final List<BuffInstance> buffs = new ArrayList<>();
 
-    /** 吸血加算（百分点，如 10 = 10%） */
     private int lifeStealAdd;
-
-    /** 攻速加算（百分点，正=加快） */
     private int atkSpeedAdd;
-
-    /** 造成伤害叠乘（默认 1） */
+    /** 造成/受到伤害比例乘数，默认 1（100%） */
     private double dealDmgMult = 1D;
-
-    /** 受到伤害叠乘（默认 1） */
     private double takenDmgMult = 1D;
-
-    /** 最终攻击/生命/防御比例加算（百分点）——开战已折入面板，战斗中 buff 用 appliedFlat */
+    /** 造成/受到元素伤害比例乘数，默认 1 */
+    private double dealElementDmgMult = 1D;
+    private double takenElementDmgMult = 1D;
+    /** 造成/受到物理伤害比例乘数，默认 1 */
+    private double dealPhysDmgMult = 1D;
+    private double takenPhysDmgMult = 1D;
     private int finalAtkAdd;
     private int finalHpAdd;
     private int finalDefAdd;
+
+    /** 元素伤害加成（百分点） */
+    private int elementDmgBonus;
+    private int elementPhysBonus;
+    private int elementPoisonBonus;
+    private int elementIgniteBonus;
+    private int elementFreezeBonus;
+    private int elementShockBonus;
+    private int elementBurnBonus;
+    /** 元素抗性（百分点） */
+    private int resistPhys;
+    private int resistPoison;
+    private int resistIgnite;
+    private int resistFreeze;
+    private int resistShock;
+    private int resistBurn;
 
     public boolean alive() {
         return hp > 0;
@@ -131,4 +149,5 @@ public class BattleRuntimeUnit {
         }
         return null;
     }
+
 }

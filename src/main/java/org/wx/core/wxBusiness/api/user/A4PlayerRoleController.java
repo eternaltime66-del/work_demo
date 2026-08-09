@@ -54,7 +54,9 @@ public class A4PlayerRoleController {
         PlayerRole role = playerRoleService.getById(id);
         ErrorFactory.throwError(role == null, "角色不存在");
         ErrorFactory.throwError(!Wx.memberId().equals(role.getUid()), "无权查看");
-        prepService.fillDisplayStats(Wx.memberId(), role);
+        String uid = Wx.memberId();
+        prepService.fillDisplayStats(uid, role);
+        prepService.fillRoleSkills(uid, role);
         return WxResult.success(role);
     }
 

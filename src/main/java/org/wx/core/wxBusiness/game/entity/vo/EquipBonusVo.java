@@ -26,6 +26,17 @@ public class EquipBonusVo {
     /** 攻速减少加算（单位 1%，叠乘源） */
     private BigDecimal atkSpeedDownAdd = BigDecimal.ZERO;
 
+    /**
+     * 战斗外被动对伤害比例的叠乘积（不含角色底板，默认 1）。
+     * 每条 ±p% → 乘以 (1±p/100)。
+     */
+    private double dealDmgMult = 1D;
+    private double takenDmgMult = 1D;
+    private double dealElementDmgMult = 1D;
+    private double takenElementDmgMult = 1D;
+    private double dealPhysDmgMult = 1D;
+    private double takenPhysDmgMult = 1D;
+
     public BigDecimal mergeFinalAtkRatio(BigDecimal roleRatio) {
         return mergeRatio(roleRatio, finalAtkRatioAdd);
     }

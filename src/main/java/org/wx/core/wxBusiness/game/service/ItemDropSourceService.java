@@ -5,9 +5,9 @@ import org.springframework.stereotype.Service;
 import org.wx.core.wxBase.base.Wx;
 import org.wx.core.wxBusiness.game.entity.Monster;
 import org.wx.core.wxBusiness.game.entity.MonsterDrop;
-import org.wx.core.wxBusiness.game.entity.StageChapter;
-import org.wx.core.wxBusiness.game.entity.StageLevel;
+import org.wx.core.wxBusiness.game.entity.Stage;
 import org.wx.core.wxBusiness.game.entity.StageLevelMonster;
+import org.wx.core.wxBusiness.game.entity.enums.StageKind;
 import org.wx.core.wxBusiness.game.entity.vo.ItemDropSourceVo;
 
 import java.util.ArrayList;
@@ -28,9 +28,7 @@ public class ItemDropSourceService {
     @Resource
     private StageLevelMonsterService stageLevelMonsterService;
     @Resource
-    private StageLevelService stageLevelService;
-    @Resource
-    private StageChapterService stageChapterService;
+    private StageService stageService;
     @Resource
     private MonsterService monsterService;
 
@@ -83,23 +81,23 @@ public class ItemDropSourceService {
                 monsterIds.add(p.getMonsterId());
             }
         }
-        Map<String, StageLevel> levelMap = new LinkedHashMap<>();
+        Map<String, Stage> levelMap = new LinkedHashMap<>();
         if (!levelIds.isEmpty()) {
-            for (StageLevel lv : stageLevelService.listByIds(levelIds)) {
-                if (lv != null) {
+            for (Stage lv : stageService.listByIds(levelIds)) {
+                if (lv != null && lv.getKind() == StageKind.LEVEL) {
                     levelMap.put(lv.getId(), lv);
                 }
             }
         }
         Set<String> chapterIds = new LinkedHashSet<>();
-        for (StageLevel lv : levelMap.values()) {
-            if (lv.getChapterId() != null) {
-                chapterIds.add(lv.getChapterId());
+        for (Stage lv : levelMap.values()) {
+            if (lv.getParentId() != null) {
+                chapterIds.add(lv.getParentId());
             }
         }
-        Map<String, StageChapter> chapterMap = new LinkedHashMap<>();
+        Map<String, Stage> chapterMap = new LinkedHashMap<>();
         if (!chapterIds.isEmpty()) {
-            for (StageChapter ch : stageChapterService.listByIds(chapterIds)) {
+            for (Stage ch : stageService.listByIds(chapterIds)) {
                 if (ch != null) {
                     chapterMap.put(ch.getId(), ch);
                 }
@@ -117,7 +115,7 @@ public class ItemDropSourceService {
         Set<String> seen = new LinkedHashSet<>();
         List<ItemDropSourceVo> result = new ArrayList<>();
         for (StageLevelMonster p : placements) {
-            StageLevel level = levelMap.get(p.getLevelId());
+            Stage level = levelMap.get(p.getLevelId());
             if (level == null || Boolean.FALSE.equals(level.getEnable())) {
                 continue;
             }
@@ -129,7 +127,7 @@ public class ItemDropSourceService {
             if (!seen.add(key)) {
                 continue;
             }
-            StageChapter chapter = chapterMap.get(level.getChapterId());
+            Stage chapter = chapterMap.get(level.getParentId());
             Monster monster = monsterMap.get(p.getMonsterId());
             ItemDropSourceVo vo = new ItemDropSourceVo();
             vo.setLevelId(level.getId());

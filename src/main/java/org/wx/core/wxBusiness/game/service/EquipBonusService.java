@@ -130,10 +130,29 @@ public class EquipBonusService {
                     bonus.setAtkSpeedDownAdd(nvlBd(bonus.getAtkSpeedDownAdd()).add(signed.abs()));
                 }
             }
+            case DEAL_DMG_RATIO -> bonus.setDealDmgMult(mulRatio(bonus.getDealDmgMult(), signed));
+            case TAKEN_DMG_RATIO -> bonus.setTakenDmgMult(mulRatio(bonus.getTakenDmgMult(), signed));
+            case DEAL_ELEMENT_DMG_RATIO -> bonus.setDealElementDmgMult(mulRatio(bonus.getDealElementDmgMult(), signed));
+            case TAKEN_ELEMENT_DMG_RATIO -> bonus.setTakenElementDmgMult(mulRatio(bonus.getTakenElementDmgMult(), signed));
+            case DEAL_PHYS_DMG_RATIO -> bonus.setDealPhysDmgMult(mulRatio(bonus.getDealPhysDmgMult(), signed));
+            case TAKEN_PHYS_DMG_RATIO -> bonus.setTakenPhysDmgMult(mulRatio(bonus.getTakenPhysDmgMult(), signed));
             default -> {
-                // 吸血 / 伤害比例等暂不进展示面板
+                // 吸血等暂不进展示面板
             }
         }
+    }
+
+    /** signed 为 ±p（单位 1%），按先后顺序叠乘到当前乘数 */
+    private static double mulRatio(double current, BigDecimal signedPercent) {
+        if (signedPercent == null || signedPercent.compareTo(BigDecimal.ZERO) == 0) {
+            return current <= 0D ? 0.0001D : current;
+        }
+        double factor = 1D + signedPercent.doubleValue() / 100D;
+        if (factor <= 0D) {
+            factor = 0.0001D;
+        }
+        double next = current * factor;
+        return next <= 0D ? 0.0001D : next;
     }
 
     private static BigDecimal signedValue(AttrModifyDirection dir, BigDecimal value) {

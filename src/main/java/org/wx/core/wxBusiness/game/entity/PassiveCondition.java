@@ -1,6 +1,7 @@
 package org.wx.core.wxBusiness.game.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
@@ -52,4 +53,10 @@ public class PassiveCondition extends WxBaseEntity<PassiveCondition> {
     private String remark;
 
     private String more;
+
+    @TableField(exist = false)
+    private String refItemName;
+
+    @TableField(exist = false)
+    private String refSkillName;
 }

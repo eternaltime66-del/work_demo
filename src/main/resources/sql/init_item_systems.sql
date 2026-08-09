@@ -8,7 +8,6 @@ CREATE TABLE IF NOT EXISTS app_item (
   icon varchar(512) DEFAULT NULL COMMENT '图标',
   item_type varchar(32) NOT NULL COMMENT 'MATERIAL/WEAPON/ARMOR/GLOVES/HELMET/ACCESSORY/LEGS',
   max_stack int DEFAULT 99 COMMENT '最大堆叠',
-  weight decimal(20,4) DEFAULT 0 COMMENT '重量',
   sort int DEFAULT 0 COMMENT '排序',
   enable tinyint(1) DEFAULT 1 COMMENT '启用',
   remark varchar(255) DEFAULT NULL,
@@ -102,8 +101,6 @@ CREATE TABLE IF NOT EXISTS app_item_helmet (
 CREATE TABLE IF NOT EXISTS app_item_accessory (
   id varchar(64) NOT NULL COMMENT 'ID',
   item_id varchar(64) NOT NULL COMMENT '物品id',
-  atk_speed_up_ratio decimal(12, 4) DEFAULT 0 COMMENT '增加攻速(%)',
-  atk_speed_down_ratio decimal(12, 4) DEFAULT 0 COMMENT '减少攻速(%)',
   remark varchar(255) DEFAULT NULL,
   CREATE_TIME datetime DEFAULT NULL,
   UPDATE_TIME datetime DEFAULT NULL,
@@ -237,10 +234,10 @@ CREATE TABLE IF NOT EXISTS app_monster_drop (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='怪物掉落配置';
 
 -- 种子材料
-INSERT INTO app_item (id,code,name,icon,item_type,max_stack,weight,sort,enable,remark,CREATE_TIME,UPDATE_TIME) VALUES
-('ITM_10000001','slime_gel','史莱姆凝胶',NULL,'MATERIAL',99,0.1,1,1,'普通材料',NOW(),NOW()),
-('ITM_10000002','wolf_fang','狼牙',NULL,'MATERIAL',99,0.2,2,1,'稀有材料',NOW(),NOW()),
-('ITM_10000003','forest_core','森林之心',NULL,'MATERIAL',20,1.0,3,1,'BOSS材料',NOW(),NOW())
+INSERT INTO app_item (id,code,name,icon,item_type,max_stack,sort,enable,remark,CREATE_TIME,UPDATE_TIME) VALUES
+('ITM_10000001','slime_gel','史莱姆凝胶',NULL,'MATERIAL',99,1,1,'普通材料',NOW(),NOW()),
+('ITM_10000002','wolf_fang','狼牙',NULL,'MATERIAL',99,2,1,'稀有材料',NOW(),NOW()),
+('ITM_10000003','forest_core','森林之心',NULL,'MATERIAL',20,3,1,'BOSS材料',NOW(),NOW())
 ON DUPLICATE KEY UPDATE name=VALUES(name);
 
 INSERT INTO app_item_material (id,item_id,grade,remark,CREATE_TIME,UPDATE_TIME) VALUES

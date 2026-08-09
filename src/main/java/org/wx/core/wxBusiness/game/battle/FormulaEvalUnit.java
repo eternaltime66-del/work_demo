@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.wx.core.wxBusiness.game.battle.enums.SkillCountDirection;
 import org.wx.core.wxBusiness.game.battle.enums.SkillCountScope;
 import org.wx.core.wxBusiness.game.entity.enums.ActiveSkillType;
+import org.wx.core.wxBusiness.game.entity.enums.DamageElement;
 import org.wx.core.wxBusiness.game.entity.enums.FormulaReadKey;
 import org.wx.core.wxBusiness.game.entity.enums.FormulaReadRole;
 
@@ -70,6 +71,10 @@ public final class FormulaEvalUnit {
     }
 
     private static double readUnitAttr(BattleRuntimeUnit u, String key) {
+        return readUnitAttr(u, key, null);
+    }
+
+    private static double readUnitAttr(BattleRuntimeUnit u, String key, BattleStatBoard board) {
         if (u == null || key == null) {
             return 0;
         }
@@ -79,13 +84,29 @@ public final class FormulaEvalUnit {
         } catch (Exception e) {
             return 0;
         }
+        String id = u.getUnitId();
         return switch (k) {
             case MAX_HP -> u.getMaxHp();
             case HP -> u.getHp();
             case ATK -> u.getAtk();
             case DEF -> u.getDef();
             case ACTION -> u.getAction();
-            case ELAPSED_ACTION -> 0;
+            case ELAPSED_ACTION -> board == null ? 0 : board.getElapsedActionValue();
+            case DEAL_DMG_AMOUNT -> board == null ? 0 : board.getDealDamageAmount(id);
+            case TAKE_DMG_AMOUNT -> board == null ? 0 : board.getReceiveDamageAmount(id);
+            case DEAL_DMG_COUNT -> board == null ? 0 : board.getDealDamageCount(id);
+            case TAKE_DMG_COUNT -> board == null ? 0 : board.getReceiveDamageCount(id);
+            case DEAL_HEAL_AMOUNT -> board == null ? 0 : board.getDealHealAmount(id);
+            case TAKE_HEAL_AMOUNT -> board == null ? 0 : board.getReceiveHealAmount(id);
+            case DEAL_HEAL_COUNT -> board == null ? 0 : board.getDealHealCount(id);
+            case TAKE_HEAL_COUNT -> board == null ? 0 : board.getReceiveHealCount(id);
+            case ELEMENT_DMG_BONUS -> u.getElementDmgBonus();
+            case ELEMENT_PHYS_BONUS -> u.getElementPhysBonus();
+            case ELEMENT_POISON_BONUS -> u.getElementPoisonBonus();
+            case ELEMENT_IGNITE_BONUS -> u.getElementIgniteBonus();
+            case ELEMENT_FREEZE_BONUS -> u.getElementFreezeBonus();
+            case ELEMENT_SHOCK_BONUS -> u.getElementShockBonus();
+            case ELEMENT_BURN_BONUS -> u.getElementBurnBonus();
         };
     }
 
@@ -176,23 +197,23 @@ public final class FormulaEvalUnit {
         if (rr.isAggregateRole()) {
             List<BattleRuntimeUnit> units = aggregateUnits(rr, self, ctx);
             return switch (category.isEmpty() ? "ATTR" : category) {
-                case "ATTR" -> sumOver(units, u -> readUnitAttr(u, str(t.get("readKey"))));
+                case "ATTR" -> sumOver(units, u -> readUnitAttr(u, str(t.get("readKey")), board));
                 case "DAMAGE" -> sumOver(units, u -> readDamage(u, board, str(t.get("damageSide")), str(t.get("damageMetric"))));
                 case "SKILL" -> sumOver(units, u -> readSkillCount(u, board, t));
-                default -> sumOver(units, u -> readUnitAttr(u, str(t.get("readKey"))));
+                default -> sumOver(units, u -> readUnitAttr(u, str(t.get("readKey")), board));
             };
         }
 
         BattleRuntimeUnit u = unitOf(rr, self, target, ctx);
         if (category.isEmpty()) {
-            return readUnitAttr(u, str(t.get("readKey")));
+            return readUnitAttr(u, str(t.get("readKey")), board);
         }
 
         return switch (category) {
-            case "ATTR" -> readUnitAttr(u, str(t.get("readKey")));
+            case "ATTR" -> readUnitAttr(u, str(t.get("readKey")), board);
             case "DAMAGE" -> readDamage(u, board, str(t.get("damageSide")), str(t.get("damageMetric")));
             case "SKILL" -> readSkillCount(u, board, t);
-            default -> readUnitAttr(u, str(t.get("readKey")));
+            default -> readUnitAttr(u, str(t.get("readKey")), board);
         };
     }
 
@@ -243,6 +264,24 @@ public final class FormulaEvalUnit {
                 return 0;
             }
             return board.getSkillCount(u.getUnitId(), dir, SkillCountScope.SKILL_TYPE, null, type);
+        }
+        if ("ANY_SCHOOL".equals(match)) {
+            String school = SkillSchoolUnit.normalizeSchool(str(t.get("matchSkillSchool")));
+            return board.getSkillCount(u.getUnitId(), dir, SkillCountScope.SKILL_SCHOOL, null, null, school, null);
+        }
+        if ("ANY_ELEMENT".equals(match)) {
+            DamageElement el = null;
+            try {
+                String es = str(t.get("matchDamageElement"));
+                if (!es.isEmpty()) {
+                    el = DamageElement.valueOf(es);
+                }
+            } catch (Exception ignored) {
+            }
+            if (el == null) {
+                el = DamageElement.PHYSICAL;
+            }
+            return board.getSkillCount(u.getUnitId(), dir, SkillCountScope.SKILL_ELEMENT, null, null, null, el);
         }
         if ("SPECIFIC".equals(match)) {
             String skillId = str(t.get("matchSkillId"));

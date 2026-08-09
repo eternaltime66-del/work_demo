@@ -4,17 +4,22 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.util.StringUtils;
 import org.wx.core.wxBusiness.game.entity.ActiveSkill;
+import org.wx.core.wxBusiness.game.entity.BuffDef;
 import org.wx.core.wxBusiness.game.entity.PassiveCombatEffect;
 import org.wx.core.wxBusiness.game.entity.PassiveCondition;
 import org.wx.core.wxBusiness.game.entity.PassiveEffect;
 import org.wx.core.wxBusiness.game.entity.PassiveSkill;
 import org.wx.core.wxBusiness.game.entity.SkillCharge;
 import org.wx.core.wxBusiness.game.entity.SkillEffect;
+import org.wx.core.wxBusiness.game.entity.SkillOutput;
 import org.wx.core.wxBusiness.game.entity.enums.ActiveSkillType;
 import org.wx.core.wxBusiness.game.entity.enums.AttrModifyDirection;
 import org.wx.core.wxBusiness.game.entity.enums.AttrModifyKey;
+import org.wx.core.wxBusiness.game.entity.enums.BattleStartApplyRule;
+import org.wx.core.wxBusiness.game.entity.enums.BuffKind;
 import org.wx.core.wxBusiness.game.entity.enums.ChargeConditionType;
 import org.wx.core.wxBusiness.game.entity.enums.CompareOp;
+import org.wx.core.wxBusiness.game.entity.enums.DamageElement;
 import org.wx.core.wxBusiness.game.entity.enums.FormulaReadKey;
 import org.wx.core.wxBusiness.game.entity.enums.FormulaReadRole;
 import org.wx.core.wxBusiness.game.entity.enums.ItemType;
@@ -28,6 +33,7 @@ import org.wx.core.wxBusiness.game.entity.enums.SkillChargeEvent;
 import org.wx.core.wxBusiness.game.entity.enums.SkillChargeMatchMode;
 import org.wx.core.wxBusiness.game.entity.enums.SkillEffectTarget;
 import org.wx.core.wxBusiness.game.entity.enums.SkillEffectType;
+import org.wx.core.wxBusiness.game.entity.enums.SkillOutputKind;
 import org.wx.core.wxBusiness.game.entity.vo.PassiveDescVo;
 import org.wx.core.wxBusiness.game.entity.vo.SkillDescVo;
 
@@ -98,44 +104,50 @@ public final class GameDescUnit {
         if (effect == null) {
             return "";
         }
-        SkillEffectType type = effect.getEffectType();
-        String target = targetLabel(effect.getTargetType());
-        String formula = formatFormula(effect.getFormulaJson());
-        String formulaPart = StringUtils.hasText(formula) ? "（" + formula + "）" : "";
-        String seg = "";
-        if (effect.getHitSegments() != null && effect.getHitSegments() > 1) {
-            seg = "，分" + effect.getHitSegments() + "段结算";
-        }
-        String ratePart = triggerRateText(effect.getTriggerRate());
-        String durPart = durationAvText(effect.getDurationAv());
-        String prefix = StringUtils.hasText(effect.getName()) ? "【" + effect.getName() + "】" : "";
-        if (type == SkillEffectType.HEAL) {
-            return prefix + "为" + target + "恢复生命" + formulaPart + seg + ratePart;
-        }
-        if (type == SkillEffectType.ATTR_MODIFY) {
-            String attr = attrKeyLabel(effect.getAttrKey());
-            String dir = effect.getAttrDir() == AttrModifyDirection.DECREASE ? "减少" : "增加";
-            return prefix + "使" + target + "的" + attr + dir + formulaPart + seg + ratePart + durPart;
-        }
-        // DAMAGE default
-        return prefix + "对" + target + "造成伤害" + formulaPart + seg + ratePart;
+        return formatOutputLike(
+                effect.getEffectType(),
+                effect.getTargetType(),
+                null,
+                effect.getAttrKey(),
+                effect.getAttrDir(),
+                effect.getFormulaJson(),
+                effect.getHitSegments(),
+                effect.getTriggerRate(),
+                effect.getDurationAv(),
+                null
+        );
     }
 
-    /** 非 100% 时追加「，概率N%」 */
-    private static String triggerRateText(Integer triggerRate) {
+    /** 50 AV = 1 秒 */
+    public static String formatAvSec(Integer av) {
+        int n = av == null ? 0 : Math.max(0, av);
+        double sec = n / 50.0;
+        if (sec < 60) {
+            if (Math.abs(sec - Math.round(sec)) < 1e-6) {
+                return Math.round(sec) + "秒";
+            }
+            String s = String.format(java.util.Locale.ROOT, "%.2f", sec).replaceAll("\\.?0+$", "");
+            return s + "秒";
+        }
+        int min = (int) Math.floor(sec / 60);
+        double rem = sec - min * 60;
+        String remText = String.format(java.util.Locale.ROOT, "%.2f", rem).replaceAll("\\.?0+$", "");
+        return min + "分 " + remText + "秒";
+    }
+
+    /** 非 100% 时前置「N% 」 */
+    private static String triggerRatePrefix(Integer triggerRate) {
         if (triggerRate == null || triggerRate >= 100) {
             return "";
         }
-        int rate = Math.max(0, triggerRate);
-        return "，概率" + rate + "%";
+        return Math.max(0, triggerRate) + "% ";
     }
 
-    /** durationAv &gt; 0 时追加「，持续N行动值」 */
-    private static String durationAvText(Integer durationAv) {
+    private static String durationAvSuffix(Integer durationAv) {
         if (durationAv == null || durationAv <= 0) {
             return "";
         }
-        return "，持续" + durationAv + "行动值";
+        return "（持续 " + formatAvSec(durationAv) + "）";
     }
 
     public static String chargeLine(SkillCharge charge, Function<String, String> skillNameFn) {
@@ -143,29 +155,53 @@ public final class GameDescUnit {
             return "";
         }
         int gain = charge.getChargeGain() != null ? charge.getChargeGain() : 0;
-        String namePrefix = StringUtils.hasText(charge.getName()) ? "【" + charge.getName() + "】" : "";
         if (charge.getConditionType() == ChargeConditionType.ACTION_VALUE) {
             int every = charge.getEveryActionValue() != null ? charge.getEveryActionValue() : 0;
-            return namePrefix + "每经过" + every + "行动值，增加" + gain + "点充能";
+            return "每 " + formatAvSec(every) + " 充能+" + gain;
         }
-        // SKILL_CHARGE
-        String event = charge.getSkillChargeEvent() == SkillChargeEvent.RECEIVE ? "受到" : "释放";
-        String match = skillChargeMatchText(charge, skillNameFn);
-        return namePrefix + event + match + "时，增加" + gain + "点充能";
+        String event = skillChargeEventLabel(charge.getSkillChargeEvent());
+        SkillChargeMatchMode mode = charge.getSkillChargeMatch();
+        if (mode == SkillChargeMatchMode.ANY_TYPE) {
+            return event + " " + activeSkillTypeLabel(charge.getMatchSkillType()) + " 类型 技能 充能+" + gain;
+        }
+        if (mode == SkillChargeMatchMode.ANY_SCHOOL) {
+            return event + " 流派「" + SkillSchoolUnit.normalizeSchool(charge.getMatchSkillSchool()) + "」技能 充能+" + gain;
+        }
+        if (mode == SkillChargeMatchMode.ANY_ELEMENT) {
+            return event + " " + damageElementLabel(charge.getMatchDamageElement()) + " 元素技能 充能+" + gain;
+        }
+        if (mode == SkillChargeMatchMode.SPECIFIC) {
+            return event + " 「" + nameOrId(skillNameFn, charge.getMatchSkillId()) + "」 充能+" + gain;
+        }
+        return event + " 任意技能 充能+" + gain;
+    }
+
+    private static String skillChargeEventLabel(SkillChargeEvent event) {
+        if (event == null) {
+            return "释放";
+        }
+        return switch (event) {
+            case RECEIVE -> "受到";
+            case DEAL_DAMAGE -> "造成伤害以";
+            case TAKE_DAMAGE -> "受到伤害以";
+            case KILL -> "击杀时以";
+            case CAST -> "释放";
+        };
     }
 
     public static String needChargeText(ActiveSkill skill) {
         if (skill == null) {
             return "";
         }
-        if (skill.getSkillType() == ActiveSkillType.NORMAL) {
-            return "普攻无需充能";
-        }
+        // 按充能模式文案（普攻默认也是 SELF_BASE_ACTION，不要写成「无需充能」）
         if (skill.getNeedChargeMode() == NeedChargeMode.SELF_BASE_ACTION) {
-            return "释放所需充能：自己的基础行动值";
+            return "所需充能 行动值";
+        }
+        if (skill.getNeedChargeMode() == NeedChargeMode.FORMULA) {
+            return "所需充能 公式";
         }
         int n = skill.getNeedCharge() != null ? skill.getNeedCharge() : 0;
-        return "释放所需充能：" + n;
+        return "所需充能 " + n;
     }
 
     public static String castLimitText(ActiveSkill skill) {
@@ -174,9 +210,9 @@ public final class GameDescUnit {
         }
         Integer max = skill.getMaxCastSkill();
         if (max == null || max <= 0) {
-            return "本技能释放次数不限";
+            return "";
         }
-        return "本技能最多释放" + max + "次";
+        return "最多释放 " + max + " 次";
     }
 
     public static SkillDescVo describeActiveSkill(
@@ -184,6 +220,27 @@ public final class GameDescUnit {
             List<SkillCharge> charges,
             List<SkillEffect> effects,
             Function<String, String> skillNameFn
+    ) {
+        return describeActiveSkill(skill, charges, effects, null, skillNameFn);
+    }
+
+    public static SkillDescVo describeActiveSkill(
+            ActiveSkill skill,
+            List<SkillCharge> charges,
+            List<SkillEffect> effects,
+            List<SkillOutput> outputs,
+            Function<String, String> skillNameFn
+    ) {
+        return describeActiveSkill(skill, charges, effects, outputs, skillNameFn, null);
+    }
+
+    public static SkillDescVo describeActiveSkill(
+            ActiveSkill skill,
+            List<SkillCharge> charges,
+            List<SkillEffect> effects,
+            List<SkillOutput> outputs,
+            Function<String, String> skillNameFn,
+            Function<String, BuffDef> buffFn
     ) {
         SkillDescVo vo = new SkillDescVo();
         if (skill == null) {
@@ -208,7 +265,14 @@ public final class GameDescUnit {
         vo.setChargeTexts(chargeTexts);
 
         List<String> effectTexts = new ArrayList<>();
-        if (effects != null) {
+        if (outputs != null && !outputs.isEmpty()) {
+            for (SkillOutput o : outputs) {
+                String line = outputLine(o, buffFn);
+                if (StringUtils.hasText(line)) {
+                    effectTexts.add(line);
+                }
+            }
+        } else if (effects != null) {
             for (SkillEffect e : effects) {
                 String line = effectLine(e);
                 if (StringUtils.hasText(line)) {
@@ -279,9 +343,18 @@ public final class GameDescUnit {
             Function<String, String> itemNameFn,
             Function<String, String> skillNameFn
     ) {
+        return describePassive(skill, itemNameFn, skillNameFn, null);
+    }
+
+    public static PassiveDescVo describePassive(
+            PassiveSkill skill,
+            Function<String, String> itemNameFn,
+            Function<String, String> skillNameFn,
+            Function<String, BuffDef> buffFn
+    ) {
         List<PassiveCondition> conditions = skill != null ? skill.getConditions() : null;
         List<PassiveEffect> effects = skill != null ? skill.getEffects() : null;
-        return describePassive(skill, conditions, effects, itemNameFn, skillNameFn);
+        return describePassive(skill, conditions, effects, itemNameFn, skillNameFn, buffFn);
     }
 
     public static PassiveDescVo describePassive(
@@ -290,6 +363,17 @@ public final class GameDescUnit {
             List<PassiveEffect> effects,
             Function<String, String> itemNameFn,
             Function<String, String> skillNameFn
+    ) {
+        return describePassive(skill, conditions, effects, itemNameFn, skillNameFn, null);
+    }
+
+    public static PassiveDescVo describePassive(
+            PassiveSkill skill,
+            List<PassiveCondition> conditions,
+            List<PassiveEffect> effects,
+            Function<String, String> itemNameFn,
+            Function<String, String> skillNameFn,
+            Function<String, BuffDef> buffFn
     ) {
         PassiveDescVo vo = new PassiveDescVo();
         if (skill == null) {
@@ -318,12 +402,16 @@ public final class GameDescUnit {
         vo.setConditionTexts(condTexts);
 
         List<String> effectTexts = new ArrayList<>();
-        if (skill.getPassiveType() == PassiveSkillType.IN_ANCHOR) {
+        if (skill.getPassiveType() != null && skill.getPassiveType().isBattlePassive()) {
+            appendBattleTriggerTexts(effectTexts, skill);
+            appendOutputTexts(effectTexts, skill.getOutputs(), buffFn);
+        } else if (skill.getPassiveType() == PassiveSkillType.IN_ANCHOR) {
             if (skill.getAnchorType() != null) {
                 effectTexts.add("锚点：" + skill.getAnchorType().getLabel()
                         + anchorMatchSuffix(skill, skillNameFn));
             }
             appendCombatEffectTexts(effectTexts, skill.getCombatEffects());
+            appendOutputTexts(effectTexts, skill.getOutputs(), buffFn);
         } else if (skill.getPassiveType() == PassiveSkillType.IN_PERIODIC
                 || skill.getPassiveType() == PassiveSkillType.IN_SUSTAINED) {
             boolean sustained = skill.getPassiveType() == PassiveSkillType.IN_SUSTAINED;
@@ -350,6 +438,7 @@ public final class GameDescUnit {
                 }
             }
             appendCombatEffectTexts(effectTexts, skill.getCombatEffects());
+            appendOutputTexts(effectTexts, skill.getOutputs(), buffFn);
         } else if (effects != null) {
             for (PassiveEffect e : effects) {
                 String line = passiveEffectLine(e);
@@ -363,30 +452,278 @@ public final class GameDescUnit {
         return vo;
     }
 
+    private static void appendBattleTriggerTexts(List<String> effectTexts, PassiveSkill skill) {
+        if (effectTexts == null || skill == null || skill.getPassiveType() == null) {
+            return;
+        }
+        PassiveSkillType type = skill.getPassiveType();
+        if (type == PassiveSkillType.BATTLE_START) {
+            BattleStartApplyRule rule = skill.getStartApplyRule() != null
+                    ? skill.getStartApplyRule() : BattleStartApplyRule.IMMEDIATE;
+            if (rule == BattleStartApplyRule.AT_ELAPSED_ONCE) {
+                effectTexts.add("第一次达到 " + formatAvSec(skill.getStartElapsedAv()) + " 时 触发一次");
+            } else if (rule == BattleStartApplyRule.EVERY_ELAPSED) {
+                effectTexts.add("每 " + formatAvSec(skill.getStartElapsedAv()) + " 脉冲一次");
+            } else {
+                effectTexts.add("开战立即触发");
+            }
+        } else if (type == PassiveSkillType.BATTLE_JUDGE || type == PassiveSkillType.BATTLE_PULSE) {
+            String left = formatFormula(skill.getLeftFormulaJson());
+            String right = formatFormula(skill.getRightFormulaJson());
+            boolean judge = type == PassiveSkillType.BATTLE_JUDGE;
+            if (judge) {
+                String op = skill.getCompareOp() != null ? skill.getCompareOp().symbol() : "?";
+                effectTexts.add("判定：当 "
+                        + (StringUtils.hasText(left) ? left : "?")
+                        + " " + op + " "
+                        + (StringUtils.hasText(right) ? right : "?")
+                        + " 时生效");
+            } else {
+                // 脉冲固定「每当达到」（阈值阶梯）
+                effectTexts.add("脉冲：每当 "
+                        + (StringUtils.hasText(left) ? left : "?")
+                        + " 达到 "
+                        + (StringUtils.hasText(right) ? right : "?")
+                        + " 时触发");
+            }
+            Integer max = skill.getMaxTriggerPerBattle();
+            if (max != null && max > 0) {
+                effectTexts.add("本场最多触发 " + max + " 次");
+            }
+        } else if (type == PassiveSkillType.BATTLE_COMBAT) {
+            String event = skill.getCombatEvent() != null ? skill.getCombatEvent().getLabel() : "战斗事件";
+            effectTexts.add("事件：" + event);
+            Integer max = skill.getMaxTriggerPerBattle();
+            if (max != null && max > 0) {
+                effectTexts.add("本场最多触发 " + max + " 次");
+            }
+        }
+    }
+
+    private static void appendOutputTexts(
+            List<String> effectTexts,
+            List<SkillOutput> outputs,
+            Function<String, BuffDef> buffFn
+    ) {
+        if (effectTexts == null || outputs == null) {
+            return;
+        }
+        for (SkillOutput o : outputs) {
+            String line = outputLine(o, buffFn);
+            if (StringUtils.hasText(line)) {
+                effectTexts.add(line);
+            }
+        }
+    }
+
+    public static String outputLine(SkillOutput output) {
+        return outputLine(output, null);
+    }
+
+    public static String outputLine(SkillOutput output, Function<String, BuffDef> buffFn) {
+        if (output == null) {
+            return "";
+        }
+        if (output.getOutputKind() == SkillOutputKind.APPEND_BUFF) {
+            return appendBuffLine(output, buffFn);
+        }
+        SkillEffectType effectType;
+        if (output.getOutputKind() == SkillOutputKind.ATTR) {
+            effectType = SkillEffectType.ATTR_MODIFY;
+        } else {
+            effectType = output.getEffectType() != null ? output.getEffectType() : SkillEffectType.DAMAGE;
+        }
+        return formatOutputLike(
+                effectType,
+                output.getTargetType(),
+                output.getDamageElement(),
+                output.getAttrKey(),
+                output.getAttrDir(),
+                output.getFormulaJson(),
+                output.getHitSegments(),
+                output.getTriggerRate(),
+                output.getDurationAv(),
+                output.getOutputKind()
+        );
+    }
+
+    /** 追加 BUFF：对 目标 追加「名称」：效果摘要（持续） */
+    public static String appendBuffLine(SkillOutput output, Function<String, BuffDef> buffFn) {
+        if (output == null) {
+            return "";
+        }
+        String rate = triggerRatePrefix(output.getTriggerRate());
+        String target = targetLabel(output.getTargetType());
+        BuffDef def = null;
+        if (buffFn != null && StringUtils.hasText(output.getBuffDefId())) {
+            def = buffFn.apply(output.getBuffDefId());
+        }
+        String name = null;
+        if (def != null && StringUtils.hasText(def.getName())) {
+            name = def.getName();
+        } else if (StringUtils.hasText(output.getBuffDefName())) {
+            name = output.getBuffDefName();
+        }
+        Integer durAv = output.getDurationAv();
+        if ((durAv == null || durAv <= 0) && def != null) {
+            durAv = def.getDurationAv();
+        }
+        String dur = durationAvSuffix(durAv);
+        String body = buffEffectBody(def);
+        StringBuilder sb = new StringBuilder();
+        sb.append(rate).append("对 ").append(target).append(" 追加");
+        if (StringUtils.hasText(name)) {
+            sb.append("「").append(name).append("」");
+        } else {
+            sb.append("BUFF");
+        }
+        if (StringUtils.hasText(body)) {
+            sb.append("：").append(body);
+        }
+        sb.append(dur);
+        return sb.toString();
+    }
+
+    /** BUFF 本体效果（不含挂载目标） */
+    public static String buffEffectBody(BuffDef def) {
+        if (def == null || def.getBuffKind() == null) {
+            return "";
+        }
+        BuffKind kind = def.getBuffKind();
+        if (kind == BuffKind.ATTR) {
+            return attrBuffBody(def);
+        }
+        if (kind == BuffKind.PULSE) {
+            return pulseBuffBody(def);
+        }
+        if (kind == BuffKind.JUDGE_ATTR) {
+            String judge = judgePrefix(def);
+            String attr = attrBuffBody(def);
+            if (StringUtils.hasText(judge) && StringUtils.hasText(attr)) {
+                return judge + "时 " + attr;
+            }
+            return StringUtils.hasText(attr) ? attr : judge;
+        }
+        if (kind == BuffKind.JUDGE_BURST) {
+            String judge = judgePrefix(def);
+            String burst = burstBuffBody(def);
+            if (StringUtils.hasText(judge) && StringUtils.hasText(burst)) {
+                return judge + "时 " + burst;
+            }
+            return StringUtils.hasText(burst) ? burst : judge;
+        }
+        if (kind == BuffKind.DODGE) {
+            int chance = def.getDodgeChance() == null ? 0 : Math.max(0, def.getDodgeChance());
+            String scope = PassiveSkillMatchUnit.matchScopeLabel(
+                    def.getSkillMatchMode(),
+                    def.getMatchSkillType(),
+                    def.getMatchSkillSchool(),
+                    def.getMatchDamageElement(),
+                    def.getMatchSkillId()
+            );
+            return "闪避" + chance + "% · " + scope;
+        }
+        return "";
+    }
+
+    private static String judgePrefix(BuffDef def) {
+        String left = formatFormula(def.getLeftFormulaJson());
+        String right = formatFormula(def.getRightFormulaJson());
+        if (!StringUtils.hasText(left) && !StringUtils.hasText(right)) {
+            return "";
+        }
+        String op = def.getCompareOp() != null ? def.getCompareOp().label() : "比较";
+        return "当 " + (StringUtils.hasText(left) ? left : "?")
+                + " " + op + " " + (StringUtils.hasText(right) ? right : "?");
+    }
+
+    private static String attrBuffBody(BuffDef def) {
+        String dir = def.getAttrDir() == AttrModifyDirection.DECREASE ? "减少" : "增加";
+        String formula = formatFormula(def.getFormulaJson());
+        return dir + attrKeyLabel(def.getAttrKey()) + (StringUtils.hasText(formula) ? " " + formula : "");
+    }
+
+    private static String pulseBuffBody(BuffDef def) {
+        String every = def.getPulseEveryAv() != null && def.getPulseEveryAv() > 0
+                ? formatAvSec(def.getPulseEveryAv()) : "—";
+        String target = targetLabel(def.getPulseTargetType());
+        String formula = formatFormula(def.getFormulaJson());
+        String formulaPart = StringUtils.hasText(formula) ? " " + formula : "";
+        if (def.getPulseEffectType() == SkillEffectType.HEAL) {
+            return "每 " + every + " 对 " + target + " 治疗" + formulaPart;
+        }
+        String el = damageElementLabel(def.getDamageElement());
+        return "每 " + every + " 对 " + target + " 造成 " + el + "伤害" + formulaPart;
+    }
+
+    private static String burstBuffBody(BuffDef def) {
+        String formula = formatFormula(def.getFormulaJson());
+        String formulaPart = StringUtils.hasText(formula) ? " " + formula : "";
+        if (def.getPulseEffectType() == SkillEffectType.HEAL) {
+            return "对 持有者 治疗" + formulaPart;
+        }
+        if (def.getPulseEffectType() == SkillEffectType.ATTR_MODIFY) {
+            return attrBuffBody(def);
+        }
+        String el = damageElementLabel(def.getDamageElement());
+        return "对 持有者 造成 " + el + "伤害" + formulaPart;
+    }
+
     public static String combatEffectLine(PassiveCombatEffect effect) {
         if (effect == null || effect.getEffectType() == null) {
             return "";
         }
-        SkillEffectType type = effect.getEffectType();
-        String target = targetLabel(effect.getTargetType());
-        String formula = formatFormula(effect.getFormulaJson());
-        String formulaPart = StringUtils.hasText(formula) ? "（" + formula + "）" : "";
+        return formatOutputLike(
+                effect.getEffectType(),
+                effect.getTargetType(),
+                null,
+                effect.getAttrKey(),
+                effect.getAttrDir(),
+                effect.getFormulaJson(),
+                effect.getHitSegments(),
+                effect.getTriggerRate(),
+                effect.getDurationAv(),
+                null
+        );
+    }
+
+    /**
+     * 新版效果摘要：对 目标 造成 物理伤害 自己·攻击
+     */
+    private static String formatOutputLike(
+            SkillEffectType effectType,
+            SkillEffectTarget targetType,
+            DamageElement damageElement,
+            AttrModifyKey attrKey,
+            AttrModifyDirection attrDir,
+            String formulaJson,
+            Integer hitSegments,
+            Integer triggerRate,
+            Integer durationAv,
+            SkillOutputKind outputKind
+    ) {
+        String rate = triggerRatePrefix(triggerRate);
+        String target = targetLabel(targetType);
+        String formula = formatFormula(formulaJson);
+        String formulaPart = StringUtils.hasText(formula) ? " " + formula : "";
         String seg = "";
-        if (effect.getHitSegments() != null && effect.getHitSegments() > 1) {
-            seg = "，分" + effect.getHitSegments() + "段结算";
+        if (hitSegments != null && hitSegments > 1) {
+            seg = " × " + hitSegments;
         }
-        String ratePart = triggerRateText(effect.getTriggerRate());
-        String durPart = durationAvText(effect.getDurationAv());
-        String prefix = StringUtils.hasText(effect.getName()) ? "【" + effect.getName() + "】" : "";
-        if (type == SkillEffectType.HEAL) {
-            return prefix + "为" + target + "恢复生命" + formulaPart + seg + ratePart;
+        String dur = durationAvSuffix(durationAv);
+        if (outputKind == SkillOutputKind.APPEND_BUFF) {
+            // 完整文案走 appendBuffLine；此处仅兜底
+            return rate + "对 " + target + " 追加BUFF" + dur;
         }
-        if (type == SkillEffectType.ATTR_MODIFY) {
-            String attr = attrKeyLabel(effect.getAttrKey());
-            String dir = effect.getAttrDir() == AttrModifyDirection.DECREASE ? "减少" : "增加";
-            return prefix + "使" + target + "的" + attr + dir + formulaPart + seg + ratePart + durPart;
+        if (outputKind == SkillOutputKind.ATTR || effectType == SkillEffectType.ATTR_MODIFY) {
+            String dir = attrDir == AttrModifyDirection.DECREASE ? "减少" : "增加";
+            return rate + "对 " + target + " " + dir + attrKeyLabel(attrKey) + formulaPart + dur;
         }
-        return prefix + "对" + target + "造成伤害" + formulaPart + seg + ratePart;
+        if (effectType == SkillEffectType.HEAL) {
+            return rate + "对 " + target + " 治疗" + formulaPart + seg;
+        }
+        String el = damageElementLabel(damageElement);
+        return rate + "对 " + target + " 造成 " + el + "伤害" + formulaPart + seg;
     }
 
     private static void appendCombatEffectTexts(List<String> effectTexts, List<PassiveCombatEffect> combatEffects) {
@@ -413,6 +750,12 @@ public final class GameDescUnit {
         if (mode == SkillChargeMatchMode.ANY_TYPE) {
             return " · " + activeSkillTypeLabel(skill.getRefSkillType()) + "类";
         }
+        if (mode == SkillChargeMatchMode.ANY_SCHOOL) {
+            return " · 流派「" + SkillSchoolUnit.normalizeSchool(skill.getRefSkillSchool()) + "」";
+        }
+        if (mode == SkillChargeMatchMode.ANY_ELEMENT) {
+            return " · " + damageElementLabel(skill.getRefDamageElement()) + "元素";
+        }
         return " · 「" + nameOrId(skillNameFn, skill.getRefSkillId()) + "」";
     }
 
@@ -430,55 +773,60 @@ public final class GameDescUnit {
 
     private static String joinSkillSummary(SkillDescVo vo) {
         List<String> blocks = new ArrayList<>();
-        String head = (vo.getSkillTypeLabel() != null ? "【" + vo.getSkillTypeLabel() + "】" : "")
-                + (StringUtils.hasText(vo.getName()) ? vo.getName() : "未命名技能");
-        blocks.add(head);
-        if (StringUtils.hasText(vo.getNeedChargeText())) {
-            blocks.add(vo.getNeedChargeText());
+        String type = StringUtils.hasText(vo.getSkillTypeLabel()) ? vo.getSkillTypeLabel() : "技能";
+        String need = StringUtils.hasText(vo.getNeedChargeText()) ? vo.getNeedChargeText() : "";
+        if (StringUtils.hasText(need)) {
+            blocks.add(type + " · " + need);
+        } else {
+            blocks.add(type);
         }
-        if (StringUtils.hasText(vo.getCastLimitText()) && vo.getCastLimitText().contains("最多")) {
+        if (StringUtils.hasText(vo.getCastLimitText())) {
             blocks.add(vo.getCastLimitText());
         }
-        if (vo.getChargeTexts() != null && !vo.getChargeTexts().isEmpty()) {
-            blocks.add("充能：" + String.join("；", vo.getChargeTexts()));
+        if (vo.getChargeTexts() != null) {
+            for (String c : vo.getChargeTexts()) {
+                if (StringUtils.hasText(c)) {
+                    blocks.add(c);
+                }
+            }
         }
-        if (vo.getEffectTexts() != null && !vo.getEffectTexts().isEmpty()) {
-            blocks.add("效果：" + String.join("；", vo.getEffectTexts()));
-        } else {
-            blocks.add("效果：暂无");
+        if (vo.getEffectTexts() != null) {
+            for (String e : vo.getEffectTexts()) {
+                if (StringUtils.hasText(e)) {
+                    blocks.add(e);
+                }
+            }
         }
         return String.join("\n", blocks);
     }
 
     private static String joinPassiveSummary(PassiveDescVo vo) {
         List<String> blocks = new ArrayList<>();
-        String head = (vo.getPassiveTypeLabel() != null ? "【" + vo.getPassiveTypeLabel() + "】" : "")
-                + (StringUtils.hasText(vo.getName()) ? vo.getName() : "未命名被动");
-        blocks.add(head);
-        if (StringUtils.hasText(vo.getConditionText())) {
-            blocks.add(vo.getConditionText());
-        }
-        if (vo.getEffectTexts() != null && !vo.getEffectTexts().isEmpty()) {
-            blocks.add("效果：" + String.join("；", vo.getEffectTexts()));
+        String type = StringUtils.hasText(vo.getPassiveTypeLabel()) ? vo.getPassiveTypeLabel() : "被动";
+        String cond = StringUtils.hasText(vo.getConditionText()) ? vo.getConditionText() : "";
+        // 「始终生效」不写进摘要，避免与触发时机叠在一起产生歧义
+        if (StringUtils.hasText(cond) && !"始终生效".equals(cond)) {
+            blocks.add(type + " · " + cond);
         } else {
-            blocks.add("效果：暂无");
+            blocks.add(type);
+        }
+        if (vo.getEffectTexts() != null) {
+            for (String e : vo.getEffectTexts()) {
+                if (StringUtils.hasText(e)) {
+                    blocks.add(e);
+                }
+            }
         }
         return String.join("\n", blocks);
     }
 
     private static String passiveTypeLabel(PassiveSkillType type) {
-        return type != null ? type.label() : "被动";
+        return type != null ? type.shortLabel() : "被动";
     }
 
-    private static String skillChargeMatchText(SkillCharge charge, Function<String, String> skillNameFn) {
-        SkillChargeMatchMode mode = charge.getSkillChargeMatch();
-        if (mode == null || mode == SkillChargeMatchMode.ANY) {
-            return "任意技能";
-        }
-        if (mode == SkillChargeMatchMode.ANY_TYPE) {
-            return activeSkillTypeLabel(charge.getMatchSkillType()) + "类技能";
-        }
-        return "技能「" + nameOrId(skillNameFn, charge.getMatchSkillId()) + "」";
+    private static String damageElementLabel(DamageElement el) {
+        DamageElement e = SkillSchoolUnit.normalizeElement(el);
+        return e.getLabel();
     }
 
     private static String targetLabel(SkillEffectTarget t) {
@@ -526,6 +874,10 @@ public final class GameDescUnit {
             String scope;
             if ("ANY_TYPE".equals(match)) {
                 scope = "指定类型(" + activeSkillTypeLabel(parseSkillType(text(n, "matchSkillType"))) + ")";
+            } else if ("ANY_SCHOOL".equals(match)) {
+                scope = "指定流派(" + SkillSchoolUnit.normalizeSchool(text(n, "matchSkillSchool")) + ")";
+            } else if ("ANY_ELEMENT".equals(match)) {
+                scope = "指定元素(" + damageElementLabel(parseDamageElement(text(n, "matchDamageElement"))) + ")";
             } else if ("SPECIFIC".equals(match)) {
                 scope = "指定技能";
             } else {
@@ -562,6 +914,17 @@ public final class GameDescUnit {
             return ActiveSkillType.valueOf(raw);
         } catch (Exception e) {
             return null;
+        }
+    }
+
+    private static DamageElement parseDamageElement(String raw) {
+        if (!StringUtils.hasText(raw)) {
+            return DamageElement.PHYSICAL;
+        }
+        try {
+            return DamageElement.valueOf(raw);
+        } catch (Exception e) {
+            return DamageElement.PHYSICAL;
         }
     }
 

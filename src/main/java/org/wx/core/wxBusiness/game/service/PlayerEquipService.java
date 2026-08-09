@@ -150,6 +150,22 @@ public class PlayerEquipService extends WxServiceImpl<PlayerEquipMapper, PlayerE
         return resolveEquippedCombatPassives(uid, PassiveSkillType.IN_SUSTAINED);
     }
 
+    public List<PassiveSkill> resolveEquippedBattleStartPassives(String uid) {
+        return resolveEquippedCombatPassives(uid, PassiveSkillType.BATTLE_START);
+    }
+
+    public List<PassiveSkill> resolveEquippedBattleJudgePassives(String uid) {
+        return resolveEquippedCombatPassives(uid, PassiveSkillType.BATTLE_JUDGE);
+    }
+
+    public List<PassiveSkill> resolveEquippedBattlePulsePassives(String uid) {
+        return resolveEquippedCombatPassives(uid, PassiveSkillType.BATTLE_PULSE);
+    }
+
+    public List<PassiveSkill> resolveEquippedBattleCombatPassives(String uid) {
+        return resolveEquippedCombatPassives(uid, PassiveSkillType.BATTLE_COMBAT);
+    }
+
     /**
      * 当前穿戴装备上的默认战斗外被动（基础+高级，去重），含效果与条件。
      */

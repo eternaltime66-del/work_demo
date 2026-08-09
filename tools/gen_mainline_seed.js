@@ -207,10 +207,14 @@ function main() {
   push('UPDATE app_player_equip SET weapon_item_id=NULL, armor_item_id=NULL, gloves_item_id=NULL, helmet_item_id=NULL, legs_item_id=NULL, accessory1_item_id=NULL, accessory2_item_id=NULL, accessory3_item_id=NULL;');
   push(`DELETE FROM app_player_role_skill WHERE skill_id <> '${DEFAULT_NORMAL}';`);
   push('');
-  push('-- ---- 关卡链 ----');
+  push('-- ---- 关卡链（保留 TYPE 根节点，重刷 CHAPTER/LEVEL）----');
   push('DELETE FROM app_stage_level_monster;');
-  push('DELETE FROM app_stage_level;');
-  push('DELETE FROM app_stage_chapter;');
+  push("DELETE FROM app_stage WHERE kind = 'LEVEL';");
+  push("DELETE FROM app_stage WHERE kind = 'CHAPTER';");
+  push('-- 确保主线 TYPE 节点存在');
+  push(`INSERT INTO app_stage (id,parent_id,kind,name,code,sort,enable,remark,CREATE_TIME,UPDATE_TIME)`);
+  push(`SELECT ${esc(TYPE_ID)},NULL,'TYPE','主线','MAIN',0,1,NULL,${NOW},${NOW}`);
+  push(`FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM app_stage WHERE id = ${esc(TYPE_ID)});`);
   push('');
   push('-- ---- 掉落 / 配方 / 物品扩展 ----');
   push('DELETE FROM app_monster_drop;');
@@ -569,7 +573,7 @@ function main() {
       const chapterNum = (act.id - 1) * 5 + ci + 1;
       const scp = `SCP_MAIN_${String(chapterNum).padStart(2, '0')}`;
       const cname = `第${String(chapterNum).padStart(2, '0')}章 · ${act.chapters[ci]}`;
-      push(`INSERT INTO app_stage_chapter (id,type_id,name,code,sort,enable,remark,CREATE_TIME,UPDATE_TIME) VALUES (${esc(scp)},${esc(TYPE_ID)},${esc(cname)},${esc(String(chapterNum).padStart(2, '0'))},${chapterNum},1,${esc(act.name)},${NOW},${NOW});`);
+      push(`INSERT INTO app_stage (id,parent_id,kind,name,code,sort,enable,remark,CREATE_TIME,UPDATE_TIME) VALUES (${esc(scp)},${esc(TYPE_ID)},'CHAPTER',${esc(cname)},${esc(String(chapterNum).padStart(2, '0'))},${chapterNum},1,${esc(act.name)},${NOW},${NOW});`);
 
       const n0 = monsterByKey[`${act.id}:N:0`];
       const n1 = monsterByKey[`${act.id}:N:1`];
@@ -583,7 +587,7 @@ function main() {
       for (let lv = 1; lv <= 10; lv++) {
         const slv = `SLV_MAIN_${String(chapterNum).padStart(2, '0')}_${String(lv).padStart(2, '0')}`;
         const lname = `${chapterNum}-${lv}`;
-        push(`INSERT INTO app_stage_level (id,chapter_id,name,code,sort,enable,CREATE_TIME,UPDATE_TIME) VALUES (${esc(slv)},${esc(scp)},${esc(lname)},${esc(lname)},${lv},1,${NOW},${NOW});`);
+        push(`INSERT INTO app_stage (id,parent_id,kind,name,code,sort,enable,CREATE_TIME,UPDATE_TIME) VALUES (${esc(slv)},${esc(scp)},'LEVEL',${esc(lname)},${esc(lname)},${lv},1,${NOW},${NOW});`);
 
         let specs = [];
         if (lv <= 2) specs = [{ id: n0, rarity: 'NORMAL' }];
@@ -613,8 +617,8 @@ function main() {
   push('SET FOREIGN_KEY_CHECKS=1;');
   push('');
   push('-- 校验提示:');
-  push('-- SELECT COUNT(*) FROM app_stage_chapter; -- 30');
-  push('-- SELECT COUNT(*) FROM app_stage_level; -- 300');
+  push('-- SELECT COUNT(*) FROM app_stage WHERE kind = \'CHAPTER\'; -- 30');
+  push('-- SELECT COUNT(*) FROM app_stage WHERE kind = \'LEVEL\'; -- 300');
   push('-- SELECT COUNT(*) FROM app_monster;');
   push('-- SELECT COUNT(*) FROM app_item;');
   push('-- SELECT COUNT(*) FROM app_recipe;');
@@ -626,8 +630,8 @@ function main() {
   const sql = lines.join('\n');
   const count = (re) => (sql.match(re) || []).length;
   console.log('Wrote', OUT);
-  console.log('chapters inserts:', count(/INSERT INTO app_stage_chapter/g));
-  console.log('levels inserts:', count(/INSERT INTO app_stage_level /g));
+  console.log('chapter inserts:', count(/kind,name,code,sort,enable,remark.*CHAPTER|'CHAPTER'/g));
+  console.log('level inserts:', (sql.match(/,'LEVEL',/g) || []).length);
   console.log('placements:', count(/INSERT INTO app_stage_level_monster/g));
   console.log('monsters:', count(/INSERT INTO app_monster /g));
   console.log('items:', count(/INSERT INTO app_item /g));

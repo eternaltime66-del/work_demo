@@ -11,7 +11,7 @@ import java.util.List;
  * 被动高级比例结算：
  * <ul>
  *   <li>吸血 / 攻速 / 最终攻击·生命·防御：加法（单位 1%）</li>
- *   <li>造成伤害比例 / 受到伤害比例：每条独立叠乘 1±p%，最终严格 &gt; 0</li>
+ *   <li>造成/受到伤害、元素伤害、物理伤害比例：每条独立叠乘 1±p%，最终严格 &gt; 0</li>
  * </ul>
  */
 public final class PassiveRatioCalcUnit {

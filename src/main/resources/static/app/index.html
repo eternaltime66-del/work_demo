@@ -1,0 +1,3830 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>游戏首页</title>
+  <link rel="icon" type="image/png" href="art/ui/game-app-icon.png">
+  <link rel="apple-touch-icon" href="art/ui/game-app-icon.png">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/modal.css">
+  <link rel="stylesheet" href="css/auth.css">
+  <link rel="stylesheet" href="css/home.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/deploy.css?v=20260808a">
+  <link rel="stylesheet" href="css/prep.css">
+  <link rel="stylesheet" href="css/warehouse.css">
+  <link rel="stylesheet" href="css/craft.css">
+  <script src="js/dev-live.js"></script>
+  <script src="js/vue.global.prod.js"></script>
+  <script src="js/composables/useDragMove.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/art.js"></script>
+</head>
+<body>
+<div id="app" class="page home-page">
+  <div class="bg-glow bg-glow-1"></div>
+  <div class="bg-glow bg-glow-2"></div>
+
+  <header v-if="tab === 'home'" class="home-hud">
+    <div class="home-hud-user" @click="openHeroDetail">
+      <div class="home-hud-avatar art-slot" data-art="char/hero-idle.png">
+        <span>{{ (hero && hero.name ? hero.name.charAt(0) : '主') }}</span>
+      </div>
+      <div class="home-hud-meta">
+        <strong class="ellipsis">{{ (hero && hero.name) || '主角' }}</strong>
+        <span>Lv.{{ (hero && hero.level) || 1 }}</span>
+      </div>
+    </div>
+    <div class="home-hud-res">
+      <div class="home-hud-chip art-slot" data-art="hud/coin.png" title="金币"><span>🪙</span><em class="num">—</em></div>
+      <div class="home-hud-chip art-slot" data-art="hud/energy.png" title="体力"><span>⚡</span><em class="num">—</em></div>
+    </div>
+    <button type="button" class="home-hud-settings hit-44" aria-label="设置" @click="settingsOpen = true">⚙</button>
+  </header>
+  <div v-else class="home-header">
+    <h1>{{ tabTitle }}</h1>
+    <button type="button" class="btn-ghost btn-sm hit-44" @click="settingsOpen = true">设置</button>
+  </div>
+
+  <div v-if="tab === 'craft'" class="craft-topbar">
+    <div class="craft-anvil art-slot" data-art="craft/anvil-bg.jpg" aria-hidden="true"></div>
+    <input
+      class="craft-filter-input"
+      v-model.trim="craftKeyword"
+      type="search"
+      placeholder="搜索配方名称"
+    >
+    <div class="craft-chip-row hide-scrollbar">
+      <button
+        v-for="opt in craftTypeOptions"
+        :key="opt.value"
+        type="button"
+        class="chip"
+        :class="{ active: craftFilter === opt.value }"
+        @click="craftFilter = opt.value"
+      >{{ opt.label }}</button>
+      <button
+        type="button"
+        class="chip"
+        :class="{ active: craftOnlyCan }"
+        @click="craftOnlyCan = !craftOnlyCan"
+      >仅可合成</button>
+    </div>
+  </div>
+
+  <div class="home-main" :class="{ 'home-main-prep': tab === 'prep', 'home-main-craft': tab === 'craft' }">
+    <!-- 首页 -->
+    <div v-show="tab === 'home'" class="home-scene stage">
+      <div class="stage-bg art-slot" data-art="home/stage-bg.jpg"></div>
+      <div class="stage-mid art-slot" data-art="home/stage-mid.png"></div>
+      <div v-if="loading" class="stage-loading">
+        <div class="skeleton-block" style="width:88px;height:88px;border-radius:22px;margin:0 auto 12px"></div>
+        <div class="skeleton-block" style="width:120px;height:14px;margin:0 auto"></div>
+      </div>
+      <div v-else-if="hero" class="stage-char">
+        <div class="hero-actor" @click="openHeroDetail">
+          <div class="hero-body art-slot" data-art="char/hero-idle.png">
+            <div class="hero-head"></div>
+          </div>
+          <div class="stage-shadow art-slot" data-art="home/shadow.png"></div>
+          <div class="hero-label">{{ hero.name || '主角' }}</div>
+          <button type="button" class="hero-info-btn hit-44" aria-label="详情" @click.stop="openHeroDetail">i</button>
+        </div>
+      </div>
+      <div v-else class="loading-text">暂无角色，请重新登录领取主角</div>
+      <div class="stage-fx"></div>
+      <div class="home-quick" v-if="!loading && hero">
+        <button type="button" class="chip" @click="tab = 'prep'">备战</button>
+        <button type="button" class="chip" @click="openCraft">合成</button>
+        <button type="button" class="chip active" @click="openDeploy">出击</button>
+      </div>
+    </div>
+
+    <!-- 备战：上区人偶/仓库互斥切换，下区战斗背包常驻 -->
+    <div v-show="tab === 'prep'" class="tab-panel prep-panel">
+      <section
+        class="prep-top"
+        :class="{ 'is-wh': warehouseOpen, 'prep-drop-zone': warehouseOpen && isWhDropZone }"
+        :data-drop="warehouseOpen ? 'WAREHOUSE:zone' : undefined"
+      >
+        <div class="prep-section-head">
+          <div class="prep-head-left">
+            <h3>{{ warehouseOpen ? '仓库' : '角色人偶' }}</h3>
+            <span class="prep-meta" v-if="warehouseOpen && warehouse">{{ warehouse.usedSlots }}/{{ warehouse.maxSlots }}</span>
+            <span v-if="!warehouseOpen && prepDisplayRole" class="prep-hero-name-inline">{{ prepDisplayRole.name || '主角' }}</span>
+          </div>
+          <div class="prep-toolbar">
+            <button
+              v-if="!warehouseOpen && prepDisplayRole"
+              type="button"
+              class="btn-ghost btn-sm hit-44"
+              @click="openPrepRoleDetail"
+            >详情</button>
+            <button
+              v-if="!warehouseOpen"
+              type="button"
+              class="btn-ghost btn-sm hit-44"
+              @click="openWarehouse"
+            >打开仓库</button>
+            <template v-else>
+              <button
+                type="button"
+                class="btn-ghost btn-sm hit-44"
+                :class="{ active: batchMode === 'toBag' }"
+                :disabled="prepActing"
+                @click="toggleBatchMode('toBag')"
+              >批量</button>
+              <button
+                type="button"
+                class="btn-ghost btn-sm hit-44"
+                @click="closeWarehouse"
+              >关闭仓库</button>
+            </template>
+          </div>
+        </div>
+
+        <!-- 舞台：人偶占位定高，仓库同尺寸覆盖 -->
+        <div class="prep-top-stage">
+          <div
+            v-if="prepDisplayRole"
+            class="prep-doll-body"
+            :class="{ 'is-placeholder': warehouseOpen }"
+            :aria-hidden="warehouseOpen ? 'true' : 'false'"
+          >
+            <div class="prep-doll-row">
+              <div class="prep-skill-col is-left">
+                <button
+                  v-for="slot in prepSkillSlotsLeft"
+                  :key="'psk-l-' + slot.slotNo"
+                  type="button"
+                  class="prep-skill-slot"
+                  :class="[slot.empty ? '' : 'filled', skillTypeClass(slot.skillType)]"
+                  @click="onPrepSkillSlotClick(slot)"
+                >
+                  <span class="prep-skill-slot-name" v-if="!slot.empty">{{ slot.skillName || '技能' }}</span>
+                  <span class="prep-skill-slot-empty" v-else>—</span>
+                  <span class="prep-skill-slot-label">技能{{ slot.slotNo }}</span>
+                </button>
+              </div>
+            <div class="equip-doll">
+              <div
+                class="equip-slot"
+                :class="[slotFilled('HELMET') ? 'filled' : '', rarityClass(slotRarity('HELMET'))]"
+                style="grid-area:helmet"
+                @click="onEquipSlotClick('HELMET')"
+              >
+                <img v-if="slotDisplayIcon('HELMET').type === 'img'" class="equip-slot-img" :src="slotDisplayIcon('HELMET').src" alt="">
+                <span v-else-if="slotDisplayIcon('HELMET').type === 'emoji'" class="equip-slot-emoji">{{ slotDisplayIcon('HELMET').text }}</span>
+                <span v-else class="equip-slot-sil art-slot" data-art="equip/slot-helmet.svg">{{ equipSilhouette('HELMET') }}</span>
+                <i v-if="slotFilled('HELMET')" class="equip-slot-dot"></i>
+                <span class="equip-slot-label">头盔</span>
+              </div>
+              <div
+                class="equip-slot"
+                :class="[slotFilled('WEAPON') ? 'filled' : '', rarityClass(slotRarity('WEAPON'))]"
+                style="grid-area:weapon"
+                @click="onEquipSlotClick('WEAPON')"
+              >
+                <img v-if="slotDisplayIcon('WEAPON').type === 'img'" class="equip-slot-img" :src="slotDisplayIcon('WEAPON').src" alt="">
+                <span v-else-if="slotDisplayIcon('WEAPON').type === 'emoji'" class="equip-slot-emoji">{{ slotDisplayIcon('WEAPON').text }}</span>
+                <span v-else class="equip-slot-sil art-slot" data-art="equip/slot-weapon.svg">{{ equipSilhouette('WEAPON') }}</span>
+                <i v-if="slotFilled('WEAPON')" class="equip-slot-dot"></i>
+                <span class="equip-slot-label">武器</span>
+              </div>
+              <div class="equip-doll-body art-slot" style="grid-area:body" data-art="char/hero-idle.png" @click="openPrepRoleDetail">
+                <div class="equip-doll-figure">
+                  <div class="hero-body"><div class="hero-head"></div></div>
+                </div>
+              </div>
+              <div
+                class="equip-slot"
+                :class="[slotFilled('ARMOR') ? 'filled' : '', rarityClass(slotRarity('ARMOR'))]"
+                style="grid-area:armor"
+                @click="onEquipSlotClick('ARMOR')"
+              >
+                <img v-if="slotDisplayIcon('ARMOR').type === 'img'" class="equip-slot-img" :src="slotDisplayIcon('ARMOR').src" alt="">
+                <span v-else-if="slotDisplayIcon('ARMOR').type === 'emoji'" class="equip-slot-emoji">{{ slotDisplayIcon('ARMOR').text }}</span>
+                <span v-else class="equip-slot-sil art-slot" data-art="equip/slot-armor.svg">{{ equipSilhouette('ARMOR') }}</span>
+                <i v-if="slotFilled('ARMOR')" class="equip-slot-dot"></i>
+                <span class="equip-slot-label">护甲</span>
+              </div>
+              <div
+                class="equip-slot"
+                :class="[slotFilled('GLOVES') ? 'filled' : '', rarityClass(slotRarity('GLOVES'))]"
+                style="grid-area:gloves"
+                @click="onEquipSlotClick('GLOVES')"
+              >
+                <img v-if="slotDisplayIcon('GLOVES').type === 'img'" class="equip-slot-img" :src="slotDisplayIcon('GLOVES').src" alt="">
+                <span v-else-if="slotDisplayIcon('GLOVES').type === 'emoji'" class="equip-slot-emoji">{{ slotDisplayIcon('GLOVES').text }}</span>
+                <span v-else class="equip-slot-sil art-slot" data-art="equip/slot-gloves.svg">{{ equipSilhouette('GLOVES') }}</span>
+                <i v-if="slotFilled('GLOVES')" class="equip-slot-dot"></i>
+                <span class="equip-slot-label">护手</span>
+              </div>
+              <div
+                class="equip-slot"
+                :class="[slotFilled('LEGS') ? 'filled' : '', rarityClass(slotRarity('LEGS'))]"
+                style="grid-area:legs"
+                @click="onEquipSlotClick('LEGS')"
+              >
+                <img v-if="slotDisplayIcon('LEGS').type === 'img'" class="equip-slot-img" :src="slotDisplayIcon('LEGS').src" alt="">
+                <span v-else-if="slotDisplayIcon('LEGS').type === 'emoji'" class="equip-slot-emoji">{{ slotDisplayIcon('LEGS').text }}</span>
+                <span v-else class="equip-slot-sil art-slot" data-art="equip/slot-legs.svg">{{ equipSilhouette('LEGS') }}</span>
+                <i v-if="slotFilled('LEGS')" class="equip-slot-dot"></i>
+                <span class="equip-slot-label">护腿</span>
+              </div>
+              <div
+                v-for="(acc, idx) in accessorySlots"
+                :key="acc.slot"
+                class="equip-slot"
+                :class="[slotFilled(acc.slot) ? 'filled' : '', rarityClass(slotRarity(acc.slot))]"
+                :style="{ gridArea: 'acc' + (idx + 1) }"
+                @click="onEquipSlotClick(acc.slot)"
+              >
+                <img v-if="slotDisplayIcon(acc.slot).type === 'img'" class="equip-slot-img" :src="slotDisplayIcon(acc.slot).src" alt="">
+                <span v-else-if="slotDisplayIcon(acc.slot).type === 'emoji'" class="equip-slot-emoji">{{ slotDisplayIcon(acc.slot).text }}</span>
+                <span v-else class="equip-slot-sil art-slot" data-art="equip/slot-acc.svg">{{ equipSilhouette(acc.slot) }}</span>
+                <i v-if="slotFilled(acc.slot)" class="equip-slot-dot"></i>
+                <span class="equip-slot-label">{{ acc.label }}</span>
+              </div>
+            </div>
+              <div class="prep-skill-col is-right">
+                <button
+                  v-for="slot in prepSkillSlotsRight"
+                  :key="'psk-r-' + slot.slotNo"
+                  type="button"
+                  class="prep-skill-slot"
+                  :class="[slot.empty ? '' : 'filled', skillTypeClass(slot.skillType)]"
+                  @click="onPrepSkillSlotClick(slot)"
+                >
+                  <span class="prep-skill-slot-name" v-if="!slot.empty">{{ slot.skillName || '技能' }}</span>
+                  <span class="prep-skill-slot-empty" v-else>—</span>
+                  <span class="prep-skill-slot-label">技能{{ slot.slotNo }}</span>
+                </button>
+              </div>
+            </div>
+            <div class="prep-stat-brief">
+              <div class="prep-stat-chip"><span class="prep-stat-chip-label">攻击</span><span class="prep-stat-chip-value num">{{ roleDisplayAtk(prepDisplayRole) }}</span></div>
+              <div class="prep-stat-chip"><span class="prep-stat-chip-label">防御</span><span class="prep-stat-chip-value num">{{ roleDisplayDef(prepDisplayRole) }}</span></div>
+              <div class="prep-stat-chip"><span class="prep-stat-chip-label">生命</span><span class="prep-stat-chip-value num">{{ roleDisplayHp(prepDisplayRole) }}</span></div>
+              <div class="prep-stat-chip"><span class="prep-stat-chip-label">攻速</span><span class="prep-stat-chip-value num">{{ roleDisplayAtkSpeed(prepDisplayRole) }}</span></div>
+            </div>
+          </div>
+          <div
+            v-else
+            class="prep-empty-tip"
+            :class="{ 'is-placeholder': warehouseOpen }"
+          >暂无角色</div>
+
+          <!-- 仓库：与角色区同尺寸覆盖 -->
+          <div v-show="warehouseOpen" class="prep-wh-layer hide-scrollbar" data-scroll-key="prep-wh">
+            <div v-if="!warehouseFilledSlots.length" class="empty-state">
+              <div class="empty-state-icon art-slot" data-art="empty/bag.png">📦</div>
+              <p>{{ isWhDropZone ? '松手放入仓库' : '仓库为空' }}</p>
+            </div>
+            <div class="prep-item-grid" v-else>
+              <div v-for="slot in warehouseFilledSlots" :key="slot.slotNo" class="prep-item-wrap">
+                <div
+                  class="prep-item"
+                  :class="prepSlotClasses(slot)"
+                  :data-drop="'WAREHOUSE:' + slot.slotNo"
+                  @pointerdown="onPrepItemPointerDown($event, 'WAREHOUSE', slot.slotNo, slot)"
+                >
+                  <img v-if="itemIconIsImage(slot.icon)" class="prep-item-img" :src="itemIconSrc(slot.icon)" :alt="slot.itemName">
+                  <span v-else class="prep-item-icon">{{ slot.icon || '📦' }}</span>
+                  <span class="qty-badge prep-item-qty">{{ slot.quantity }}</span>
+                </div>
+                <div class="prep-item-name ellipsis">{{ slot.itemName }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div v-if="dragState" class="prep-drag-hint">
+        {{ dragHintText }}
+      </div>
+
+      <!-- 战斗背包常驻 -->
+      <section class="prep-bottom" :class="{ 'prep-drop-zone': isBagDropZone }" data-drop="BAG:zone">
+        <div class="prep-section-head">
+          <div class="prep-head-left">
+            <h3>战斗背包</h3>
+            <span class="prep-meta">{{ bagItems.length }} 件</span>
+          </div>
+          <div class="prep-toolbar">
+            <button
+              type="button"
+              class="btn-ghost btn-sm hit-44"
+              :class="{ active: batchMode === 'toWarehouse' }"
+              :disabled="prepActing"
+              @click="toggleBatchMode('toWarehouse')"
+            >批量</button>
+          </div>
+        </div>
+        <div class="prep-scroll prep-bag-zone hide-scrollbar" data-scroll-key="prep-bag">
+          <div v-if="!bagItems.length" class="empty-state">
+            <div class="empty-state-icon art-slot" data-art="empty/bag.png">🎒</div>
+            <p>{{ isBagDropZone ? '松手放入背包' : (warehouseOpen ? '背包为空，从仓库拖入' : '背包为空，点上方打开仓库') }}</p>
+          </div>
+          <div v-else class="prep-item-grid">
+            <div v-for="item in bagItems" :key="item.id" class="prep-item-wrap">
+              <div
+                class="prep-item"
+                :class="prepBagClasses(item)"
+                :data-drop="'BAG:' + item.id"
+                @pointerdown="onPrepItemPointerDown($event, 'BAG', item.id, item)"
+              >
+                <img v-if="itemIconIsImage(item.icon)" class="prep-item-img" :src="itemIconSrc(item.icon)" :alt="item.itemName">
+                <span v-else class="prep-item-icon">{{ item.icon || '📦' }}</span>
+                <span class="qty-badge prep-item-qty">{{ item.quantity }}</span>
+              </div>
+              <div class="prep-item-name ellipsis">{{ item.itemName }}</div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- 布局 -->
+    <div v-show="tab === 'layout'" class="tab-panel layout-panel" data-scroll-key="layout">
+      <div class="layout-status">
+        <span>{{ layoutStatusText }}</span>
+        <button type="button" class="layout-help hit-44" title="规则" @click="showToast('横6竖5；拖角色到格子；主角通常 2×2；近战偏前两列')">?</button>
+      </div>
+      <div class="layout-board-wrap">
+        <div
+          class="battle-board"
+          ref="layoutBoard"
+          :style="boardStyle"
+        >
+          <div
+            v-for="cell in cells"
+            :key="'p-' + cell.r + '-' + cell.c"
+            class="battle-cell"
+            :class="{
+              melee: cell.c < 2,
+              ranged: cell.c >= 2,
+              active: isAnchor(cell.c, cell.r, draftLayouts),
+              valid: isLayoutCellHot(cell.c, cell.r),
+              invalid: isLayoutCellInvalid(cell.c, cell.r),
+              hover: isLayoutCellHot(cell.c, cell.r)
+            }"
+            :style="cellStyle(cell.c, cell.r)"
+          ></div>
+          <div
+            v-for="item in draftLayouts"
+            :key="item.roleId"
+            class="battle-unit player-unit"
+            :class="{ main: item.mainRole, dragging: layoutDrag && layoutDrag.roleId === item.roleId, selected: selectedRoleId === item.roleId }"
+            :style="layoutUnitStyle(item)"
+            @pointerdown.prevent="onLayoutUnitDown($event, item)"
+            @click.stop="selectPlaced(item)"
+          >
+            <span>{{ shortName(item.roleName) }}</span>
+            <em>{{ item.gridH }}×{{ item.gridW }}</em>
+          </div>
+        </div>
+        <div class="layout-enemy-dir" aria-hidden="true">
+          <span></span><span></span><span></span>
+          <em>敌方来袭方向</em>
+        </div>
+      </div>
+
+      <div
+        class="roster-zone"
+        ref="layoutRoster"
+        :class="{ 'drop-active': layoutDrag && layoutDrag.fromBoard && layoutOverRoster }"
+      >
+        <div class="roster-title">可选角色 · 拖到战场上场 · 拖回此处下阵</div>
+        <div class="roster-list">
+          <button
+            v-for="role in roles"
+            :key="role.id"
+            type="button"
+            class="roster-item"
+            :class="{ selected: selectedRoleId === role.id, onField: isOnField(role.id), dragging: layoutDrag && layoutDrag.roleId === role.id }"
+            @pointerdown.prevent="onLayoutRosterDown($event, role)"
+            @click="selectRole(role)"
+          >
+            <strong class="ellipsis">{{ role.name || '角色' }}</strong>
+            <span>{{ role.mainRole ? '主角' : '角色' }} · {{ role.gridH || 1 }}×{{ role.gridW || 1 }}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div
+      v-if="layoutGhost.show"
+      class="drag-ghost layout-finger-ghost"
+      :style="{ left: layoutGhost.x + 'px', top: layoutGhost.y + 'px' }"
+    >{{ layoutGhost.name }}</div>
+    <div
+      v-if="prepGhost.show"
+      class="drag-ghost"
+      :style="{ left: prepGhost.x + 'px', top: prepGhost.y + 'px' }"
+    >{{ prepGhost.name }}</div>
+
+    <!-- 合成台 -->
+    <div v-show="tab === 'craft'" class="tab-panel craft-panel">
+      <div v-if="craftLoading" class="craft-skel">
+        <div class="skeleton-block" style="height:84px;margin-bottom:8px"></div>
+        <div class="skeleton-block" style="height:84px;margin-bottom:8px"></div>
+        <div class="skeleton-block" style="height:84px"></div>
+      </div>
+      <div v-else-if="!filteredCraftRecipes.length" class="empty-state">
+        <div class="empty-state-icon art-slot" data-art="empty/recipe.png">🧪</div>
+        <p>暂无匹配配方</p>
+      </div>
+      <div v-else class="craft-list" data-scroll-key="craft">
+        <div
+          v-for="recipe in filteredCraftRecipes"
+          :key="recipe.id"
+          class="craft-card"
+          @click="openCraftDetail(recipe)"
+        >
+          <div class="craft-card-top">
+            <img v-if="itemIconIsImage(recipe.resultItemIcon)" class="craft-row-icon" :src="itemIconSrc(recipe.resultItemIcon)" alt="">
+            <span v-else class="craft-row-emoji">{{ recipe.resultItemIcon || '📦' }}</span>
+            <div class="craft-row-text">
+              <div class="craft-row-name">{{ recipe.resultItemName || recipe.name }}</div>
+              <div class="craft-row-sub">×{{ recipe.resultQty || 1 }} · {{ itemTypeLabel(recipe.resultItemType) }}</div>
+            </div>
+            <button
+              type="button"
+              class="craft-detail-link hit-44"
+              @click.stop="openCraftItemDetail(recipe)"
+            >详情</button>
+            <i class="craft-rarity-bar" :class="gradeRarityClass(recipe.grade || 1)"></i>
+          </div>
+          <div class="craft-card-bottom">
+            <div class="craft-mat-thumbs">
+              <div
+                v-for="mat in (recipe.materials || [])"
+                :key="mat.itemId"
+                class="craft-mat-chip"
+                :class="{ short: !mat.enough }"
+                :title="(mat.itemName || '') + ' ' + (mat.ownedQty || 0) + '/' + (mat.requiredQty || 0)"
+              >
+                <div class="craft-mat-thumb">
+                  <img v-if="itemIconIsImage(mat.icon)" :src="itemIconSrc(mat.icon)" alt="">
+                  <span v-else>{{ mat.icon || '📦' }}</span>
+                </div>
+                <span class="craft-mat-x">×{{ mat.requiredQty || 0 }}</span>
+              </div>
+              <span v-if="!(recipe.materials && recipe.materials.length)" class="muted" style="font-size:11px">无材料数据</span>
+            </div>
+            <button
+              v-if="recipe.canCraft"
+              type="button"
+              class="craft-btn primary hit-44"
+              :disabled="craftActing"
+              @click.stop="executeCraft(recipe)"
+            >合成</button>
+            <button
+              v-else
+              type="button"
+              class="craft-btn warn hit-44"
+              @click.stop="openCraftDetail(recipe, true)"
+            >查看缺料</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 出击：章节手风琴 -->
+    <div v-show="tab === 'deploy'" class="tab-panel deploy-panel">
+      <div v-if="deployLoading" class="deploy-skel">
+        <div class="skeleton-block" style="height:88px;margin-bottom:8px"></div>
+        <div class="skeleton-block" style="height:88px;margin-bottom:8px"></div>
+        <div class="skeleton-block" style="height:88px"></div>
+      </div>
+      <div v-else class="sortie-panel">
+        <div class="stage-panel-head">
+          <h2>出击</h2>
+          <span class="stamina-pill" title="体力">体力 {{ stamina.stamina }}/{{ stamina.maxStamina }}</span>
+        </div>
+        <div class="deploy-mode-tabs">
+          <button type="button" class="chip" :class="{ active: deployMode === 'main' }" @click="setDeployMode('main')">主线</button>
+          <button type="button" class="chip" :class="{ active: deployMode === 'tower' }" @click="setDeployMode('tower')">无尽塔</button>
+        </div>
+
+        <template v-if="deployMode === 'tower'">
+          <div class="tower-panel">
+            <p class="muted">无选关：每次从第一层开始，胜利保留残血进入下一层，战败结束。</p>
+            <div v-if="towerLoading" class="empty-hint">读取中...</div>
+            <div v-else class="tower-card">
+              <div class="tower-card-row">
+                <strong>{{ towerStatus.hasRunning ? '进行中' : (towerStatus.status === 'CLEARED' ? '已通关' : (towerStatus.status === 'DEAD' ? '已战败' : '未开始')) }}</strong>
+                <span class="muted" v-if="towerStatus.hasRunning">
+                  当前 {{ towerStatus.currentLevelCode || towerStatus.currentLevelName || '—' }}
+                  <template v-if="towerStatus.chapterName"> · {{ towerStatus.chapterName }}</template>
+                </span>
+                <span class="muted" v-else>入口 {{ towerStatus.startLevelId ? '第 1 层' : '暂无关卡' }}</span>
+              </div>
+              <div class="tower-actions">
+                <button type="button" class="battle-start-btn" :disabled="towerActing" @click="enterTower">
+                  {{ towerStatus.hasRunning ? '放弃并重新开始' : '进入无尽塔' }}
+                </button>
+                <button
+                  type="button"
+                  class="battle-start-btn pulse"
+                  :disabled="towerActing || !towerStatus.hasRunning || !towerStatus.currentLevelId"
+                  @click="startTowerBattle"
+                >挑战当前层</button>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <template v-else>
+          <p class="muted" style="margin:0 0 10px">展开大关 · 点小关预览 · 通关解锁下一关</p>
+          <div v-if="!flatChapters.length" class="empty-state">
+            <div class="empty-state-icon art-slot" data-art="empty/level.png">🗺</div>
+            <p>暂无大关</p>
+          </div>
+          <div v-else class="chapter-list" data-scroll-key="deploy">
+            <template v-for="group in chapterGroups" :key="group.typeId">
+              <div
+                v-for="ch in group.chapters"
+                :key="ch.id"
+                class="chapter-accordion"
+                :class="{ open: expandedChapterId === ch.id }"
+              >
+                <button type="button" class="chapter-row" @click="toggleChapter(ch, group.typeId)">
+                  <div class="chapter-thumb art-slot" :data-art="'chapter/' + ch.id + '.jpg'">🏞</div>
+                  <div class="chapter-row-main">
+                    <strong class="ellipsis">{{ ch.name }}</strong>
+                    <span>{{ (ch.levels || []).length }} 小关<template v-if="ch.cleared"> · 已首通</template></span>
+                    <div class="chapter-progress"><i :style="{ width: chapterProgress(ch) + '%' }"></i></div>
+                  </div>
+                  <span class="chapter-row-arrow">{{ expandedChapterId === ch.id ? '▾' : '›' }}</span>
+                </button>
+                <div v-if="expandedChapterId === ch.id" class="chapter-levels">
+                  <div v-if="!(ch.levels || []).length" class="empty-hint">暂无小关</div>
+                  <button
+                    v-for="lv in (ch.levels || [])"
+                    :key="lv.id"
+                    type="button"
+                    class="level-row"
+                    :class="{ locked: lv.locked, cleared: lv.cleared }"
+                    @click="onLevelRowClick(lv, ch)"
+                  >
+                    <div class="level-row-code">{{ lv.code || '—' }}</div>
+                    <div class="level-row-meta">
+                      <span class="ellipsis">{{ lv.name }}</span>
+                      <div class="level-faces">
+                        <span
+                          v-for="(face, fi) in levelFaces(lv.id)"
+                          :key="lv.id + '-f' + fi"
+                          class="level-face art-slot"
+                          :class="rarityClass(face.rarity)"
+                          :data-art="face.monsterId ? ('monster/' + face.monsterId + '-face.png') : null"
+                        >{{ face.ch }}</span>
+                        <em v-if="!levelFaces(lv.id).length">{{ levelMonsterCount(lv.id) }}</em>
+                      </div>
+                      <span class="level-cost muted">体力 {{ lv.fightStaminaCost != null ? lv.fightStaminaCost : (lv.cleared ? 1 : 0) }}</span>
+                    </div>
+                    <div class="level-stars" aria-hidden="true">
+                      <span v-for="s in 3" :key="s" :class="{ on: s <= (lv.cleared ? 3 : (lv.stars || 0)) }">★</span>
+                    </div>
+                    <span class="chapter-row-arrow">›</span>
+                  </button>
+                </div>
+              </div>
+            </template>
+          </div>
+        </template>
+      </div>
+    </div>
+  </div>
+
+  <!-- 预览 + 出击弹窗（唯一 sheet） -->
+  <div v-if="previewSheetOpen" class="deploy-sheet-mask is-preview" @click.self="closePreviewSheet">
+    <div class="deploy-sheet deploy-sheet-preview">
+      <div class="sheet-handle"></div>
+      <div class="deploy-sheet-head">
+        <div>
+          <h3>{{ selectedLevel ? (selectedLevel.code || selectedLevel.name) : '关卡预览' }}</h3>
+          <p class="muted">{{ sheetChapter ? sheetChapter.name : '' }} · 关卡预览</p>
+        </div>
+        <button type="button" class="deploy-sheet-close hit-44" aria-label="关闭" @click="closePreviewSheet">×</button>
+      </div>
+      <div class="deploy-sheet-body">
+        <div class="preview-status-row" v-if="levelPreview || selectedLevel">
+          <span class="preview-badge" :class="previewCleared ? 'is-clear' : 'is-new'">
+            {{ previewCleared ? '已首通' : '未首通' }}
+          </span>
+          <span class="muted">
+            体力 {{ previewFightCost }}
+            · 今日
+            <template v-if="previewDailyMax">{{ previewTodayCount }}/{{ previewDailyMax }}</template>
+            <template v-else>无限</template>
+          </span>
+        </div>
+
+        <div class="preview-entry-row">
+          <button
+            type="button"
+            class="preview-entry-btn"
+            :disabled="monsterLoading || !levelMonsters.length"
+            @click="openEnemyFormation"
+          >
+            <span class="preview-entry-title">敌方阵容预览</span>
+            <span class="preview-entry-sub">
+              <template v-if="monsterLoading">读取中…</template>
+              <template v-else-if="!levelMonsters.length">暂无怪物</template>
+              <template v-else>{{ levelMonsters.length }} 只 · 点击查看</template>
+            </span>
+          </button>
+        </div>
+
+        <div class="preview-link-row">
+          <button
+            type="button"
+            class="preview-glow-link is-reward"
+            :disabled="previewLoading"
+            @click="openPreviewRewardList('first')"
+          >首通奖励</button>
+          <span class="preview-claim" :class="previewFirstClaimed ? 'claimed' : 'pending'">
+            {{ previewFirstClaimed ? '已领' : '未领' }}
+          </span>
+        </div>
+        <div class="preview-link-row">
+          <button
+            type="button"
+            class="preview-glow-link is-drop"
+            :disabled="previewLoading"
+            @click="openPreviewRewardList('drop')"
+          >怪物掉落</button>
+          <span class="muted">可能掉落</span>
+        </div>
+
+        <button
+          type="button"
+          class="battle-start-btn pulse"
+          :disabled="!selectedLevelId || monsterLoading || (selectedLevel && selectedLevel.locked)"
+          @click="startBattle"
+        >进入战斗</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 敌方阵容弹窗 -->
+  <div
+    v-if="enemyFormationOpen"
+    class="modal-mask preview-sub-mask"
+    :class="{ 'modal-under': !!monsterDetail || !!previewRewardKind || prepItemDetail }"
+    @click.self="closeEnemyFormation"
+  >
+    <div class="modal preview-sub-panel">
+      <div class="modal-head">
+        <div>
+          <h3>敌方阵容预览</h3>
+          <p class="muted">横6 · 竖5 · 点击怪物查看详情</p>
+        </div>
+        <button type="button" class="modal-close hit-44" aria-label="关闭" @click="closeEnemyFormation">×</button>
+      </div>
+      <div class="modal-body preview-formation-body">
+        <div v-if="monsterLoading" class="empty-hint">读取怪物...</div>
+        <div v-else-if="!levelMonsters.length" class="empty-hint">该关卡暂无怪物配置</div>
+        <template v-else>
+          <div class="battle-board enemy-board deploy-board" :style="boardStyle">
+            <div
+              v-for="cell in cells"
+              :key="'ef-' + cell.r + '-' + cell.c"
+              class="battle-cell"
+              :style="cellStyle(cell.c, cell.r)"
+            ></div>
+            <div
+              v-for="m in levelMonsters"
+              :key="'efu-' + m.id"
+              class="battle-unit enemy-unit is-clickable"
+              :class="rarityClass(m.rarity)"
+              :style="unitStyle(m)"
+              @click="openMonsterDetail(m)"
+            >
+              <span>{{ shortName(m.monsterName) }}</span>
+              <em>{{ rarityLabel(m.rarity) }}</em>
+            </div>
+          </div>
+          <div class="enemy-tags" v-if="levelMonsters.length">
+            <button
+              v-for="m in levelMonsters"
+              :key="'eft-' + m.id"
+              type="button"
+              class="enemy-tag"
+              :class="rarityClass(m.rarity)"
+              @click="openMonsterDetail(m)"
+            >{{ m.monsterName }} · {{ rarityLabel(m.rarity) }}</button>
+          </div>
+        </template>
+      </div>
+    </div>
+  </div>
+
+  <!-- 怪物详情 -->
+  <div
+    v-if="monsterDetail"
+    class="modal-mask preview-sub-mask is-monster"
+    :class="{ 'modal-under': skillDetailOpen }"
+    @click.self="closeMonsterDetail"
+  >
+    <div class="modal preview-sub-panel monster-detail-panel">
+      <div class="modal-head">
+        <div>
+          <h3>怪物详情</h3>
+          <p class="muted">{{ rarityLabel(monsterDetail.rarity) }} · 占地 {{ monsterDetail.gridH || 1 }}×{{ monsterDetail.gridW || 1 }}</p>
+        </div>
+        <button type="button" class="modal-close hit-44" aria-label="关闭" @click="closeMonsterDetail">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="sd-hero">
+          <span class="sd-type-pill" :class="'is-' + (monsterDetail.rarity || 'NORMAL')">{{ rarityLabel(monsterDetail.rarity) }}</span>
+          <div class="sd-name">{{ monsterDetail.monsterName || '怪物' }}</div>
+        </div>
+        <div class="sd-meta">
+          <div class="sd-chip"><span class="sd-chip-label">攻击</span><span class="sd-chip-val">{{ monsterDetail.baseAtk || 0 }}</span></div>
+          <div class="sd-chip"><span class="sd-chip-label">生命</span><span class="sd-chip-val">{{ monsterDetail.baseHp || 0 }}</span></div>
+          <div class="sd-chip"><span class="sd-chip-label">防御</span><span class="sd-chip-val">{{ monsterDetail.baseDef || 0 }}</span></div>
+          <div class="sd-chip"><span class="sd-chip-label">行动值</span><span class="sd-chip-val">{{ monsterDetail.baseAction || 0 }}</span></div>
+        </div>
+        <p class="sd-remark" v-if="monsterDetail.remarkText">{{ monsterDetail.remarkText }}</p>
+        <section class="sd-card is-charge">
+          <header class="sd-card-head">技能</header>
+          <ul class="sd-skill-list">
+            <li
+              v-if="monsterDetail.normalSkillId || monsterDetail.normalSkillName"
+              class="sd-skill-row is-normal"
+              @click="monsterDetail.normalSkillId && openSkillDetail(monsterDetail.normalSkillId)"
+            >
+              <span class="sd-skill-name">{{ monsterDetail.normalSkillName || '普攻' }}</span>
+              <span class="sd-skill-meta">普攻</span>
+            </li>
+            <li
+              v-if="monsterDetail.smallSkillId || monsterDetail.smallSkillName"
+              class="sd-skill-row is-small"
+              @click="monsterDetail.smallSkillId && openSkillDetail(monsterDetail.smallSkillId)"
+            >
+              <span class="sd-skill-name">{{ monsterDetail.smallSkillName || '小技能' }}</span>
+              <span class="sd-skill-meta">小技能</span>
+            </li>
+            <li
+              v-if="monsterDetail.ultimateSkillId || monsterDetail.ultimateSkillName"
+              class="sd-skill-row is-ultimate"
+              @click="monsterDetail.ultimateSkillId && openSkillDetail(monsterDetail.ultimateSkillId)"
+            >
+              <span class="sd-skill-name">{{ monsterDetail.ultimateSkillName || '大招' }}</span>
+              <span class="sd-skill-meta">大招</span>
+            </li>
+            <li v-if="!monsterDetail.normalSkillId && !monsterDetail.smallSkillId && !monsterDetail.ultimateSkillId" class="muted" style="padding:8px 0;font-size:12px;list-style:none">暂无技能配置</li>
+          </ul>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <!-- 首通奖励 / 怪物掉落一览 -->
+  <div
+    v-if="previewRewardKind"
+    class="modal-mask preview-sub-mask"
+    :class="{ 'modal-under': prepItemDetail || skillDetailOpen }"
+    @click.self="closePreviewRewardList"
+  >
+    <div class="modal preview-sub-panel">
+      <div class="modal-head">
+        <div>
+          <h3>{{ previewRewardKind === 'first' ? '首通奖励' : '怪物掉落一览' }}</h3>
+          <p class="muted">{{ previewRewardKind === 'first' ? (previewFirstClaimed ? '已领取' : '未领取') : '可能掉落 · 点击物品查看详情' }}</p>
+        </div>
+        <button type="button" class="modal-close hit-44" aria-label="关闭" @click="closePreviewRewardList">×</button>
+      </div>
+      <div class="modal-body">
+        <div v-if="previewLoading" class="empty-hint">读取中...</div>
+        <template v-else-if="previewRewardKind === 'first'">
+          <div v-if="!previewFirstRewards.length" class="preview-empty">无首通奖励</div>
+          <ul v-else class="preview-reward-list is-clickable">
+            <li
+              v-for="(r, i) in previewFirstRewards"
+              :key="'pfr-' + (r.itemId || i)"
+              @click="openPreviewItemDetail(r.itemId)"
+            >
+              <span class="ellipsis preview-item-link">{{ r.itemName || r.itemId }}</span>
+              <em>×{{ r.qty != null ? r.qty : 1 }}</em>
+            </li>
+          </ul>
+        </template>
+        <template v-else>
+          <div v-if="!previewDrops.length" class="preview-empty">无配置掉落</div>
+          <ul v-else class="preview-drop-list is-clickable">
+            <li
+              v-for="(d, i) in previewDrops"
+              :key="'pdr-' + (d.itemId || i)"
+              @click="openPreviewItemDetail(d.itemId)"
+            >
+              <span class="ellipsis preview-item-link">{{ d.itemName || d.itemId }}</span>
+              <span class="preview-drop-meta">
+                {{ formatDropRate(d.dropRate) }}
+                · {{ formatDropQty(d) }}
+              </span>
+            </li>
+          </ul>
+        </template>
+      </div>
+    </div>
+  </div>
+
+  <div v-if="craftBurst.show" class="craft-burst">
+    <div class="craft-burst-ring"></div>
+    <div class="craft-burst-icon">{{ craftBurst.icon || '✨' }}</div>
+  </div>
+
+  <nav class="home-tabbar">
+    <button type="button" :class="{ active: tab === 'home' }" @click="goTab('home')">首页</button>
+    <button type="button" :class="{ active: tab === 'prep' }" @click="openPrep">备战</button>
+    <button type="button" :class="{ active: tab === 'layout' }" @click="openLayout">布局</button>
+    <button type="button" :class="{ active: tab === 'craft' }" @click="openCraft">合成</button>
+    <button type="button" :class="{ active: tab === 'deploy' }" @click="openDeploy">出击</button>
+  </nav>
+
+  <!-- 合成详情 -->
+  <div
+    v-if="craftDetail"
+    class="craft-detail-mask"
+    :class="{ 'modal-under': skillDetailOpen || prepItemDetail }"
+    @click.self="closeCraftDetail"
+  >
+    <div class="craft-detail-panel">
+      <div class="craft-detail-head">
+        <h3>合成详情</h3>
+        <button type="button" class="craft-detail-close hit-44" aria-label="关闭" @click="closeCraftDetail">×</button>
+      </div>
+      <div class="craft-detail-body">
+        <div class="craft-detail-result">
+          <img v-if="itemIconIsImage(craftDetail.resultItemIcon)" class="craft-detail-result-img" :src="itemIconSrc(craftDetail.resultItemIcon)" alt="">
+          <span v-else class="craft-detail-result-emoji">{{ craftDetail.resultItemIcon || '📦' }}</span>
+          <div>
+            <div class="craft-detail-result-name">
+              {{ craftDetail.resultItemName || craftDetail.name }}
+              <em
+                v-if="craftDetail.resultItem && craftDetail.resultItem.grade != null"
+                class="craft-grade-badge"
+                :class="gradeRarityClass(craftDetail.resultItem.grade)"
+              >品级 {{ craftDetail.resultItem.grade }}</em>
+            </div>
+            <div class="craft-detail-result-meta">
+              产出 ×{{ craftDetail.resultQty || 1 }}
+              <template v-if="craftDetail.resultItemType"> · {{ itemTypeLabel(craftDetail.resultItemType) }}</template>
+            </div>
+            <div class="craft-detail-result-remark" v-if="craftDetail.remark">{{ craftDetail.remark }}</div>
+          </div>
+        </div>
+
+        <div class="craft-detail-section" v-if="craftDetail.resultItem">
+          <div class="sd-meta craft-core-stats">
+            <div class="sd-chip"><span class="sd-chip-label">攻击</span><span class="sd-chip-val">{{ craftDetail.resultItem.baseAtk != null ? craftDetail.resultItem.baseAtk : '—' }}</span></div>
+            <div class="sd-chip"><span class="sd-chip-label">防御</span><span class="sd-chip-val">{{ craftDetail.resultItem.defense != null ? craftDetail.resultItem.defense : '—' }}</span></div>
+            <div class="sd-chip"><span class="sd-chip-label">生命</span><span class="sd-chip-val">{{ craftDetail.resultItem.hp != null ? craftDetail.resultItem.hp : '—' }}</span></div>
+            <div class="sd-chip" v-if="craftDetail.resultItem.itemType === 'WEAPON' && formatAtkSpeedShort(craftDetail.resultItem) !== '—'"><span class="sd-chip-label">攻速</span><span class="sd-chip-val">{{ formatAtkSpeedShort(craftDetail.resultItem) }}</span></div>
+          </div>
+
+          <button type="button" class="craft-more-toggle" @click="openCraftItemDetail(craftDetail)">
+            详情
+          </button>
+        </div>
+
+        <div class="craft-detail-section">
+          <header class="sd-card-head craft-section-head">所需材料</header>
+          <div
+            v-for="mat in craftDetail.materials"
+            :key="mat.itemId"
+            class="craft-mat-row"
+            :class="{ enough: mat.enough, short: !mat.enough }"
+          >
+            <span v-if="mat.enough" class="craft-mat-check" aria-hidden="true">✓</span>
+            <img v-if="itemIconIsImage(mat.icon)" class="craft-mat-img" :src="itemIconSrc(mat.icon)" alt="">
+            <span v-else class="craft-mat-emoji">{{ mat.icon || '📦' }}</span>
+            <div class="craft-mat-info">
+              <div class="craft-mat-name">{{ mat.itemName }}</div>
+              <div class="craft-mat-qty" :class="{ short: !mat.enough }">拥有 {{ mat.ownedQty }}/需要 {{ mat.requiredQty }}</div>
+            </div>
+            <button
+              v-if="!mat.enough"
+              type="button"
+              class="craft-btn warn mini"
+              @click="onMaterialAction(mat)"
+            >去获取</button>
+            <button
+              v-else
+              type="button"
+              class="craft-btn ghost mini"
+              @click="onMaterialAction(mat)"
+            >{{ mat.sourceLabel || '查看' }}</button>
+          </div>
+        </div>
+
+        <div class="craft-detail-section" v-if="craftDropSources.length">
+          <header class="sd-card-head craft-section-head">材料掉落 · {{ craftDropFocusName || '关卡' }}</header>
+          <div v-for="(d, i) in craftDropSources" :key="'drop-' + i" class="craft-drop-row">
+            <div class="craft-drop-main">
+              <div class="craft-drop-code">{{ d.displayCode || '—' }} {{ d.levelName || '' }}</div>
+              <div class="craft-drop-sub">{{ d.chapterName || '' }} · {{ d.monsterName }} · {{ formatDropRate(d.dropRate) }} · {{ d.minQty }}-{{ d.maxQty }}</div>
+            </div>
+            <button type="button" class="craft-btn warn mini" @click="goDeployForLevel(d.levelId)">去出击</button>
+          </div>
+        </div>
+      </div>
+      <div class="craft-detail-foot">
+        <button
+          type="button"
+          class="craft-run-btn"
+          :disabled="craftActing || !craftDetail.canCraft"
+          @click="executeCraft(craftDetail)"
+        >{{ craftDetail.canCraft ? '确认合成' : '材料不足' }}</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 备战物品详情 -->
+  <div
+    v-if="prepItemDetail && prepItemView"
+    class="item-detail-mask"
+    :class="{ 'modal-under': skillDetailOpen }"
+    @click.self="closePrepItemDetail"
+  >
+    <div class="item-detail-panel">
+      <div class="item-detail-head">
+        <h3>物品详情</h3>
+        <button type="button" class="item-detail-close hit-44" aria-label="关闭" @click="closePrepItemDetail">×</button>
+      </div>
+      <div class="item-detail-body">
+        <div class="sd-hero has-icon">
+          <img
+            v-if="itemIconIsImage(prepItemView.icon)"
+            class="sd-hero-icon-img"
+            :src="itemIconSrc(prepItemView.icon)"
+            :alt="prepItemView.name"
+          >
+          <span v-else class="sd-hero-icon">{{ prepItemView.icon || '📦' }}</span>
+          <span class="sd-type-pill" :class="'is-item-' + (prepItemView.itemType || 'OTHER')">
+            {{ itemTypeLabel(prepItemView.itemType) }}
+          </span>
+          <div class="sd-name">{{ prepItemView.name || '物品' }}</div>
+          <div class="sd-code" v-if="prepItemView.code">{{ prepItemView.code }}</div>
+        </div>
+
+        <div class="sd-meta">
+          <div class="sd-chip" v-if="prepItemDetail.source === 'WAREHOUSE' || prepItemDetail.source === 'BAG'">
+            <span class="sd-chip-label">数量</span>
+            <span class="sd-chip-val">{{ prepItemView.quantity || 0 }}</span>
+          </div>
+          <div class="sd-chip" v-if="prepItemDetail.source === 'EQUIP'">
+            <span class="sd-chip-label">装备槽</span>
+            <span class="sd-chip-val sd-chip-val-sm">{{ slotLabelMap[prepItemView.slot] || prepItemView.slot }}</span>
+          </div>
+          <div class="sd-chip" v-if="prepItemView.itemType === 'WEAPON'">
+            <span class="sd-chip-label">攻击</span>
+            <span class="sd-chip-val">{{ prepItemView.baseAtk ?? 0 }}</span>
+          </div>
+          <div class="sd-chip" v-if="['ARMOR','GLOVES','HELMET','LEGS'].indexOf(prepItemView.itemType) >= 0">
+            <span class="sd-chip-label">生命</span>
+            <span class="sd-chip-val">{{ prepItemView.hp ?? 0 }}</span>
+          </div>
+          <div class="sd-chip" v-if="['ARMOR','GLOVES','HELMET','LEGS'].indexOf(prepItemView.itemType) >= 0">
+            <span class="sd-chip-label">防御</span>
+            <span class="sd-chip-val">{{ prepItemView.defense ?? 0 }}</span>
+          </div>
+          <div class="sd-chip" v-if="prepItemView.itemType === 'WEAPON' && formatAtkSpeedShort(prepItemView) !== '—'">
+            <span class="sd-chip-label">攻速</span>
+            <span class="sd-chip-val">{{ formatAtkSpeedShort(prepItemView) }}</span>
+          </div>
+          <div class="sd-chip" v-if="prepItemView.itemType === 'MATERIAL'">
+            <span class="sd-chip-label">品级</span>
+            <span class="sd-chip-val">{{ prepItemView.grade ?? '—' }}</span>
+          </div>
+          <div class="sd-chip" v-if="prepItemView.maxStack != null">
+            <span class="sd-chip-label">堆叠</span>
+            <span class="sd-chip-val">{{ prepItemView.maxStack }}</span>
+          </div>
+        </div>
+
+        <p class="sd-remark" v-if="prepItemView.remark">{{ prepItemView.remark }}</p>
+
+        <section class="sd-card is-effect" v-if="prepItemView.itemType === 'WEAPON' && prepItemNormalRow">
+          <header class="sd-card-head">普攻技能</header>
+          <ul class="sd-list">
+            <li
+              :class="{ 'is-clickable': !!prepItemNormalRow.id }"
+              @click="prepItemNormalRow.id && openSkillDetail(prepItemNormalRow.id)"
+            >
+              <span class="sd-num">1.</span>
+              <span class="sd-text">
+                <span class="sd-link is-underline" :class="{ muted: !prepItemNormalRow.id }">
+                  {{ prepItemNormalRow.name || '普攻' }}
+                </span>
+                <span class="sd-tag-sys" v-if="prepItemNormalRow.systemDefault">系统默认</span>
+                <span class="sd-sub" v-if="prepItemNormalRow.summary" v-html="formatDescHtml(prepItemNormalRow.summary)"></span>
+              </span>
+            </li>
+          </ul>
+        </section>
+
+        <section
+          class="sd-card is-charge"
+          v-if="prepItemView.itemType && prepItemView.itemType !== 'MATERIAL' && prepItemSkillRows.length"
+        >
+          <header class="sd-card-head">充能技能</header>
+          <ul class="sd-list">
+            <li
+              v-for="(row, idx) in prepItemSkillRows"
+              :key="'psk-' + (row.id || idx)"
+              :class="{ 'is-clickable': !!row.id }"
+              @click="row.id && openSkillDetail(row.id)"
+            >
+              <span class="sd-num">{{ idx + 1 }}.</span>
+              <span class="sd-text">
+                <span class="sd-link is-underline" :class="{ muted: !row.id }">{{ row.name || '技能' }}</span>
+                <span class="sd-sub" v-if="row.summary" v-html="formatDescHtml(row.summary)"></span>
+              </span>
+            </li>
+          </ul>
+        </section>
+
+        <section
+          class="sd-card is-attr"
+          v-if="prepItemView.itemType && prepItemView.itemType !== 'MATERIAL' && prepItemPassiveRows.length"
+        >
+          <header class="sd-card-head">被动技能</header>
+          <ul class="sd-list">
+            <li
+              v-for="(ps, idx) in prepItemPassiveRows"
+              :key="'pps-' + (ps.id || idx)"
+              :class="{ 'is-clickable': !!ps.id }"
+              @click="ps.id && openPassiveDetail(ps.id)"
+            >
+              <span class="sd-num">{{ idx + 1 }}.</span>
+              <span class="sd-text">
+                <span class="sd-link is-underline" :class="{ muted: !ps.id }">{{ ps.name || '被动' }}</span>
+                <span class="sd-sub" v-if="ps.summary" v-html="formatDescHtml(ps.summary)"></span>
+              </span>
+            </li>
+          </ul>
+        </section>
+      </div>
+      <div class="item-detail-actions">
+        <button
+          v-if="prepItemDetail.source === 'WAREHOUSE'"
+          type="button"
+          class="item-detail-transfer"
+          :disabled="prepActing"
+          @click="transferDetailToBag"
+        >转移到背包</button>
+        <button
+          v-for="opt in equipableSlotOptions"
+          :key="opt.slot"
+          type="button"
+          class="item-detail-transfer"
+          :disabled="prepActing"
+          @click="equipDetailSlot(opt.slot)"
+        >装备{{ opt.label }}</button>
+        <button
+          v-if="prepItemDetail.source === 'BAG'"
+          type="button"
+          class="item-detail-transfer wh"
+          :disabled="prepActing"
+          @click="transferDetailToWarehouse"
+        >转移到仓库</button>
+        <button
+          v-if="prepItemDetail.source === 'EQUIP'"
+          type="button"
+          class="item-detail-transfer wh"
+          :disabled="prepActing"
+          @click="unequipDetailSlot"
+        >卸下</button>
+      </div>
+    </div>
+  </div>
+
+  <div v-if="detailOpen && detailRole" class="hero-detail-mask" @click.self="closeHeroDetail">
+    <div class="hero-detail-panel">
+      <div class="hero-detail-head">
+        <h3>角色详情</h3>
+        <button type="button" class="hero-detail-close hit-44" aria-label="关闭" @click="closeHeroDetail">×</button>
+      </div>
+      <div class="hero-detail-body">
+        <div class="sd-hero has-icon">
+          <div class="hero-body hero-detail-figure">
+            <div class="hero-head"></div>
+          </div>
+          <span class="sd-type-pill is-PASSIVE">{{ detailRole.mainRole ? '主角' : '角色' }}</span>
+          <div class="sd-name">{{ detailRole.name || '主角' }}</div>
+          <div class="sd-code">占地 {{ detailRole.gridH || 2 }}×{{ detailRole.gridW || 2 }}</div>
+        </div>
+
+        <div class="sd-meta">
+          <div class="sd-chip"><span class="sd-chip-label">攻击</span><span class="sd-chip-val">{{ roleDisplayAtk(detailRole) }}</span></div>
+          <div class="sd-chip"><span class="sd-chip-label">生命</span><span class="sd-chip-val">{{ roleDisplayHp(detailRole) }}</span></div>
+          <div class="sd-chip"><span class="sd-chip-label">防御</span><span class="sd-chip-val">{{ roleDisplayDef(detailRole) }}</span></div>
+          <div class="sd-chip"><span class="sd-chip-label">攻速</span><span class="sd-chip-val">{{ roleDisplayAtkSpeed(detailRole) }}</span></div>
+        </div>
+
+        <section class="sd-card is-attr">
+          <header class="sd-card-head">基础 / 额外 / 装备</header>
+          <ul class="sd-kv-list">
+            <li><span>基础攻击</span><b>{{ detailRole.baseAtk || 0 }}</b></li>
+            <li><span>额外攻击</span><b>{{ detailRole.extraAtk || 0 }}</b></li>
+            <li><span>装备攻击</span><b>+{{ detailRole.equipBonusAtk || 0 }}</b></li>
+            <li><span>基础生命</span><b>{{ detailRole.baseHp || 0 }}</b></li>
+            <li><span>额外生命</span><b>{{ detailRole.extraHp || 0 }}</b></li>
+            <li><span>装备生命</span><b>+{{ detailRole.equipBonusHp || 0 }}</b></li>
+            <li><span>基础防御</span><b>{{ detailRole.baseDef || 0 }}</b></li>
+            <li><span>额外防御</span><b>{{ detailRole.extraDef || 0 }}</b></li>
+            <li><span>装备防御</span><b>+{{ detailRole.equipBonusDef || 0 }}</b></li>
+            <li><span>基础攻速</span><b>{{ roleBaseAtkSpeed(detailRole) }}</b></li>
+            <li><span>最终攻速</span><b>{{ roleDisplayAtkSpeed(detailRole) }}</b></li>
+            <li><span>基础行动值</span><b>{{ detailRole.baseAction || 0 }}</b></li>
+            <li><span>最终行动值</span><b>{{ roleDisplayAction(detailRole) }}</b></li>
+          </ul>
+        </section>
+
+        <section class="sd-card is-charge">
+          <header class="sd-card-head">攻速参数</header>
+          <ul class="sd-kv-list">
+            <li><span>增加攻速</span><b>{{ detailRole.atkSpeedUpRatio || 0 }}%</b></li>
+            <li><span>减少攻速</span><b>{{ detailRole.atkSpeedDownRatio || 0 }}%</b></li>
+          </ul>
+        </section>
+
+        <section class="sd-card is-effect">
+          <header class="sd-card-head">比例</header>
+          <ul class="sd-kv-list">
+            <li><span>造成伤害比例</span><b>{{ detailRole.dealDmgRatio != null ? detailRole.dealDmgRatio : 100 }}%</b></li>
+            <li><span>受到伤害比例</span><b>{{ detailRole.takenDmgRatio != null ? detailRole.takenDmgRatio : 100 }}%</b></li>
+            <li><span>造成元素伤害比例</span><b>{{ detailRole.dealElementDmgRatio != null ? detailRole.dealElementDmgRatio : 100 }}%</b></li>
+            <li><span>受到元素伤害比例</span><b>{{ detailRole.takenElementDmgRatio != null ? detailRole.takenElementDmgRatio : 100 }}%</b></li>
+            <li><span>造成物理伤害比例</span><b>{{ detailRole.dealPhysDmgRatio != null ? detailRole.dealPhysDmgRatio : 100 }}%</b></li>
+            <li><span>受到物理伤害比例</span><b>{{ detailRole.takenPhysDmgRatio != null ? detailRole.takenPhysDmgRatio : 100 }}%</b></li>
+            <li><span>吸血比例</span><b>{{ detailRole.lifeStealRatio || 0 }}%</b></li>
+          </ul>
+        </section>
+
+        <section class="sd-card is-charge">
+          <header class="sd-card-head">角色技能一览</header>
+          <ul v-if="detailRoleBoundSkills.length" class="sd-skill-list">
+            <li
+              v-for="sk in detailRoleBoundSkills"
+              :key="'role-' + sk.skillId"
+              class="sd-skill-row"
+              :class="skillTypeClass(sk.skillType)"
+              @click="sk.skillId && openSkillDetail(sk.skillId)"
+            >
+              <span class="sd-skill-name">{{ sk.skillName || '技能' }}</span>
+              <span class="sd-skill-meta">{{ skillTypeLabel(sk.skillType) }}</span>
+            </li>
+          </ul>
+          <p v-else class="muted" style="margin:8px 0 0;font-size:12px">暂无角色技能</p>
+        </section>
+
+        <section class="sd-card is-attr">
+          <header class="sd-card-head">装备技能一览</header>
+          <ul v-if="detailEquipSkills.length" class="sd-skill-list">
+            <li
+              v-for="sk in detailEquipSkills"
+              :key="'equip-' + sk.skillId"
+              class="sd-skill-row"
+              :class="skillTypeClass(sk.skillType)"
+              @click="sk.skillId && openSkillDetail(sk.skillId)"
+            >
+              <span class="sd-skill-name">{{ sk.skillName || '技能' }}</span>
+              <span class="sd-skill-meta">{{ skillTypeLabel(sk.skillType) }} · {{ sk.sourceLabel || '装备' }}</span>
+            </li>
+          </ul>
+          <p v-else class="muted" style="margin:8px 0 0;font-size:12px">暂无装备技能</p>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div
+    v-if="skillDetailOpen"
+    class="skill-detail-mask"
+    :class="{ 'modal-under': buffDetailOpen }"
+    @click.self="closeSkillDetail"
+  >
+    <div class="skill-detail-panel">
+      <div class="skill-detail-head">
+        <h3>{{ skillDetailKind === 'passive' ? '被动详情' : '技能详情' }}</h3>
+        <button type="button" class="item-detail-close hit-44" aria-label="关闭" @click="closeSkillDetail">×</button>
+      </div>
+      <div v-if="skillDetailLoading" class="skill-detail-body">
+        <div class="skeleton-block" style="height:64px;margin-bottom:10px"></div>
+        <div class="skeleton-block" style="height:14px;width:70%;margin-bottom:8px"></div>
+        <div class="skeleton-block" style="height:14px;width:45%"></div>
+      </div>
+      <div v-else-if="skillDetailKind === 'active' && skillDetail && skillDetail.skill" class="skill-detail-body is-active-skill">
+        <div class="sd-hero">
+          <div class="sd-hero-tags">
+            <span class="sd-type-pill" :class="'is-' + (skillDetail.skill.skillType || 'NORMAL')">
+              {{ skillTypeLabel(skillDetail.skill.skillType) }}
+            </span>
+            <span class="sd-tag-sys" v-if="skillDetail.skill.code === 'DEFAULT_NORMAL'">系统默认</span>
+          </div>
+          <div class="sd-name">{{ skillDetail.skill.name || '技能' }}</div>
+          <div
+            class="sd-code"
+            v-if="skillDetail.skill.code && skillDetail.skill.code !== 'DEFAULT_NORMAL'"
+          >{{ skillDetail.skill.code }}</div>
+        </div>
+        <div class="sd-meta-line">
+          <span class="sd-meta-seg">
+            充能
+            <span class="sd-meta-charge">[{{ skillChargeBracket(skillDetail.skill) }}]</span>
+          </span>
+          <span class="sd-meta-sep">|</span>
+          <span class="sd-meta-seg">流派 <b>{{ skillDetail.skill.skillSchool || '无' }}</b></span>
+          <span class="sd-meta-sep">|</span>
+          <span class="sd-meta-seg">元素 <b>{{ damageElementLabel(skillDetail.skill.damageElement) }}</b></span>
+          <template v-if="skillDetail.skill.maxCastSkill != null && skillDetail.skill.maxCastSkill > 0">
+            <span class="sd-meta-sep">|</span>
+            <span class="sd-meta-seg">上限 <b>{{ skillDetail.skill.maxCastSkill }}</b></span>
+          </template>
+        </div>
+        <p
+          class="sd-remark"
+          v-if="skillDetail.skill.remark && skillDetail.skill.code !== 'DEFAULT_NORMAL'"
+        >{{ skillDetail.skill.remark }}</p>
+        <section class="sd-card is-charge" v-if="skillDetail.charges && skillDetail.charges.length">
+          <header class="sd-card-head">充能条件</header>
+          <ul class="sd-list">
+            <li v-for="(c, idx) in skillDetail.charges" :key="c.id || idx">
+              <span class="sd-num">{{ idx + 1 }}.</span>
+              <span class="sd-text">{{ formatChargeConditionSummary(c) }}</span>
+            </li>
+          </ul>
+        </section>
+        <section class="sd-card is-effect" v-if="skillDetailEffectRows.length">
+          <header class="sd-card-head">释放效果</header>
+          <ul class="sd-list">
+            <li
+              v-for="(e, idx) in skillDetailEffectRows"
+              :key="e.id || ('eff-' + idx)"
+              :class="{ 'is-clickable': isAppendBuffClickable(e) }"
+              @click="isAppendBuffClickable(e) && openBuffDetail(e.buffDefId)"
+            >
+              <span class="sd-num">{{ idx + 1 }}.</span>
+              <span class="sd-text">
+                <template v-if="e.outputKind === 'APPEND_BUFF'">
+                  {{ formatAppendBuffLead(e) }}
+                  <span class="sd-link is-underline" :class="{ muted: !e.buffDefId }">{{ appendBuffLinkLabel(e) }}</span>
+                  {{ formatAppendBuffTail(e) }}
+                </template>
+                <template v-else><span v-html="formatDescHtml(formatEffectSummary(e))"></span></template>
+              </span>
+            </li>
+          </ul>
+        </section>
+        <div class="sd-empty" v-if="(!skillDetail.charges || !skillDetail.charges.length) && !skillDetailEffectRows.length">
+          暂无充能条件与效果配置
+        </div>
+      </div>
+      <div v-else-if="skillDetailKind === 'passive' && skillDetail" class="skill-detail-body">
+        <div class="sd-hero">
+          <span class="sd-type-pill is-PASSIVE">被动</span>
+          <div class="sd-name">{{ skillDetail.name || '被动' }}</div>
+          <div class="sd-code">{{ passiveTypeLabel(skillDetail.passiveType) }}</div>
+        </div>
+        <p class="sd-remark" v-if="skillDetail.remark">{{ skillDetail.remark }}</p>
+        <section class="sd-card is-charge" v-if="passiveConditionLines.length">
+          <header class="sd-card-head">生效条件</header>
+          <ul class="sd-list">
+            <li v-for="(line, idx) in passiveConditionLines" :key="'pc-' + idx">
+              <span class="sd-idx">{{ idx + 1 }}</span>
+              <span class="sd-text">{{ line }}</span>
+            </li>
+          </ul>
+        </section>
+        <section class="sd-card is-attr" v-if="skillDetail.effects && skillDetail.effects.length">
+          <header class="sd-card-head">属性效果</header>
+          <ul class="sd-list">
+            <li v-for="(e, idx) in skillDetail.effects" :key="e.id || idx">
+              <span class="sd-idx">{{ idx + 1 }}</span>
+              <span class="sd-text">
+                {{ passiveAttrLabel(e.attrKey) }}
+                <em class="sd-em">{{ attrDirLabel(e.attrDir) }}{{ e.valueNum != null ? e.valueNum : '' }}</em>
+              </span>
+            </li>
+          </ul>
+        </section>
+        <section class="sd-card is-effect" v-if="skillDetail.outputs && skillDetail.outputs.length">
+          <header class="sd-card-head">战斗输出</header>
+          <ul class="sd-list">
+            <li
+              v-for="(o, idx) in skillDetail.outputs"
+              :key="o.id || idx"
+              :class="{ 'is-clickable': isAppendBuffClickable(o) }"
+              @click="isAppendBuffClickable(o) && openBuffDetail(o.buffDefId)"
+            >
+              <span class="sd-idx">{{ idx + 1 }}</span>
+              <span class="sd-text">
+                <template v-if="o.outputKind === 'APPEND_BUFF'">
+                  {{ formatAppendBuffLead(o) }}
+                  <span class="sd-link is-underline" :class="{ muted: !o.buffDefId }">{{ appendBuffLinkLabel(o) }}</span>
+                  {{ formatAppendBuffTail(o) }}
+                </template>
+                <template v-else><span v-html="formatDescHtml(formatEffectSummary(o))"></span></template>
+              </span>
+            </li>
+          </ul>
+        </section>
+        <div class="sd-empty"
+          v-if="!passiveConditionLines.length && (!skillDetail.effects || !skillDetail.effects.length) && (!skillDetail.outputs || !skillDetail.outputs.length)">
+          暂无效果配置
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div v-if="buffDetailOpen" class="buff-detail-mask" @click.self="closeBuffDetail">
+    <div class="skill-detail-panel">
+      <div class="skill-detail-head">
+        <h3>BUFF 详情</h3>
+        <button type="button" class="item-detail-close hit-44" aria-label="关闭" @click="closeBuffDetail">×</button>
+      </div>
+      <div v-if="buffDetailLoading" class="skill-detail-body">
+        <div class="skeleton-block" style="height:64px;margin-bottom:10px"></div>
+        <div class="skeleton-block" style="height:14px;width:70%;margin-bottom:8px"></div>
+        <div class="skeleton-block" style="height:14px;width:45%"></div>
+      </div>
+      <div v-else-if="buffDetail" class="skill-detail-body">
+        <div class="sd-hero">
+          <span class="sd-type-pill" :class="buffDetail.beneficial === false ? 'is-ULTIMATE' : 'is-SMALL'">
+            {{ buffDetail.beneficial === false ? '减益' : '增益' }}
+          </span>
+          <div class="sd-name">{{ buffDetail.name || 'BUFF' }}</div>
+          <div class="sd-code">{{ buffKindLabel(buffDetail.buffKind) }}</div>
+        </div>
+        <div class="sd-meta-line">
+          <span class="sd-meta-seg">持续 <b>{{ formatBuffDuration(buffDetail) }}</b></span>
+          <span class="sd-meta-dot">·</span>
+          <span class="sd-meta-seg">叠加 <b>{{ formatBuffStack(buffDetail) }}</b></span>
+          <span class="sd-meta-dot">·</span>
+          <span class="sd-meta-seg"><b>{{ buffDetail.dispelable === false ? '不可驱散' : '可驱散' }}</b></span>
+        </div>
+        <p class="sd-remark" v-if="buffDetail.remark">{{ buffDetail.remark }}</p>
+        <section class="sd-card is-effect" v-if="buffDetailEffectLines.length">
+          <header class="sd-card-head">效果</header>
+          <ul class="sd-list">
+            <li v-for="(line, idx) in buffDetailEffectLines" :key="'bf-' + idx">
+              <span class="sd-num">{{ idx + 1 }}.</span>
+              <span class="sd-text" v-html="formatDescHtml(line)"></span>
+            </li>
+          </ul>
+        </section>
+        <div class="sd-empty" v-else>暂无效果配置</div>
+      </div>
+    </div>
+  </div>
+
+  <div v-if="batchMode" class="batch-bar">
+    <span>已选 {{ batchSelectedCount }} 件</span>
+    <button type="button" class="btn-ghost btn-sm hit-44" @click="selectAllBatch">全选</button>
+    <button
+      type="button"
+      class="btn-primary btn-sm hit-44"
+      :disabled="prepActing || !canConfirmBatch"
+      @click="confirmBatch"
+    >确认转移</button>
+    <button type="button" class="btn-ghost btn-sm hit-44" @click="cancelBatch">取消</button>
+  </div>
+
+  <div v-if="settingsOpen" class="sheet-mask" @click.self="settingsOpen = false">
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <h3 style="margin:0">设置</h3>
+        <button type="button" class="sheet-close hit-44" aria-label="关闭" @click="settingsOpen = false">×</button>
+      </div>
+      <div class="sheet-body" style="display:flex;flex-direction:column;gap:10px">
+        <button type="button" class="btn-primary btn-block btn-md" @click="goChangePassword">修改密码</button>
+        <button type="button" class="btn-danger btn-block btn-md" @click="logout">退出登录</button>
+      </div>
+    </div>
+  </div>
+
+  <div v-if="toast.show" class="toast" :class="toast.type">{{ toast.text }}</div>
+</div>
+
+<script src="js/api.js"></script>
+<script>
+const { createApp } = Vue;
+const COLS = 6;
+const ROWS = 5;
+const GAP = 6;
+const CELL = 54;
+
+createApp({
+  data() {
+    return {
+      tab: 'home',
+      tabScrollMap: {},
+      loading: true,
+      hero: null,
+      roles: [],
+      detailOpen: false,
+      detailRoleData: null,
+      toast: { show: false, text: '', type: 'error' },
+      draftLayouts: [],
+      selectedRoleId: '',
+      layoutSaving: false,
+      layoutDrag: null,
+      layoutHover: null,
+      layoutOverRoster: false,
+      layoutGhost: { show: false, x: 0, y: 0, name: '' },
+      savedLayoutSnap: '',
+      _layoutSavePending: false,
+      settingsOpen: false,
+      stageTree: [],
+      deployMode: 'main',
+      stamina: { stamina: 0, maxStamina: 30 },
+      towerStatus: { hasRunning: false },
+      towerLoading: false,
+      towerActing: false,
+      selectedTypeId: '',
+      selectedChapterId: '',
+      selectedLevelId: '',
+      selectedLevel: null,
+      sheetChapter: null,
+      sheetLevels: [],
+      expandedChapterId: '',
+      previewSheetOpen: false,
+      enemyFormationOpen: false,
+      monsterDetail: null,
+      previewRewardKind: null,
+      levelPreview: null,
+      previewLoading: false,
+      levelMonsters: [],
+      monsterCountMap: {},
+      levelFaceMap: {},
+      deployLoading: false,
+      monsterLoading: false,
+      warehouseOpen: false,
+      warehouse: null,
+      battleBag: null,
+      equipSlots: [],
+      prepSkillSlots: [
+        { slotNo: 1, empty: true }, { slotNo: 2, empty: true },
+        { slotNo: 3, empty: true }, { slotNo: 4, empty: true },
+        { slotNo: 5, empty: true }, { slotNo: 6, empty: true },
+        { slotNo: 7, empty: true }, { slotNo: 8, empty: true }
+      ],
+      bagItems: [],
+      prepActing: false,
+      batchMode: '',
+      batchWhSlots: [],
+      batchBagIds: [],
+      dragState: null,
+      prepGhost: { show: false, x: 0, y: 0, name: '' },
+      prepItemDetail: null,
+      /** 刚打开物品详情时屏蔽嵌套技能/被动点击，避免同一次点击穿透 */
+      _blockNestedDetailUntil: 0,
+      skillDetailOpen: false,
+      skillDetailLoading: false,
+      skillDetailKind: 'active',
+      skillDetail: null,
+      buffDetailOpen: false,
+      buffDetailLoading: false,
+      buffDetail: null,
+      prepMainRole: null,
+      craftRecipes: [],
+      craftLoading: false,
+      craftActing: false,
+      craftFilter: 'all',
+      craftOnlyCan: false,
+      craftKeyword: '',
+      craftDetail: null,
+      craftDropSources: [],
+      craftDropFocusName: '',
+      craftBurst: { show: false, icon: '✨' },
+      craftTypeOptions: [
+        { value: 'all', label: '全部' },
+        { value: 'WEAPON', label: '武器' },
+        { value: 'ARMOR', label: '护甲' },
+        { value: 'HELMET', label: '头盔' },
+        { value: 'GLOVES', label: '护手' },
+        { value: 'LEGS', label: '护腿' },
+        { value: 'ACCESSORY', label: '饰品' },
+        { value: 'MATERIAL', label: '材料' }
+      ],
+      accessorySlots: [
+        { slot: 'ACCESSORY_1', label: '饰品1' },
+        { slot: 'ACCESSORY_2', label: '饰品2' },
+        { slot: 'ACCESSORY_3', label: '饰品3' }
+      ],
+      itemTypeSlotMap: {
+        WEAPON: ['WEAPON'],
+        ARMOR: ['ARMOR'],
+        GLOVES: ['GLOVES'],
+        HELMET: ['HELMET'],
+        LEGS: ['LEGS'],
+        ACCESSORY: ['ACCESSORY_1', 'ACCESSORY_2', 'ACCESSORY_3']
+      },
+      slotLabelMap: {
+        WEAPON: '武器',
+        ARMOR: '护甲',
+        GLOVES: '护手',
+        LEGS: '护腿',
+        HELMET: '头盔',
+        ACCESSORY_1: '饰品1',
+        ACCESSORY_2: '饰品2',
+        ACCESSORY_3: '饰品3'
+      },
+      _dragDepth: 0
+    };
+  },
+  computed: {
+    tabTitle() {
+      return { home: '首页', prep: '备战', layout: '布局', craft: '合成台', deploy: '出击' }[this.tab] || '首页';
+    },
+    filteredCraftRecipes() {
+      var list = this.craftRecipes || [];
+      var kw = (this.craftKeyword || '').toLowerCase();
+      var filter = this.craftFilter || 'all';
+      var onlyCan = !!this.craftOnlyCan;
+      return list.filter((r) => {
+        if (filter !== 'all' && (r.resultItemType || '') !== filter) return false;
+        if (onlyCan && !r.canCraft) return false;
+        if (!kw) return true;
+        var name = ((r.resultItemName || '') + ' ' + (r.name || '')).toLowerCase();
+        return name.indexOf(kw) >= 0;
+      });
+    },
+    prepDisplayRole() {
+      return this.prepMainRole || this.hero;
+    },
+    prepSkillSlotsLeft() {
+      return this.normalizePrepSkillSlots(this.prepSkillSlots).slice(0, 4);
+    },
+    prepSkillSlotsRight() {
+      return this.normalizePrepSkillSlots(this.prepSkillSlots).slice(4, 8);
+    },
+    /** V2 优先 outputs；否则旧 effects */
+    skillDetailEffectRows() {
+      var d = this.skillDetail;
+      if (!d || this.skillDetailKind !== 'active') return [];
+      if (d.outputs && d.outputs.length) return d.outputs;
+      return d.effects || [];
+    },
+    passiveConditionLines() {
+      if (this.skillDetailKind !== 'passive' || !this.skillDetail) return [];
+      return this.buildPassiveConditionLines(this.skillDetail);
+    },
+    buffDetailEffectLines() {
+      return this.buildBuffEffectLines(this.buffDetail);
+    },
+    detailRoleSkills() {
+      var role = this.detailRole;
+      return (role && role.skills) ? role.skills : [];
+    },
+    detailRoleBoundSkills() {
+      return this.detailRoleSkills.filter(function (sk) {
+        return sk && sk.source === 'ROLE';
+      });
+    },
+    detailEquipSkills() {
+      return this.detailRoleSkills.filter(function (sk) {
+        return sk && (sk.source === 'EQUIP' || sk.source === 'WEAPON');
+      });
+    },
+    detailRole() {
+      var snap = this.detailRoleData;
+      if (!snap) return this.hero;
+      // 装备后 prep/hero 会刷新；属性用最新 live，技能一览保留详情接口结果
+      var live = this.prepMainRole && this.prepMainRole.id === snap.id
+        ? this.prepMainRole
+        : (this.hero && this.hero.id === snap.id ? this.hero : null);
+      if (!live) return snap;
+      var skills = (snap.skills && snap.skills.length)
+        ? snap.skills
+        : (live.skills || []);
+      return Object.assign({}, live, { skills: skills });
+    },
+    /** 物品详情展示：合并装备槽 detail 与背包/仓库基础字段 */
+    prepItemView() {
+      if (!this.prepItemDetail || !this.prepItemDetail.data) return null;
+      var raw = this.prepItemDetail.data;
+      var detail = raw.detail || {};
+      function pick(key) {
+        return detail[key] != null ? detail[key] : raw[key];
+      }
+      return {
+        slot: raw.slot,
+        quantity: raw.quantity,
+        itemId: raw.itemId || detail.itemId,
+        name: raw.itemName || raw.name || detail.name,
+        icon: raw.icon || detail.icon,
+        itemType: (function () {
+          var t = raw.itemType || detail.itemType || raw.requiredType;
+          return t && typeof t === 'object' ? (t.name || t) : t;
+        })(),
+        itemTypeLabel: detail.itemTypeLabel || raw.itemTypeLabel,
+        code: detail.code || raw.code,
+        maxStack: pick('maxStack'),
+        grade: pick('grade'),
+        baseAtk: pick('baseAtk'),
+        hp: pick('hp'),
+        defense: pick('defense'),
+        atkSpeedText: detail.atkSpeedText || raw.atkSpeedText,
+        atkSpeedUpRatio: pick('atkSpeedUpRatio'),
+        atkSpeedDownRatio: pick('atkSpeedDownRatio'),
+        normalSkillId: detail.normalSkillId || raw.normalSkillId,
+        normalSkillName: detail.normalSkillName || raw.normalSkillName,
+        normalSkillDesc: detail.normalSkillDesc || raw.normalSkillDesc,
+        normalSkillSystemDefault: !!(detail.normalSkillSystemDefault || raw.normalSkillSystemDefault),
+        defaultSkillNames: detail.defaultSkillNames || raw.defaultSkillNames || [],
+        defaultSkills: detail.defaultSkills || raw.defaultSkills || [],
+        defaultSkillDescs: detail.defaultSkillDescs || raw.defaultSkillDescs || [],
+        defaultBasicPassiveDescs: detail.defaultBasicPassiveDescs || raw.defaultBasicPassiveDescs || [],
+        defaultAdvancedPassiveDescs: detail.defaultAdvancedPassiveDescs || raw.defaultAdvancedPassiveDescs || [],
+        defaultBattleStartPassiveDescs: detail.defaultBattleStartPassiveDescs || raw.defaultBattleStartPassiveDescs || [],
+        defaultBattleJudgePassiveDescs: detail.defaultBattleJudgePassiveDescs || raw.defaultBattleJudgePassiveDescs || [],
+        defaultBattlePulsePassiveDescs: detail.defaultBattlePulsePassiveDescs || raw.defaultBattlePulsePassiveDescs || [],
+        defaultBattleCombatPassiveDescs: detail.defaultBattleCombatPassiveDescs || raw.defaultBattleCombatPassiveDescs || [],
+        defaultAnchorPassiveDescs: detail.defaultAnchorPassiveDescs || raw.defaultAnchorPassiveDescs || [],
+        defaultPeriodicPassiveDescs: detail.defaultPeriodicPassiveDescs || raw.defaultPeriodicPassiveDescs || [],
+        defaultSustainedPassiveDescs: detail.defaultSustainedPassiveDescs || raw.defaultSustainedPassiveDescs || [],
+        remark: detail.remark || raw.remark
+      };
+    },
+    /** 武器普攻：与充能技能同一套编号列表样式（未绑定则后端已填系统默认） */
+    prepItemNormalRow() {
+      var v = this.prepItemView;
+      if (!v) return null;
+      var desc = v.normalSkillDesc;
+      var id = v.normalSkillId || (desc && desc.id) || null;
+      var name = v.normalSkillName || (desc && desc.name) || '';
+      if (!id && !name && !(desc && desc.summary)) return null;
+      return {
+        id: id,
+        name: name || '普攻',
+        summary: desc && desc.summary,
+        systemDefault: !!v.normalSkillSystemDefault
+      };
+    },
+    prepItemSkillRows() {
+      var v = this.prepItemView;
+      if (!v) return [];
+      var descs = v.defaultSkillDescs || [];
+      var links = v.defaultSkills || [];
+      var byId = {};
+      descs.forEach(function (d) { if (d && d.id) byId[d.id] = d; });
+      if (links.length) {
+        return links.map(function (sk) {
+          var d = (sk && sk.id && byId[sk.id]) || null;
+          return {
+            id: sk.id,
+            name: (d && d.name) || sk.name || sk.id,
+            summary: d && d.summary
+          };
+        });
+      }
+      return descs.map(function (d) {
+        return { id: d.id, name: d.name || d.id, summary: d.summary };
+      });
+    },
+    /** 装备详情：全部被动合并为一条编号列表 */
+    prepItemPassiveRows() {
+      var v = this.prepItemView;
+      if (!v) return [];
+      var lists = [
+        v.defaultBasicPassiveDescs,
+        v.defaultAdvancedPassiveDescs,
+        v.defaultBattleStartPassiveDescs,
+        v.defaultBattleJudgePassiveDescs,
+        v.defaultBattlePulsePassiveDescs,
+        v.defaultBattleCombatPassiveDescs,
+        v.defaultAnchorPassiveDescs,
+        v.defaultPeriodicPassiveDescs,
+        v.defaultSustainedPassiveDescs
+      ];
+      var out = [];
+      lists.forEach(function (arr) {
+        (arr || []).forEach(function (ps) {
+          if (ps) out.push(ps);
+        });
+      });
+      return out;
+    },
+    warehouseFilledSlots() {
+      if (!this.warehouse || !this.warehouse.slots) return [];
+      return this.warehouse.slots.filter((s) => s && s.itemId && (s.quantity == null || s.quantity > 0));
+    },
+    equipSlotMap() {
+      var map = {};
+      (this.equipSlots || []).forEach((slot) => { map[slot.slot] = slot; });
+      return map;
+    },
+    canConfirmBatch() {
+      if (this.batchMode === 'toBag') return this.batchWhSlots.length > 0;
+      if (this.batchMode === 'toWarehouse') return this.batchBagIds.length > 0;
+      return false;
+    },
+    batchSelectedCount() {
+      if (this.batchMode === 'toBag') return this.batchWhSlots.length;
+      if (this.batchMode === 'toWarehouse') return this.batchBagIds.length;
+      return 0;
+    },
+    dragHintText() {
+      if (!this.dragState) return '';
+      if (this.dragState.fromType === 'WAREHOUSE') return '拖到下方背包松手即可转移';
+      if (this.dragState.fromType === 'BAG') return '拖到上方仓库松手即可转移';
+      return '拖拽转移中…';
+    },
+    isBagDropZone() {
+      return this.dragState && this.dragState.fromType === 'WAREHOUSE';
+    },
+    isWhDropZone() {
+      return this.dragState && this.dragState.fromType === 'BAG';
+    },
+    layoutStatusText() {
+      var total = (this.roles || []).length;
+      var on = (this.draftLayouts || []).length;
+      var hasMain = (this.draftLayouts || []).some((x) => x.mainRole);
+      var parts = ['已上场 ' + on + '/' + Math.max(total, on)];
+      if (!hasMain) parts.push('主角未上场');
+      if (this.layoutSaving) parts.push('保存中');
+      else if (this.layoutDirty) parts.push('保存失败');
+      return parts.join(' · ');
+    },
+    layoutDirty() {
+      return this.layoutSnap(this.draftLayouts) !== this.savedLayoutSnap;
+    },
+    equipableSlotOptions() {
+      if (!this.prepItemDetail || this.prepItemDetail.source !== 'BAG') return [];
+      var type = this.prepItemDetail.data && this.prepItemDetail.data.itemType;
+      var slots = this.itemTypeSlotMap[type] || [];
+      var labelMap = this.slotLabelMap;
+      return slots.map((slot) => ({ slot: slot, label: labelMap[slot] || slot }));
+    },
+    cells() {
+      var list = [];
+      for (var r = 0; r < ROWS; r++) {
+        for (var c = 0; c < COLS; c++) {
+          list.push({ r: r, c: c });
+        }
+      }
+      return list;
+    },
+    previewCleared() {
+      if (this.levelPreview && this.levelPreview.cleared != null) return !!this.levelPreview.cleared;
+      return !!(this.selectedLevel && this.selectedLevel.cleared);
+    },
+    previewFirstClaimed() {
+      if (this.levelPreview && this.levelPreview.firstRewardClaimed != null) {
+        return !!this.levelPreview.firstRewardClaimed;
+      }
+      return !!(this.selectedLevel && this.selectedLevel.firstRewardClaimed);
+    },
+    previewFirstRewards() {
+      if (this.levelPreview && this.levelPreview.firstRewards) return this.levelPreview.firstRewards;
+      return (this.selectedLevel && this.selectedLevel.firstRewards) || [];
+    },
+    previewDrops() {
+      return (this.levelPreview && this.levelPreview.drops) || [];
+    },
+    previewFightCost() {
+      if (this.levelPreview && this.levelPreview.fightStaminaCost != null) return this.levelPreview.fightStaminaCost;
+      if (this.selectedLevel && this.selectedLevel.fightStaminaCost != null) return this.selectedLevel.fightStaminaCost;
+      return this.previewCleared ? 1 : 0;
+    },
+    previewDailyMax() {
+      if (this.levelPreview) return this.levelPreview.dailyMaxAttempts;
+      return this.selectedLevel && this.selectedLevel.dailyMaxAttempts;
+    },
+    previewTodayCount() {
+      if (this.levelPreview && this.levelPreview.todayAttemptCount != null) return this.levelPreview.todayAttemptCount;
+      return (this.selectedLevel && this.selectedLevel.todayAttemptCount) || 0;
+    },
+    boardStyle() {
+      var cell = this.previewSheetOpen ? 42 : CELL;
+      var gap = this.previewSheetOpen ? 4 : GAP;
+      return {
+        width: (COLS * cell + (COLS - 1) * gap) + 'px',
+        height: (ROWS * cell + (ROWS - 1) * gap) + 'px',
+        '--cell': cell + 'px',
+        '--gap': gap + 'px'
+      };
+    },
+    selectedRole() {
+      return this.roles.find((r) => r.id === this.selectedRoleId) || null;
+    },
+    chapterGroups() {
+      return (this.stageTree || []).map((t) => ({
+        typeId: t.id,
+        typeName: t.name,
+        chapters: t.chapters || []
+      })).filter((g) => g.chapters.length);
+    },
+    flatChapters() {
+      var list = [];
+      this.chapterGroups.forEach((g) => {
+        g.chapters.forEach((ch) => list.push(ch));
+      });
+      return list;
+    },
+    overlayOpen() {
+      return !!(
+        this.detailOpen
+        || this.craftDetail
+        || this.prepItemDetail
+        || this.skillDetailOpen
+        || this.buffDetailOpen
+        || this.previewSheetOpen
+        || this.enemyFormationOpen
+        || this.monsterDetail
+        || this.previewRewardKind
+        || this.settingsOpen
+      );
+    }
+  },
+  mounted() {
+    if (!GameApi.getToken()) {
+      location.href = (APP_CONFIG.loginPage || 'login.html');
+      return;
+    }
+    var self = this;
+    this._prepDrag = typeof useDragMove === 'function' ? useDragMove({
+      onPick: function (payload, e) { self.onPrepDragPick(payload, e); },
+      onHover: function (payload, dropEl, e) { self.onPrepDragHover(payload, dropEl, e); },
+      onDrop: function (payload, dropEl, e) { self.onPrepDragDrop(payload, dropEl, e); },
+      onClick: function (payload) { self.onPrepDragClick(payload); }
+    }) : null;
+    this._onEsc = function (e) {
+      if (e.key === 'Escape' || e.key === 'Esc') self.closeTopOverlay();
+    };
+    document.addEventListener('keydown', this._onEsc);
+    this.loadHero();
+    if (location.hash === '#deploy') {
+      this.openDeploy();
+    }
+    this.$nextTick(() => { if (window.ArtSlots) ArtSlots.apply(this.$el); });
+  },
+  watch: {
+    overlayOpen(v) {
+      document.body.classList.toggle('modal-open', !!v);
+    },
+    tab(next, prev) {
+      this.saveTabScroll(prev);
+      this.$nextTick(() => {
+        this.restoreTabScroll(next);
+        if (window.ArtSlots) ArtSlots.apply(this.$el);
+      });
+    },
+    expandedChapterId() {
+      this.$nextTick(() => { if (window.ArtSlots) ArtSlots.apply(this.$el); });
+    }
+  },
+  beforeUnmount() {
+    if (this._onEsc) document.removeEventListener('keydown', this._onEsc);
+    document.body.classList.remove('modal-open');
+    this.unbindLayoutDragListeners();
+    if (this._prepDrag) this._prepDrag.cancel();
+    if (this._burstTimer) clearTimeout(this._burstTimer);
+  },
+  methods: {
+    closeTopOverlay() {
+      if (this.buffDetailOpen) { this.closeBuffDetail(); return; }
+      if (this.skillDetailOpen) { this.closeSkillDetail(); return; }
+      if (this.prepItemDetail) { this.closePrepItemDetail(); return; }
+      if (this.monsterDetail) { this.closeMonsterDetail(); return; }
+      if (this.previewRewardKind) { this.closePreviewRewardList(); return; }
+      if (this.enemyFormationOpen) { this.closeEnemyFormation(); return; }
+      if (this.craftDetail) { this.closeCraftDetail(); return; }
+      if (this.detailOpen) { this.closeHeroDetail(); return; }
+      if (this.previewSheetOpen) { this.closePreviewSheet(); return; }
+      if (this.settingsOpen) { this.settingsOpen = false; }
+    },
+    saveTabScroll(tab) {
+      if (!tab || !this.$el) return;
+      var map = Object.assign({}, this.tabScrollMap);
+      var nodes = this.$el.querySelectorAll('[data-scroll-key]');
+      for (var i = 0; i < nodes.length; i++) {
+        var el = nodes[i];
+        var key = el.getAttribute('data-scroll-key');
+        if (!key) continue;
+        if (tab === 'prep' && key.indexOf('prep') !== 0) continue;
+        if (tab === 'craft' && key !== 'craft') continue;
+        if (tab === 'deploy' && key !== 'deploy') continue;
+        if (tab === 'layout' && key !== 'layout') continue;
+        if (tab === 'home') continue;
+        map[key] = el.scrollTop;
+      }
+      this.tabScrollMap = map;
+    },
+    restoreTabScroll(tab) {
+      if (!tab || !this.$el) return;
+      var map = this.tabScrollMap || {};
+      var nodes = this.$el.querySelectorAll('[data-scroll-key]');
+      for (var i = 0; i < nodes.length; i++) {
+        var key = nodes[i].getAttribute('data-scroll-key');
+        if (map[key] != null) nodes[i].scrollTop = map[key];
+      }
+    },
+    requestTab(key, onEnter) {
+      if (key === this.tab) return;
+      if (this.tab === 'layout') {
+        var heroId = this.hero && this.hero.id;
+        var hasMain = (this.draftLayouts || []).some((x) => x.mainRole || (heroId && x.roleId === heroId));
+        if (!hasMain) {
+          this.showToast('主角必须上场');
+          return;
+        }
+        if (this.layoutDirty) {
+          if (!window.confirm('布局尚未保存，确定离开？未保存的改动将丢失。')) return;
+        }
+      }
+      this.closeDeploySheets();
+      this.tab = key;
+      if (typeof onEnter === 'function') onEnter.call(this);
+    },
+    showToast(text, type) {
+      this.toast = { show: true, text: text, type: type || 'error' };
+      setTimeout(() => { this.toast.show = false; }, 2200);
+    },
+    authCatch(err) {
+      this.showToast(err.message || '加载失败');
+      if (err.result && (err.result.code === '403' || String(err.message).indexOf('登录') >= 0)) {
+        GameApi.clearToken();
+        setTimeout(() => { location.href = (APP_CONFIG.loginPage || 'login.html'); }, 800);
+      }
+    },
+    loadHero() {
+      this.loading = true;
+      GameApi.playerRoleList()
+        .then((res) => {
+          this.roles = (res.data || []).map((r) => {
+            if (r.mainRole) {
+              r.gridH = r.gridH || 2;
+              r.gridW = r.gridW || 2;
+            } else {
+              r.gridH = r.gridH || 1;
+              r.gridW = r.gridW || 1;
+            }
+            return r;
+          });
+          this.hero = this.roles.find((r) => r.mainRole) || this.roles[0] || null;
+        })
+        .catch((err) => this.authCatch(err))
+        .finally(() => { this.loading = false; });
+    },
+    openHeroDetail() {
+      if (!this.hero) return;
+      var self = this;
+      var id = this.hero.id;
+      this.detailRoleData = this.hero;
+      this.detailOpen = true;
+      // 拉取含装备加成的最新详情
+      GameApi.playerRoleInfo(id)
+        .then((res) => {
+          if (res.data) {
+            self.detailRoleData = res.data;
+            if (res.data.mainRole) self.hero = res.data;
+          }
+        })
+        .catch(() => {});
+    },
+    openPrepRoleDetail() {
+      var role = this.prepDisplayRole;
+      if (!role || !role.id) return;
+      var self = this;
+      this.detailRoleData = role;
+      this.detailOpen = true;
+      GameApi.playerRoleInfo(role.id)
+        .then((res) => {
+          if (res.data) self.detailRoleData = res.data;
+        })
+        .catch(() => {});
+    },
+    closeHeroDetail() {
+      this.detailOpen = false;
+      this.detailRoleData = null;
+    },
+    goChangePassword() {
+      this.settingsOpen = false;
+      location.href = APP_CONFIG.changePasswordPage || 'change-password.html';
+    },
+    logout() {
+      this.settingsOpen = false;
+      GameApi.clearToken();
+      location.href = (APP_CONFIG.loginPage || 'login.html');
+    },
+    goTab(key) {
+      this.requestTab(key);
+    },
+    closeDeploySheets() {
+      this.previewSheetOpen = false;
+      this.levelMonsters = [];
+    },
+    openPrep() {
+      this.requestTab('prep', function () { this.loadPrep(); });
+    },
+    openLayout() {
+      this.requestTab('layout', function () {
+        if (!this.roles.length) this.loadHero();
+        GameApi.playerLayoutList()
+          .then((res) => {
+            this.draftLayouts = (res.data || []).map((x) => Object.assign({}, x));
+            this.savedLayoutSnap = this.layoutSnap(this.draftLayouts);
+            if (!this.selectedRoleId && this.hero) this.selectedRoleId = this.hero.id;
+          })
+          .catch((err) => this.authCatch(err));
+      });
+    },
+    layoutSnap(list) {
+      return JSON.stringify((list || []).map((x) => ({
+        roleId: x.roleId,
+        posCol: x.posCol,
+        posRow: x.posRow
+      })).sort((a, b) => String(a.roleId).localeCompare(String(b.roleId))));
+    },
+    openDeploy() {
+      this.requestTab('deploy', function () {
+        this.refreshStamina();
+        if (this.deployMode === 'tower') {
+          this.loadTowerStatus();
+          return;
+        }
+        this.loadMainProgress(false);
+      });
+    },
+    refreshStamina() {
+      GameApi.stageStamina()
+        .then((res) => {
+          var d = res.data || {};
+          this.stamina = {
+            stamina: d.stamina != null ? d.stamina : 0,
+            maxStamina: d.maxStamina != null ? d.maxStamina : 30
+          };
+        })
+        .catch(() => {});
+    },
+    setDeployMode(mode) {
+      this.deployMode = mode === 'tower' ? 'tower' : 'main';
+      if (this.deployMode === 'tower') {
+        this.loadTowerStatus();
+      } else {
+        this.loadMainProgress(true);
+      }
+    },
+    loadMainProgress(force) {
+      if (!force && this.stageTree.length) return;
+      var self = this;
+      this.deployLoading = true;
+      GameApi.stageMainProgress()
+        .then((res) => {
+          var root = res.data || {};
+          var chapters = (root.chapters || []).map(function (ch) {
+            return Object.assign({}, ch, {
+              levels: (ch.levels || []).map(function (lv) {
+                return Object.assign({}, lv, {
+                  locked: lv.unlocked === false,
+                  lockHint: '请先通关上一关'
+                });
+              })
+            });
+          });
+          self.stageTree = [{
+            id: root.id,
+            name: root.name || '主线',
+            code: root.code || 'MAIN',
+            chapters: chapters
+          }];
+        })
+        .catch((err) => this.authCatch(err))
+        .finally(() => { this.deployLoading = false; });
+    },
+    loadTowerStatus() {
+      this.towerLoading = true;
+      GameApi.stageTowerStatus()
+        .then((res) => { this.towerStatus = res.data || { hasRunning: false }; })
+        .catch((err) => this.authCatch(err))
+        .finally(() => { this.towerLoading = false; });
+    },
+    enterTower() {
+      var tip = this.towerStatus.hasRunning ? '放弃当前进度并从第一层重新开始？' : '进入无尽塔（从第一层开始）？';
+      if (!confirm(tip)) return;
+      this.towerActing = true;
+      GameApi.stageTowerEnter()
+        .then((res) => {
+          this.towerStatus = res.data || { hasRunning: false };
+          this.showToast('已进入无尽塔', 'success');
+        })
+        .catch((err) => this.authCatch(err))
+        .finally(() => { this.towerActing = false; });
+    },
+    startTowerBattle() {
+      if (!this.towerStatus || !this.towerStatus.hasRunning || !this.towerStatus.currentLevelId) {
+        this.showToast('请先进入无尽塔');
+        return;
+      }
+      location.href = (APP_CONFIG.battlePage || 'battle.html') + '?mode=tower';
+    },
+    openCraft() {
+      this.requestTab('craft', function () { this.loadCraft(); });
+    },
+    loadCraft() {
+      this.craftLoading = true;
+      GameApi.craftList()
+        .then((res) => { this.craftRecipes = res.data || []; })
+        .catch((err) => this.authCatch(err))
+        .finally(() => { this.craftLoading = false; });
+    },
+    formatAtkSpeedShort(item) {
+      if (!item) return '—';
+      var up = Number(item.atkSpeedUpRatio || 0);
+      var down = Number(item.atkSpeedDownRatio || 0);
+      if (up) return up + '%';
+      if (down) return '-' + down + '%';
+      var text = item.atkSpeedText;
+      if (text) {
+        var m = String(text).match(/-?\d+(?:\.\d+)?%/);
+        if (m) return m[0];
+        if (text === '无变化') return '—';
+        return text;
+      }
+      return '—';
+    },
+    openCraftDetail(recipe, focusMissing) {
+      if (!recipe || !recipe.id) return;
+      this.craftDropSources = [];
+      this.craftDropFocusName = '';
+      GameApi.craftDetail(recipe.id)
+        .then((res) => {
+          this.craftDetail = res.data || recipe;
+          if (focusMissing) {
+            var miss = (this.craftDetail.missingMaterials || [])[0]
+              || (this.craftDetail.materials || []).find((m) => !m.enough);
+            if (miss) this.onMaterialAction(miss);
+          }
+        })
+        .catch((err) => this.authCatch(err));
+    },
+    openCraftItemDetail(recipe) {
+      if (!recipe) return;
+      var showItem = function (item) {
+        if (!item) {
+          this.showToast('暂无装备详情');
+          return;
+        }
+        this.armNestedDetailClickGuard();
+        this.prepItemDetail = { source: 'VIEW', data: Object.assign({}, item) };
+      }.bind(this);
+      if (recipe.resultItem) {
+        showItem(recipe.resultItem);
+        return;
+      }
+      if (!recipe.id) {
+        showItem(null);
+        return;
+      }
+      GameApi.craftDetail(recipe.id)
+        .then((res) => {
+          var data = res.data || {};
+          showItem(data.resultItem);
+        })
+        .catch((err) => this.authCatch(err));
+    },
+    closeCraftDetail() {
+      this.craftDetail = null;
+      this.craftDropSources = [];
+      this.craftDropFocusName = '';
+    },
+    playCraftBurst(recipe) {
+      var icon = recipe && recipe.resultItemIcon;
+      this.craftBurst = {
+        show: true,
+        icon: this.itemIconIsImage(icon) ? '✨' : (icon || '✨')
+      };
+      if (this._burstTimer) clearTimeout(this._burstTimer);
+      var self = this;
+      this._burstTimer = setTimeout(function () {
+        self.craftBurst = { show: false, icon: '✨' };
+      }, 420);
+    },
+    gradeRarityClass(grade) {
+      var g = Number(grade);
+      if (g >= 4) return 'rarity-boss';
+      if (g === 3) return 'rarity-epic';
+      if (g === 2) return 'rarity-rare';
+      return 'rarity-normal';
+    },
+    executeCraft(recipe) {
+      var id = recipe && recipe.id;
+      if (!id || this.craftActing) return;
+      this.craftActing = true;
+      var detailOpen = !!(this.craftDetail && this.craftDetail.id === id);
+      var self = this;
+      GameApi.craftExecute(id)
+        .then((res) => {
+          self.playCraftBurst(recipe);
+          self.showToast('合成成功，已放入背包', 'success');
+          var updated = res.data;
+          if (updated) {
+            if (detailOpen) self.craftDetail = updated;
+            self.craftRecipes = (self.craftRecipes || []).map((r) => r.id === updated.id ? updated : r);
+          }
+          self.loadCraft();
+        })
+        .catch((err) => self.authCatch(err))
+        .finally(() => { self.craftActing = false; });
+    },
+    onMaterialAction(mat) {
+      if (!mat) return;
+      if (mat.sourceType === 'CRAFT' && mat.sourceRecipeId) {
+        this.openCraftDetail({ id: mat.sourceRecipeId });
+        return;
+      }
+      if (mat.sourceType === 'BATTLE' || !mat.enough) {
+        this.craftDropFocusName = mat.itemName || '';
+        GameApi.craftDropSources(mat.itemId)
+          .then((res) => {
+            this.craftDropSources = res.data || [];
+            if (!this.craftDropSources.length) {
+              this.showToast('暂无掉落关卡配置');
+            }
+          })
+          .catch((err) => this.authCatch(err));
+        return;
+      }
+      this.showToast(mat.sourceLabel || '敬请期待');
+    },
+    formatDropRate(rate) {
+      if (rate == null) return '—';
+      return Number(rate) + '%';
+    },
+    goDeployForLevel(levelId) {
+      if (!levelId) return;
+      localStorage.setItem(APP_CONFIG.selectedLevelKey || 'selectedLevelId', levelId);
+      this.closeCraftDetail();
+      var self = this;
+      var openTarget = function () {
+        var found = self.findStageLevel(levelId);
+        if (!found) {
+          self.showToast('未找到对应关卡');
+          return;
+        }
+        self.expandedChapterId = found.chapter.id;
+        self.selectedTypeId = found.typeId || '';
+        self.selectedChapterId = found.chapter.id;
+        self.sheetChapter = found.chapter;
+        self.prefetchChapterFaces(found.chapter);
+        self.openPreviewSheet(found.level);
+      };
+      var ensureTree = function () {
+        if (self.stageTree.length) {
+          openTarget();
+          return;
+        }
+        self.deployLoading = true;
+        GameApi.stageTree()
+          .then((res) => {
+            self.stageTree = res.data || [];
+            openTarget();
+          })
+          .catch((err) => self.authCatch(err))
+          .finally(() => { self.deployLoading = false; });
+      };
+      if (this.tab === 'deploy') {
+        ensureTree();
+        return;
+      }
+      this.requestTab('deploy', ensureTree);
+    },
+    /** 在关卡树中定位小关 */
+    findStageLevel(levelId) {
+      if (!levelId) return null;
+      var groups = this.chapterGroups || [];
+      for (var gi = 0; gi < groups.length; gi++) {
+        var g = groups[gi];
+        var chapters = g.chapters || [];
+        for (var ci = 0; ci < chapters.length; ci++) {
+          var ch = chapters[ci];
+          var levels = ch.levels || [];
+          for (var li = 0; li < levels.length; li++) {
+            if (levels[li] && levels[li].id === levelId) {
+              return { typeId: g.typeId, chapter: ch, level: levels[li] };
+            }
+          }
+        }
+      }
+      return null;
+    },
+    itemIconIsImage(icon) {
+      if (!icon) return false;
+      var s = String(icon);
+      return s.indexOf('http') === 0 || s.indexOf('/') === 0 || s.indexOf('art/') === 0;
+    },
+    itemIconSrc(icon) {
+      var cfg = window.APP_CONFIG || {};
+      return cfg.resolveAssetUrl ? cfg.resolveAssetUrl(icon) : icon;
+    },
+    fmtAtkSpeed(action) {
+      var a = Number(action) || 0;
+      if (a <= 0) return '0.00';
+      return (100 / a).toFixed(2);
+    },
+    roleBaseAtkSpeed(role) {
+      if (!role) return '1.00';
+      if (role.baseAtkSpeed != null && Number(role.baseAtkSpeed) > 0) {
+        return Number(role.baseAtkSpeed).toFixed(2);
+      }
+      return this.fmtAtkSpeed(role.baseAction || 100);
+    },
+    roleDisplayAtkSpeed(role) {
+      if (!role) return '1.00';
+      if (role.displayAtkSpeed != null && Number(role.displayAtkSpeed) > 0) {
+        return Number(role.displayAtkSpeed).toFixed(2);
+      }
+      return this.fmtAtkSpeed(this.roleDisplayAction(role) || role.baseAction || 100);
+    },
+    roleDisplayAtk(role) {
+      if (!role) return 0;
+      if (role.displayAtk != null) return role.displayAtk;
+      return (role.baseAtk || 0) + (role.extraAtk || 0) + (role.equipBonusAtk || 0);
+    },
+    roleDisplayHp(role) {
+      if (!role) return 0;
+      if (role.displayHp != null) return role.displayHp;
+      return (role.baseHp || 0) + (role.extraHp || 0) + (role.equipBonusHp || 0);
+    },
+    roleDisplayDef(role) {
+      if (!role) return 0;
+      if (role.displayDef != null) return role.displayDef;
+      return (role.baseDef || 0) + (role.extraDef || 0) + (role.equipBonusDef || 0);
+    },
+    roleDisplayAction(role) {
+      if (!role) return 0;
+      if (role.displayAction != null) return role.displayAction;
+      return role.baseAction || 0;
+    },
+    openSkillDetail(skillId) {
+      if (this.isNestedDetailClickBlocked()) return;
+      if (!skillId) {
+        this.showToast('技能未配置');
+        return;
+      }
+      var self = this;
+      this.skillDetailOpen = true;
+      this.skillDetailLoading = true;
+      this.skillDetailKind = 'active';
+      this.skillDetail = null;
+      GameApi.activeSkillDetail(skillId)
+        .then((res) => {
+          self.skillDetail = res.data || null;
+          if (!self.skillDetail || !self.skillDetail.skill) {
+            self.showToast('技能不存在');
+            self.closeSkillDetail();
+          }
+        })
+        .catch((err) => {
+          self.authCatch(err);
+          self.closeSkillDetail();
+        })
+        .finally(() => { self.skillDetailLoading = false; });
+    },
+    armNestedDetailClickGuard() {
+      this._blockNestedDetailUntil = Date.now() + 400;
+    },
+    isNestedDetailClickBlocked() {
+      return Date.now() < (this._blockNestedDetailUntil || 0);
+    },
+    openPassiveDetail(passiveId) {
+      if (this.isNestedDetailClickBlocked()) return;
+      if (!passiveId) {
+        this.showToast('被动未配置');
+        return;
+      }
+      var self = this;
+      this.skillDetailOpen = true;
+      this.skillDetailLoading = true;
+      this.skillDetailKind = 'passive';
+      this.skillDetail = null;
+      GameApi.passiveSkillDetail(passiveId)
+        .then((res) => {
+          self.skillDetail = res.data || null;
+          if (!self.skillDetail) {
+            self.showToast('被动不存在');
+            self.closeSkillDetail();
+          }
+        })
+        .catch((err) => {
+          self.authCatch(err);
+          self.closeSkillDetail();
+        })
+        .finally(() => { self.skillDetailLoading = false; });
+    },
+    closeSkillDetail() {
+      if (this.buffDetailOpen) {
+        this.closeBuffDetail();
+        return;
+      }
+      this.skillDetailOpen = false;
+      this.skillDetailLoading = false;
+      this.skillDetailKind = 'active';
+      this.skillDetail = null;
+    },
+    isAppendBuffClickable(e) {
+      return !!(e && e.outputKind === 'APPEND_BUFF' && e.buffDefId);
+    },
+    formatAppendBuffLead(e) {
+      if (!e) return '';
+      var rate = e.triggerRate != null ? Number(e.triggerRate) : 100;
+      var ratePart = (rate < 100) ? (Math.max(0, rate) + '% ') : '';
+      return ratePart + '对 ' + this.effectTargetLabel(e.targetType) + ' ';
+    },
+    appendBuffLinkLabel(e) {
+      if (e && e.buffDefName) return '追加「' + e.buffDefName + '」';
+      return '追加BUFF';
+    },
+    formatAppendBuffTail(e) {
+      if (!e) return '';
+      return e.durationAv != null && Number(e.durationAv) > 0
+        ? '（持续 ' + this.formatAvSec(e.durationAv) + '）'
+        : '';
+    },
+    openBuffDetail(buffDefId) {
+      if (this.isNestedDetailClickBlocked()) return;
+      if (!buffDefId) {
+        this.showToast('BUFF 未配置');
+        return;
+      }
+      var self = this;
+      this.buffDetailOpen = true;
+      this.buffDetailLoading = true;
+      this.buffDetail = null;
+      this.armNestedDetailClickGuard();
+      GameApi.buffDefDetail(buffDefId)
+        .then((res) => {
+          self.buffDetail = res.data || null;
+          if (!self.buffDetail) {
+            self.showToast('BUFF 不存在');
+            self.closeBuffDetail();
+          }
+        })
+        .catch((err) => {
+          self.authCatch(err);
+          self.closeBuffDetail();
+        })
+        .finally(() => { self.buffDetailLoading = false; });
+    },
+    closeBuffDetail() {
+      this.buffDetailOpen = false;
+      this.buffDetailLoading = false;
+      this.buffDetail = null;
+    },
+    buffKindLabel(v) {
+      return {
+        ATTR: '属性 BUFF',
+        PULSE: '脉冲 BUFF',
+        JUDGE_ATTR: '判定属性 BUFF',
+        JUDGE_BURST: '判定爆发 BUFF'
+      }[v] || v || 'BUFF';
+    },
+    formatBuffDuration(b) {
+      if (!b) return '—';
+      if (b.durationAv != null && Number(b.durationAv) > 0) {
+        return this.formatAvSec(b.durationAv);
+      }
+      return '战斗内永久';
+    },
+    formatBuffStack(b) {
+      if (!b) return '—';
+      if (b.stackMode === 'STACK') {
+        var max = b.maxStacks != null && Number(b.maxStacks) > 0 ? Number(b.maxStacks) : 0;
+        return max > 0 ? ('可叠加（最多 ' + max + ' 层）') : '可叠加';
+      }
+      return '不可叠加';
+    },
+    formatFormulaPlain(raw) {
+      var tokens = this.parseFormulaTokens(raw);
+      if (!tokens.length) return '';
+      var parts = [];
+      for (var i = 0; i < tokens.length; i++) {
+        var t = tokens[i];
+        if (!t) continue;
+        if (t.kind === 'OP') {
+          parts.push(this.formulaOpLabel(t.op));
+          continue;
+        }
+        if (t.paramMode === 'LITERAL') {
+          parts.push(t.value != null ? String(t.value) : '0');
+          continue;
+        }
+        parts.push(this.formulaReadTokenLabel(t));
+      }
+      return parts.join(' ');
+    },
+    buildBuffEffectLines(b) {
+      if (!b) return [];
+      var lines = [];
+      var kind = b.buffKind || '';
+      if (kind === 'JUDGE_ATTR' || kind === 'JUDGE_BURST') {
+        var left = this.formatFormulaPlain(b.leftFormulaJson) || '左式';
+        var right = this.formatFormulaPlain(b.rightFormulaJson) || '右式';
+        lines.push('判定：' + left + ' ' + this.compareOpLabel(b.compareOp) + ' ' + right);
+      }
+      if (kind === 'ATTR' || kind === 'JUDGE_ATTR') {
+        var formula = this.formatFormulaPlain(b.formulaJson);
+        lines.push(
+          this.attrModifyDirLabel(b.attrDir) + this.attrModifyKeyLabel(b.attrKey)
+          + (formula ? ' ' + formula : '')
+        );
+      }
+      if (kind === 'PULSE') {
+        var every = b.pulseEveryAv != null ? this.formatAvSec(b.pulseEveryAv) : '—';
+        var pulseTarget = this.effectTargetLabel(b.pulseTargetType);
+        var pulseFormula = this.formatFormulaPlain(b.formulaJson);
+        if (b.pulseEffectType === 'HEAL') {
+          lines.push('每 ' + every + ' 对 ' + pulseTarget + ' 治疗' + (pulseFormula ? ' ' + pulseFormula : ''));
+        } else {
+          var el = this.damageElementLabel(b.damageElement || 'PHYSICAL');
+          lines.push('每 ' + every + ' 对 ' + pulseTarget + ' 造成 ' + el + '伤害'
+            + (pulseFormula ? ' ' + pulseFormula : ''));
+        }
+      }
+      if (kind === 'JUDGE_BURST') {
+        var burstTarget = '持有者';
+        var burstFormula = this.formatFormulaPlain(b.formulaJson);
+        if (b.pulseEffectType === 'HEAL') {
+          lines.push('成立时 对 ' + burstTarget + ' 治疗' + (burstFormula ? ' ' + burstFormula : ''));
+        } else if (b.pulseEffectType === 'ATTR_MODIFY') {
+          lines.push(
+            '成立时 '
+            + this.attrModifyDirLabel(b.attrDir) + this.attrModifyKeyLabel(b.attrKey)
+            + (burstFormula ? ' ' + burstFormula : '')
+          );
+        } else {
+          var bel = this.damageElementLabel(b.damageElement || 'PHYSICAL');
+          lines.push('成立时 对 ' + burstTarget + ' 造成 ' + bel + '伤害'
+            + (burstFormula ? ' ' + burstFormula : ''));
+        }
+      }
+      return lines.filter(Boolean);
+    },
+    compareOpLabel(v) {
+      return {
+        GT: '大于', GTE: '大于等于', LT: '小于', LTE: '小于等于', EQ: '等于', NEQ: '不等于'
+      }[v] || v || '比较';
+    },
+    combatEventLabel(v) {
+      return {
+        AFTER_DEAL_ACTIVE_DMG: '造成主动技能伤害后',
+        AFTER_TAKE_ACTIVE_DMG: '受到主动技能伤害后',
+        AFTER_CAST_SKILL: '释放技能后',
+        AFTER_RECEIVE_SKILL: '受到技能后',
+        AFTER_TAKE_PULSE_BUFF_DMG: '受到脉冲BUFF伤害后',
+        AFTER_KILL: '击杀时',
+        AFTER_KILLED: '被击杀时',
+        AFTER_DODGE: '触发闪避后'
+      }[v] || v || '战斗事件';
+    },
+    formatPassiveConditionLine(c) {
+      if (!c || !c.conditionType) return '';
+      if (c.conditionType === 'EQUIP_ITEM') {
+        return '装备了「' + (c.refItemName || c.refItemId || '指定装备') + '」';
+      }
+      if (c.conditionType === 'EQUIP_ITEM_TYPE') {
+        return '装备了' + this.itemTypeLabel(c.refItemType);
+      }
+      if (c.conditionType === 'EQUIP_SKILL') {
+        return '装备了技能「' + (c.refSkillName || c.refSkillId || '指定技能') + '」';
+      }
+      if (c.conditionType === 'EQUIP_SKILL_TYPE') {
+        return '装备了' + this.skillTypeLabel(c.refSkillType) + '类技能';
+      }
+      if (c.conditionType === 'FORMULA_COMPARE') {
+        var left = this.formatEffectFormula({ formulaJson: c.leftFormulaJson }) || '?';
+        var right = this.formatEffectFormula({ formulaJson: c.rightFormulaJson }) || '?';
+        return '当（' + left + '）' + this.compareOpLabel(c.compareOp) + '（' + right + '）';
+      }
+      return c.conditionType;
+    },
+    buildPassiveConditionLines(p) {
+      if (!p) return [];
+      var lines = [];
+      var mode = p.conditionMode || 'UNLIMITED';
+      // 「始终生效」不展示，避免与触发时机叠在一起产生歧义
+      if (mode !== 'UNLIMITED') {
+        var conds = p.conditions || [];
+        if (!conds.length) {
+          lines.push('需满足条件（未配置）');
+        } else {
+          conds.forEach((c) => {
+            var t = this.formatPassiveConditionLine(c);
+            if (t) lines.push(t);
+          });
+        }
+      }
+      var type = p.passiveType;
+      if (type === 'BATTLE_START') {
+        var rule = p.startApplyRule || 'IMMEDIATE';
+        if (rule === 'IMMEDIATE') {
+          lines.push('开战立即触发');
+        } else if (rule === 'AT_ELAPSED_ONCE') {
+          lines.push('第一次达到 ' + this.formatAvSec(p.startElapsedAv || 0) + ' 时 触发一次');
+        } else if (rule === 'EVERY_ELAPSED') {
+          lines.push('每 ' + this.formatAvSec(p.startElapsedAv || 0) + ' 脉冲一次');
+        }
+      } else if (type === 'BATTLE_JUDGE' || type === 'BATTLE_PULSE') {
+        var left = this.formatEffectFormula({ formulaJson: p.leftFormulaJson }) || '?';
+        var right = this.formatEffectFormula({ formulaJson: p.rightFormulaJson }) || '?';
+        if (type === 'BATTLE_JUDGE') {
+          lines.push('判定：当 ' + left + ' ' + this.compareOpLabel(p.compareOp) + ' ' + right + ' 时生效');
+        } else {
+          lines.push('脉冲：每当 ' + left + ' 达到 ' + right + ' 时触发');
+        }
+        if (p.maxTriggerPerBattle != null && p.maxTriggerPerBattle > 0) {
+          lines.push('本场最多触发 ' + p.maxTriggerPerBattle + ' 次');
+        }
+      } else if (type === 'BATTLE_COMBAT') {
+        lines.push('事件：' + this.combatEventLabel(p.combatEvent));
+        if (p.maxTriggerPerBattle != null && p.maxTriggerPerBattle > 0) {
+          lines.push('本场最多触发 ' + p.maxTriggerPerBattle + ' 次');
+        }
+      }
+      return lines;
+    },
+    passiveTypeLabel(v) {
+      return {
+        OUT_BASIC: '基础属性型·基础属性',
+        OUT_ADVANCED: '基础属性型·高级属性',
+        BATTLE_START: '战斗锚点型·开战锚点',
+        BATTLE_JUDGE: '战斗锚点型·判定锚点',
+        BATTLE_PULSE: '战斗锚点型·脉冲锚点',
+        BATTLE_COMBAT: '战斗锚点型·战斗事件',
+        IN_ANCHOR: '锚点被动(旧)',
+        IN_PERIODIC: '周期被动(旧)',
+        IN_SUSTAINED: '持续效果(旧)'
+      }[v] || v || '—';
+    },
+    passiveAttrLabel(v) {
+      return {
+        ATK: '攻击', MAX_HP: '生命', DEF: '防御',
+        LIFE_STEAL: '吸血', ATK_SPEED: '攻速',
+        DEAL_DMG_RATIO: '造成伤害比例', TAKEN_DMG_RATIO: '受到伤害比例',
+        DEAL_ELEMENT_DMG_RATIO: '造成元素伤害比例', TAKEN_ELEMENT_DMG_RATIO: '受到元素伤害比例',
+        DEAL_PHYS_DMG_RATIO: '造成物理伤害比例', TAKEN_PHYS_DMG_RATIO: '受到物理伤害比例',
+        FINAL_ATK: '最终攻击', FINAL_HP: '最终生命', FINAL_DEF: '最终防御'
+      }[v] || v || '—';
+    },
+    attrDirLabel(v) {
+      return { INCREASE: '+', DECREASE: '-' }[v] || '';
+    },
+    skillTypeLabel(type) {
+      return { NORMAL: '普攻', ULTIMATE: '大招', SMALL: '小技能' }[type] || type || '—';
+    },
+    skillNeedChargeText(sk) {
+      if (!sk) return '—';
+      if (sk.needChargeMode === 'SELF_BASE_ACTION') return '行动值';
+      if (sk.needChargeMode === 'FORMULA') return '公式';
+      return sk.needCharge != null ? String(sk.needCharge) : '0';
+    },
+    /** 详情窄行：充能 [5] / 充能 [行动值] */
+    skillChargeBracket(sk) {
+      if (!sk) return '—';
+      if (sk.needChargeMode === 'SELF_BASE_ACTION') return '行动值';
+      if (sk.needChargeMode === 'FORMULA') return '公式';
+      return sk.needCharge != null ? String(sk.needCharge) : '0';
+    },
+    chargeConditionLabel(type) {
+      return {
+        ACTION_VALUE: '行动值充能',
+        SKILL_CHARGE: '技能充能'
+      }[type] || type || '—';
+    },
+    skillChargeEventLabel(v) {
+      return {
+        CAST: '释放',
+        RECEIVE: '受到',
+        DEAL_DAMAGE: '造成伤害',
+        TAKE_DAMAGE: '受到伤害',
+        KILL: '造成击杀'
+      }[v] || v || '—';
+    },
+    skillChargeMatchLabel(v) {
+      return {
+        ANY: '任意', ANY_TYPE: '指定类型', ANY_SCHOOL: '指定流派',
+        ANY_ELEMENT: '指定元素类型', SPECIFIC: '指定技能'
+      }[v] || v || '—';
+    },
+    skillChargeTargetLabel(c) {
+      if (!c) return '—';
+      if (c.skillChargeMatch === 'ANY_TYPE') return this.skillTypeLabel(c.matchSkillType) || '—';
+      if (c.skillChargeMatch === 'ANY_SCHOOL') return c.matchSkillSchool || '无';
+      if (c.skillChargeMatch === 'ANY_ELEMENT') return this.damageElementLabel(c.matchDamageElement);
+      if (c.skillChargeMatch === 'SPECIFIC') return c.matchSkillName || c.matchSkillId || '—';
+      return '—';
+    },
+    /** 行动值 → 秒（50 AV = 1 秒） */
+    formatAvSec(av) {
+      var n = Number(av) || 0;
+      if (n < 0) n = 0;
+      var sec = n / 50;
+      if (sec < 60) {
+        if (Math.abs(sec - Math.round(sec)) < 1e-6) return Math.round(sec) + '秒';
+        return sec.toFixed(2).replace(/\.?0+$/, '') + '秒';
+      }
+      var min = Math.floor(sec / 60);
+      var rem = sec - min * 60;
+      return min + '分 ' + rem.toFixed(2).replace(/\.?0+$/, '') + '秒';
+    },
+    /** 例：释放 普攻 类型 技能 充能+1 */
+    formatChargeConditionSummary(c) {
+      if (!c) return '—';
+      var gain = c.chargeGain != null ? Number(c.chargeGain) : 0;
+      if (c.conditionType === 'ACTION_VALUE') {
+        return '每 ' + this.formatAvSec(c.everyActionValue || 0) + ' 充能+' + gain;
+      }
+      if (c.conditionType === 'SKILL_CHARGE') {
+        var event = this.skillChargeEventLabel(c.skillChargeEvent);
+        var match = c.skillChargeMatch || 'ANY';
+        if (match === 'ANY_TYPE') {
+          return event + ' ' + this.skillTypeLabel(c.matchSkillType) + ' 类型 技能 充能+' + gain;
+        }
+        if (match === 'ANY_SCHOOL') {
+          return event + ' 流派「' + (c.matchSkillSchool || '无') + '」技能 充能+' + gain;
+        }
+        if (match === 'ANY_ELEMENT') {
+          return event + ' ' + this.damageElementLabel(c.matchDamageElement) + ' 元素技能 充能+' + gain;
+        }
+        if (match === 'SPECIFIC') {
+          return event + ' 「' + (c.matchSkillName || c.matchSkillId || '指定技能') + '」 充能+' + gain;
+        }
+        return event + ' 任意技能 充能+' + gain;
+      }
+      return (c.name || this.chargeConditionLabel(c.conditionType)) + ' 充能+' + gain;
+    },
+    effectTargetLabel(v) {
+      return {
+        SELF: '自己', FIRST: '首目标', FRONT_ROW: '前排', BACK_ROW: '后排',
+        RANDOM_ENEMY: '随机一个敌方', ENEMY_MAX_HP: '生命值最高敌方',
+        ENEMY_MIN_HP: '生命值最低敌方', ALLY_MIN_HP: '生命值最低己方',
+        ALL_ENEMY: '敌方全部', ALL_ALLY: '己方全部'
+      }[v] || v || '—';
+    },
+    effectTypeLabel(v) {
+      return { DAMAGE: '伤害', HEAL: '治疗', ATTR_MODIFY: '属性修改' }[v] || v || '—';
+    },
+    damageElementLabel(v) {
+      return {
+        PHYSICAL: '物理', POISON: '中毒', IGNITE: '点燃',
+        FREEZE: '冰冻', SHOCK: '电击', BURN: '灼烧'
+      }[v] || '物理';
+    },
+    attrModifyKeyLabel(v) {
+      return { ATK: '攻击', MAX_HP: '最大生命', DEF: '防御' }[v] || v || '—';
+    },
+    attrModifyDirLabel(v) {
+      return { INCREASE: '增加', DECREASE: '减少' }[v] || v || '—';
+    },
+    escapeHtml(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    },
+    /** 元素伤害词：电击伤害（无分隔、展示加粗） */
+    formatDescHtml(text) {
+      if (text == null || text === '') return '';
+      return this.escapeHtml(String(text))
+        .replace(/(物理|中毒|点燃|冰冻|电击|灼烧)伤害/g, '<b class="sd-dmg-type">$1伤害</b>')
+        .replace(/\n/g, '<br>');
+    },
+    /** 例：对 敌方全部 造成 物理伤害 20 × 1 = 20 */
+    formatEffectSummary(e) {
+      if (!e) return '—';
+      var rate = e.triggerRate != null ? Number(e.triggerRate) : 100;
+      var ratePart = (rate < 100) ? (Math.max(0, rate) + '% ') : '';
+      var target = this.effectTargetLabel(e.targetType);
+      var formula = this.formatEffectFormula(e);
+      var formulaPart = formula ? ' ' + formula : '';
+      var dur = e.durationAv != null && Number(e.durationAv) > 0
+        ? '（持续 ' + this.formatAvSec(e.durationAv) + '）'
+        : '';
+      var kind = e.outputKind || '';
+      if (kind === 'APPEND_BUFF') {
+        var buffName = e.buffDefName ? ('「' + e.buffDefName + '」') : 'BUFF';
+        return ratePart + '对 ' + target + ' 追加' + buffName + dur;
+      }
+      if (kind === 'ATTR' || e.effectType === 'ATTR_MODIFY') {
+        return ratePart + '对 ' + target + ' '
+          + this.attrModifyDirLabel(e.attrDir) + this.attrModifyKeyLabel(e.attrKey)
+          + formulaPart + dur;
+      }
+      if (e.effectType === 'HEAL') {
+        return ratePart + '对 ' + target + ' 治疗' + formulaPart;
+      }
+      var el = this.damageElementLabel(e.damageElement || 'PHYSICAL');
+      return ratePart + '对 ' + target + ' 造成 ' + el + '伤害' + formulaPart;
+    },
+    formulaReadLabel(key) {
+      return {
+        MAX_HP: '最大生命', HP: '当前生命', ATK: '攻击', DEF: '防御',
+        ACTION: '角色行动值', ELAPSED_ACTION: '已经过行动值'
+      }[key] || key || '?';
+    },
+    formulaReadRoleLabel(role) {
+      return { SELF: '自己', GLOBAL: '全局', EACH_TARGET: '每个目标' }[role] || '';
+    },
+    formulaReadTokenLabel(t) {
+      if (!t || t.paramMode !== 'READ') return '';
+      var role = this.formulaReadRoleLabel(t.readRole || 'SELF');
+      if ((t.readRole || 'SELF') === 'GLOBAL') return role + '·已经过行动值';
+      var cat = t.readCategory || 'ATTR';
+      if (cat === 'DAMAGE') {
+        var side = t.damageSide === 'RECEIVE' ? '受到' : '造成';
+        var metric = t.damageMetric === 'COUNT' ? '累计伤害次数' : '累计伤害量';
+        return role + '·伤害·' + side + '·' + metric;
+      }
+      if (cat === 'SKILL') {
+        var match = this.skillChargeMatchLabel(t.skillMatch || 'ANY');
+        if (t.skillMatch === 'ANY_TYPE') match += '(' + this.skillTypeLabel(t.matchSkillType) + ')';
+        if (t.skillMatch === 'ANY_SCHOOL') match += '(' + (t.matchSkillSchool || '无') + ')';
+        if (t.skillMatch === 'ANY_ELEMENT') match += '(' + this.damageElementLabel(t.matchDamageElement) + ')';
+        var sm = t.skillMetric === 'RECEIVE' ? '受到次数' : '释放次数';
+        return role + '·技能·' + match + '·' + sm;
+      }
+      return role + '·' + this.formulaReadLabel(t.readKey || 'ATK');
+    },
+    formulaOpLabel(op) {
+      return { '+': '+', '-': '−', '*': '×', '/': '÷', '(': '(', ')': ')' }[op] || op || '';
+    },
+    parseFormulaTokens(raw) {
+      if (!raw) return [];
+      try {
+        var arr = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        return Array.isArray(arr) ? arr : [];
+      } catch (e) {
+        return [];
+      }
+    },
+    /** 右侧展示：20 × 2 = 40；读不到数值时用 自己·攻击力 × 2 */
+    formatEffectFormula(effect) {
+      if (!effect) return '';
+      var tokens = this.parseFormulaTokens(effect.formulaJson);
+      if (!tokens.length) return '';
+      var parts = [];
+      var role = this.prepDisplayRole || this.hero;
+      var nums = [];
+      var canEval = true;
+      for (var i = 0; i < tokens.length; i++) {
+        var t = tokens[i];
+        if (!t) continue;
+        if (t.kind === 'OP') {
+          parts.push(this.formulaOpLabel(t.op));
+          nums.push({ kind: 'OP', op: t.op });
+          continue;
+        }
+        if (t.paramMode === 'LITERAL') {
+          var lit = t.value != null ? String(t.value) : '0';
+          parts.push(lit);
+          nums.push({ kind: 'NUM', value: Number(lit) || 0 });
+          continue;
+        }
+        var readRole = t.readRole || 'SELF';
+        var cat = t.readCategory || 'ATTR';
+        if (readRole === 'EACH_TARGET' || readRole === 'GLOBAL' || cat === 'DAMAGE' || cat === 'SKILL') {
+          canEval = false;
+          parts.push(this.formulaReadTokenLabel(t));
+          nums.push({ kind: 'NUM', value: NaN });
+        } else {
+          var readKey = t.readKey || 'ATK';
+          var n = this.readFormulaStat(role, readKey);
+          if (n != null) {
+            parts.push(String(n));
+            nums.push({ kind: 'NUM', value: n });
+          } else {
+            canEval = false;
+            parts.push(this.formulaReadTokenLabel(t));
+            nums.push({ kind: 'NUM', value: NaN });
+          }
+        }
+      }
+      var expr = parts.join(' ');
+      if (!canEval) return expr;
+      var result = this.evalFormulaNums(nums);
+      if (result == null || !isFinite(result)) return expr;
+      return expr + ' = ' + Math.round(result);
+    },
+    readFormulaStat(role, key) {
+      if (!role) return null;
+      switch (key) {
+        case 'MAX_HP': return this.roleDisplayHp(role);
+        case 'HP': return this.roleDisplayHp(role);
+        case 'ATK': return this.roleDisplayAtk(role);
+        case 'DEF': return this.roleDisplayDef(role);
+        case 'ACTION': return this.roleDisplayAction(role);
+        case 'ELAPSED_ACTION': return 0;
+        default: return null;
+      }
+    },
+    evalFormulaNums(tokens) {
+      // 简易中缀：支持 + - * / ( )
+      var output = [];
+      var ops = [];
+      var prec = { '+': 1, '-': 1, '*': 2, '/': 2 };
+      for (var i = 0; i < tokens.length; i++) {
+        var t = tokens[i];
+        if (t.kind === 'NUM') {
+          if (!isFinite(t.value)) return null;
+          output.push(t.value);
+          continue;
+        }
+        var op = t.op;
+        if (op === '(') { ops.push(op); continue; }
+        if (op === ')') {
+          while (ops.length && ops[ops.length - 1] !== '(') output.push(ops.pop());
+          if (ops.length) ops.pop();
+          continue;
+        }
+        while (ops.length && ops[ops.length - 1] !== '(' && (prec[ops[ops.length - 1]] || 0) >= (prec[op] || 0)) {
+          output.push(ops.pop());
+        }
+        ops.push(op);
+      }
+      while (ops.length) output.push(ops.pop());
+      var stack = [];
+      for (var j = 0; j < output.length; j++) {
+        var x = output[j];
+        if (typeof x === 'number') { stack.push(x); continue; }
+        var b = stack.pop();
+        var a = stack.pop();
+        if (a == null || b == null) return null;
+        if (x === '+') stack.push(a + b);
+        else if (x === '-') stack.push(a - b);
+        else if (x === '*') stack.push(a * b);
+        else if (x === '/') stack.push(b === 0 ? 0 : a / b);
+        else return null;
+      }
+      return stack.length === 1 ? stack[0] : null;
+    },
+    itemTypeLabel(type) {
+      return {
+        MATERIAL: '材料',
+        WEAPON: '武器',
+        ARMOR: '护甲',
+        GLOVES: '护手',
+        HELMET: '头盔',
+        ACCESSORY: '饰品',
+        LEGS: '护腿'
+      }[type] || type || '';
+    },
+    loadPrep() {
+      var self = this;
+      return GameApi.prepSummary()
+        .then((res) => {
+          var data = res.data || {};
+          self.prepMainRole = data.mainRole || null;
+          if (data.mainRole) {
+            var prevHeroSkills = (self.hero && self.hero.id === data.mainRole.id) ? self.hero.skills : null;
+            self.hero = Object.assign({}, data.mainRole, {
+              skills: (data.mainRole.skills && data.mainRole.skills.length)
+                ? data.mainRole.skills
+                : (prevHeroSkills || [])
+            });
+          }
+          self.warehouse = data.warehouse || null;
+          self.battleBag = data.battleBag || null;
+          self.bagItems = (data.battleBag && data.battleBag.items) || [];
+          self.equipSlots = (data.battleBag && data.battleBag.equipSlots) || [];
+          self.prepSkillSlots = self.normalizePrepSkillSlots(data.skillSlots);
+          if (self.detailOpen && self.detailRoleData && data.mainRole
+              && self.detailRoleData.id === data.mainRole.id) {
+            var keepSkills = self.detailRoleData.skills;
+            self.detailRoleData = Object.assign({}, data.mainRole, {
+              skills: (data.mainRole.skills && data.mainRole.skills.length)
+                ? data.mainRole.skills
+                : (keepSkills || [])
+            });
+          }
+        })
+        .catch((err) => self.authCatch(err));
+    },
+    normalizePrepSkillSlots(list) {
+      var byNo = {};
+      (list || []).forEach(function (s) {
+        if (s && s.slotNo != null) byNo[s.slotNo] = s;
+      });
+      var out = [];
+      for (var i = 1; i <= 8; i++) {
+        out.push(byNo[i] || { slotNo: i, empty: true });
+      }
+      return out;
+    },
+    skillTypeClass(type) {
+      if (type === 'ULTIMATE') return 'is-ultimate';
+      if (type === 'SMALL') return 'is-small';
+      if (type === 'NORMAL') return 'is-normal';
+      return '';
+    },
+    onPrepSkillSlotClick(slot) {
+      if (!slot || slot.empty || !slot.skillId) {
+        this.showToast('空技能槽');
+        return;
+      }
+      this.openSkillDetail(slot.skillId);
+    },
+    openWarehouse() {
+      this.warehouseOpen = true;
+    },
+    closeWarehouse() {
+      this.warehouseOpen = false;
+      this.cancelBatch();
+    },
+    slotFilled(slot) {
+      var s = this.slotItem(slot);
+      return !!(s && !s.empty && s.itemId);
+    },
+    slotItem(slot) {
+      return this.equipSlotMap[slot] || null;
+    },
+    slotItemName(slot) {
+      var s = this.slotItem(slot);
+      return s && s.itemName ? s.itemName : '';
+    },
+    slotDisplayIcon(slot) {
+      var s = this.slotItem(slot);
+      if (!s || s.empty || !s.itemId) return { type: 'empty' };
+      var icon = s.icon;
+      if (this.itemIconIsImage(icon)) return { type: 'img', src: this.itemIconSrc(icon) };
+      if (icon && String(icon).trim()) return { type: 'emoji', text: icon };
+      return { type: 'empty' };
+    },
+    onEquipSlotClick(slot) {
+      if (!this.slotFilled(slot) || this.prepActing) return;
+      var s = this.slotItem(slot);
+      if (!s) return;
+      this.armNestedDetailClickGuard();
+      this.prepItemDetail = { source: 'EQUIP', data: Object.assign({}, s) };
+    },
+    onWarehouseClick(slot) {
+      if (!slot || !slot.itemId) return;
+      if (this.batchMode === 'toBag') {
+        var idx = this.batchWhSlots.indexOf(slot.slotNo);
+        if (idx >= 0) this.batchWhSlots.splice(idx, 1);
+        else this.batchWhSlots.push(slot.slotNo);
+        return;
+      }
+      this.armNestedDetailClickGuard();
+      this.prepItemDetail = { source: 'WAREHOUSE', data: Object.assign({}, slot) };
+    },
+    onBagClick(item) {
+      if (!item) return;
+      if (this.batchMode === 'toWarehouse') {
+        var idx = this.batchBagIds.indexOf(item.id);
+        if (idx >= 0) this.batchBagIds.splice(idx, 1);
+        else this.batchBagIds.push(item.id);
+        return;
+      }
+      this.armNestedDetailClickGuard();
+      this.prepItemDetail = { source: 'BAG', data: Object.assign({}, item) };
+    },
+    closePrepItemDetail() {
+      this.prepItemDetail = null;
+    },
+    transferDetailToBag() {
+      if (!this.prepItemDetail || this.prepItemDetail.source !== 'WAREHOUSE' || this.prepActing) return;
+      var slotNo = this.prepItemDetail.data.slotNo;
+      var self = this;
+      this.doTransfer('WAREHOUSE', String(slotNo), 'BAG', '0')
+        .then(() => { self.closePrepItemDetail(); });
+    },
+    transferDetailToWarehouse() {
+      if (!this.prepItemDetail || this.prepItemDetail.source !== 'BAG' || this.prepActing) return;
+      var bagId = this.prepItemDetail.data.id;
+      var self = this;
+      this.doTransfer('BAG', bagId, 'WAREHOUSE', '0')
+        .then(() => { self.closePrepItemDetail(); });
+    },
+    equipDetailSlot(slot) {
+      if (!this.prepItemDetail || this.prepItemDetail.source !== 'BAG' || this.prepActing) return;
+      var itemId = this.prepItemDetail.data.itemId;
+      var self = this;
+      self.prepActing = true;
+      GameApi.prepEquip(slot, itemId)
+        .then(() => {
+          self.showToast('已装备', 'success');
+          self.closePrepItemDetail();
+          return self.loadPrep();
+        })
+        .catch((err) => self.authCatch(err))
+        .finally(() => { self.prepActing = false; });
+    },
+    unequipDetailSlot() {
+      if (!this.prepItemDetail || this.prepItemDetail.source !== 'EQUIP' || this.prepActing) return;
+      var slot = this.prepItemDetail.data.slot;
+      var self = this;
+      self.prepActing = true;
+      GameApi.prepUnequip(slot)
+        .then(() => {
+          self.showToast('已卸下', 'success');
+          self.closePrepItemDetail();
+          return self.loadPrep();
+        })
+        .catch((err) => self.authCatch(err))
+        .finally(() => { self.prepActing = false; });
+    },
+    toggleBatchMode(mode) {
+      if (this.batchMode === mode) {
+        this.cancelBatch();
+        return;
+      }
+      this.batchMode = mode;
+      this.batchWhSlots = [];
+      this.batchBagIds = [];
+      if (mode === 'toBag') this.warehouseOpen = true;
+    },
+    cancelBatch() {
+      this.batchMode = '';
+      this.batchWhSlots = [];
+      this.batchBagIds = [];
+    },
+    selectAllBatch() {
+      if (this.batchMode === 'toBag') {
+        this.batchWhSlots = (this.warehouseFilledSlots || []).map((s) => s.slotNo);
+      } else if (this.batchMode === 'toWarehouse') {
+        this.batchBagIds = (this.bagItems || []).map((b) => b.id);
+      }
+    },
+    equipSilhouette(slot) {
+      return {
+        HELMET: '⛑',
+        WEAPON: '⚔',
+        ARMOR: '🛡',
+        GLOVES: '🧤',
+        LEGS: '🥾',
+        ACCESSORY_1: '💍',
+        ACCESSORY_2: '💍',
+        ACCESSORY_3: '💍'
+      }[slot] || '◆';
+    },
+    slotRarity(slot) {
+      var s = this.slotItem(slot);
+      return (s && (s.rarity || s.itemRarity)) || 'NORMAL';
+    },
+    confirmBatch() {
+      var self = this;
+      if (!this.canConfirmBatch || this.prepActing) return;
+      this.prepActing = true;
+      var req;
+      if (this.batchMode === 'toBag') {
+        req = GameApi.prepWarehouseToBag(this.batchWhSlots);
+      } else {
+        req = GameApi.prepBagToWarehouse(this.batchBagIds);
+      }
+      req.then(() => {
+        self.showToast('转移成功', 'success');
+        self.cancelBatch();
+        return self.loadPrep();
+      }).catch((err) => {
+        self.authCatch(err);
+      }).finally(() => {
+        self.prepActing = false;
+      });
+    },
+    prepSlotClasses(slot) {
+      var cls = {};
+      if (this.batchMode === 'toBag' && this.batchWhSlots.indexOf(slot.slotNo) >= 0) {
+        cls.selected = true;
+      }
+      if (this.dragState && this.dragState.overKey === 'WAREHOUSE:' + slot.slotNo) {
+        cls['drag-over'] = true;
+      }
+      return cls;
+    },
+    prepBagClasses(item) {
+      var cls = {};
+      if (this.batchMode === 'toWarehouse' && this.batchBagIds.indexOf(item.id) >= 0) {
+        cls.selected = true;
+      }
+      if (this.dragState && this.dragState.overKey === 'BAG:' + item.id) {
+        cls['drag-over'] = true;
+      }
+      return cls;
+    },
+    onPrepItemPointerDown(e, type, key, item) {
+      if (this.prepActing) return;
+      if (this.batchMode) {
+        e.preventDefault();
+        if (type === 'WAREHOUSE') this.onWarehouseClick(item);
+        else if (type === 'BAG') this.onBagClick(item);
+        return;
+      }
+      if (!this._prepDrag) return;
+      e.preventDefault();
+      this._prepDrag.onPointerDown(e, { fromType: type, fromKey: String(key), item: item });
+    },
+    onPrepDragPick(payload, e) {
+      if (payload.fromType === 'BAG' && !this.warehouseOpen) {
+        this.openWarehouse();
+      }
+      this.dragState = {
+        fromType: payload.fromType,
+        fromKey: payload.fromKey,
+        item: payload.item,
+        overKey: ''
+      };
+      this.prepGhost = {
+        show: true,
+        x: e.clientX,
+        y: e.clientY,
+        name: (payload.item && (payload.item.itemName || payload.item.name)) || '物品'
+      };
+    },
+    parsePrepDrop(dropEl) {
+      if (!dropEl) return null;
+      var raw = dropEl.getAttribute('data-drop') || '';
+      var i = raw.indexOf(':');
+      if (i < 0) return null;
+      return { type: raw.slice(0, i), key: raw.slice(i + 1) };
+    },
+    onPrepDragHover(payload, dropEl, e) {
+      if (!this.dragState) return;
+      this.prepGhost = {
+        show: true,
+        x: e.clientX,
+        y: e.clientY,
+        name: this.prepGhost.name || '物品'
+      };
+      var drop = this.parsePrepDrop(dropEl);
+      if (!drop) {
+        this.dragState.overKey = '';
+        return;
+      }
+      var from = this.dragState;
+      if (from.fromType === 'WAREHOUSE' && drop.type === 'BAG') {
+        from.overKey = 'BAG:' + drop.key;
+        return;
+      }
+      if (from.fromType === 'BAG' && drop.type === 'WAREHOUSE') {
+        from.overKey = 'WAREHOUSE:' + drop.key;
+        return;
+      }
+      if (from.fromType === 'BAG' && drop.type === 'BAG' && drop.key !== from.fromKey) {
+        var target = this.bagItems.find((b) => String(b.id) === String(drop.key));
+        if (target && from.item && target.itemId === from.item.itemId) {
+          from.overKey = 'BAG:' + drop.key;
+        } else {
+          from.overKey = '';
+        }
+        return;
+      }
+      from.overKey = '';
+    },
+    onPrepDragDrop(payload, dropEl) {
+      this.prepGhost = { show: false, x: 0, y: 0, name: '' };
+      if (!this.dragState || this.batchMode) {
+        this.dragState = null;
+        return;
+      }
+      var drop = this.parsePrepDrop(dropEl);
+      var from = this.dragState;
+      this.dragState = null;
+      if (!drop) return;
+      var toType = drop.type;
+      var toKey = drop.key === 'zone' ? '0' : drop.key;
+      if (from.fromType === toType && from.fromKey === String(toKey)) return;
+      if (from.fromType === 'WAREHOUSE' && toType === 'BAG') {
+        this.doTransfer(from.fromType, from.fromKey, 'BAG', toKey);
+        return;
+      }
+      if (from.fromType === 'BAG' && toType === 'WAREHOUSE') {
+        this.doTransfer(from.fromType, from.fromKey, 'WAREHOUSE', toKey);
+        return;
+      }
+      if (from.fromType === 'BAG' && toType === 'BAG') {
+        var target = this.bagItems.find((b) => String(b.id) === String(toKey));
+        if (!target || !from.item || target.itemId !== from.item.itemId) return;
+        this.doTransfer(from.fromType, from.fromKey, toType, String(toKey));
+      }
+    },
+    onPrepDragClick(payload) {
+      this.prepGhost = { show: false, x: 0, y: 0, name: '' };
+      this.dragState = null;
+      if (!payload) return;
+      if (payload.fromType === 'WAREHOUSE') this.onWarehouseClick(payload.item);
+      else if (payload.fromType === 'BAG') this.onBagClick(payload.item);
+    },
+    doTransfer(fromType, fromKey, toType, toKey) {
+      var self = this;
+      self.prepActing = true;
+      return GameApi.prepTransfer(fromType, fromKey, toType, toKey, null)
+        .then(() => {
+          self.showToast('转移成功', 'success');
+          return self.loadPrep();
+        })
+        .catch((err) => self.authCatch(err))
+        .finally(() => {
+          self.prepActing = false;
+          self.dragState = null;
+          self.prepGhost = { show: false, x: 0, y: 0, name: '' };
+        });
+    },
+    toggleChapter(chapter, typeId) {
+      if (!chapter) return;
+      if (this.expandedChapterId === chapter.id) {
+        this.expandedChapterId = '';
+        return;
+      }
+      this.expandedChapterId = chapter.id;
+      this.sheetChapter = chapter;
+      this.sheetLevels = chapter.levels || [];
+      this.selectedTypeId = typeId || '';
+      this.selectedChapterId = chapter.id;
+      this.prefetchChapterFaces(chapter);
+    },
+    chapterProgress(ch) {
+      var levels = (ch && ch.levels) || [];
+      if (!levels.length) return 0;
+      var done = levels.filter((lv) => (lv.stars || 0) > 0 || lv.cleared).length;
+      return Math.round((done / levels.length) * 100);
+    },
+    onLevelRowClick(lv, ch) {
+      if (!lv) return;
+      if (lv.locked) {
+        this.showToast(lv.lockHint || '关卡未解锁');
+        return;
+      }
+      if (ch) this.sheetChapter = ch;
+      this.openPreviewSheet(lv);
+    },
+    prefetchChapterFaces(chapter) {
+      var levels = (chapter && chapter.levels) || [];
+      var self = this;
+      levels.forEach((lv) => {
+        if (!lv || !lv.id || self.levelFaceMap[lv.id] != null) return;
+        GameApi.stageLevelMonsterList(lv.id)
+          .then((res) => {
+            var list = res.data || [];
+            var faces = list.slice(0, 4).map((m) => ({
+              ch: (m.monsterName || '?').charAt(0),
+              rarity: m.rarity,
+              monsterId: m.monsterId || null
+            }));
+            var nextFaces = Object.assign({}, self.levelFaceMap);
+            nextFaces[lv.id] = faces;
+            self.levelFaceMap = nextFaces;
+            var nextCount = Object.assign({}, self.monsterCountMap);
+            nextCount[lv.id] = list.length;
+            self.monsterCountMap = nextCount;
+            self.$nextTick(function () {
+              if (window.ArtSlots) ArtSlots.apply(self.$el);
+            });
+          })
+          .catch(() => {});
+      });
+    },
+    levelFaces(levelId) {
+      return this.levelFaceMap[levelId] || [];
+    },
+    openPreviewSheet(lv) {
+      if (!lv) return;
+      this.selectedLevel = lv;
+      this.selectedLevelId = lv.id;
+      localStorage.setItem(APP_CONFIG.selectedLevelKey || 'selectedLevelId', lv.id);
+      this.previewSheetOpen = true;
+      this.levelPreview = null;
+      this.loadLevelMonsters();
+      this.loadLevelPreview(lv.id);
+    },
+    closePreviewSheet() {
+      this.previewSheetOpen = false;
+      this.levelMonsters = [];
+      this.levelPreview = null;
+      this.previewLoading = false;
+      this.closeEnemyFormation();
+      this.closePreviewRewardList();
+      this.closeMonsterDetail();
+    },
+    openEnemyFormation() {
+      if (this.monsterLoading || !this.levelMonsters.length) {
+        this.showToast(this.monsterLoading ? '怪物读取中…' : '该关卡暂无怪物');
+        return;
+      }
+      this.enemyFormationOpen = true;
+    },
+    closeEnemyFormation() {
+      this.enemyFormationOpen = false;
+      this.closeMonsterDetail();
+    },
+    openMonsterDetail(m) {
+      if (!m) return;
+      this.monsterDetail = Object.assign({}, m);
+    },
+    closeMonsterDetail() {
+      this.monsterDetail = null;
+    },
+    openPreviewRewardList(kind) {
+      if (kind !== 'first' && kind !== 'drop') return;
+      this.previewRewardKind = kind;
+    },
+    closePreviewRewardList() {
+      this.previewRewardKind = null;
+    },
+    openPreviewItemDetail(itemId) {
+      if (!itemId) {
+        this.showToast('物品无效');
+        return;
+      }
+      var self = this;
+      GameApi.itemDetail(itemId)
+        .then(function (res) {
+          if (!res.data) {
+            self.showToast('物品不存在');
+            return;
+          }
+          self.armNestedDetailClickGuard();
+          self.prepItemDetail = { source: 'VIEW', data: Object.assign({}, res.data) };
+        })
+        .catch(function (err) { self.authCatch(err); });
+    },
+    loadLevelPreview(levelId) {
+      if (!levelId) return;
+      var self = this;
+      this.previewLoading = true;
+      GameApi.stageLevelPreview(levelId)
+        .then(function (res) {
+          if (self.selectedLevelId !== levelId) return;
+          self.levelPreview = res.data || null;
+          if (self.selectedLevel && self.levelPreview) {
+            self.selectedLevel = Object.assign({}, self.selectedLevel, {
+              cleared: self.levelPreview.cleared,
+              firstRewardClaimed: self.levelPreview.firstRewardClaimed,
+              firstRewards: self.levelPreview.firstRewards || [],
+              fightStaminaCost: self.levelPreview.fightStaminaCost,
+              dailyMaxAttempts: self.levelPreview.dailyMaxAttempts,
+              todayAttemptCount: self.levelPreview.todayAttemptCount
+            });
+          }
+        })
+        .catch(function (err) { self.authCatch(err); })
+        .finally(function () {
+          if (self.selectedLevelId === levelId) self.previewLoading = false;
+        });
+    },
+    formatDropRate(rate) {
+      if (rate == null || rate === '') return '—';
+      var n = Number(rate);
+      if (isNaN(n)) return String(rate);
+      return n + '%';
+    },
+    formatDropQty(d) {
+      if (!d) return '';
+      var min = d.minQty != null ? Number(d.minQty) : 1;
+      var max = d.maxQty != null ? Number(d.maxQty) : min;
+      if (min === max) return '×' + min;
+      return '×' + min + '-' + max;
+    },
+    showEnemyInfo(m) {
+      this.openMonsterDetail(m);
+    },
+    levelMonsterCount(levelId) {
+      var n = this.monsterCountMap[levelId];
+      if (n == null) return '…';
+      return n + ' 只';
+    },
+    shortName(name) {
+      if (!name) return '?';
+      return name.length > 4 ? name.slice(0, 4) : name;
+    },
+    rarityLabel(r) {
+      return { NORMAL: '普通', RARE: '稀有', EPIC: '史诗', BOSS: 'BOSS', SPECIAL: '特殊' }[r] || r || '';
+    },
+    rarityClass(r) {
+      return {
+        NORMAL: 'rarity-normal',
+        RARE: 'rarity-rare',
+        EPIC: 'rarity-epic',
+        BOSS: 'rarity-boss',
+        SPECIAL: 'rarity-special'
+      }[r] || 'rarity-normal';
+    },
+    cellSize() {
+      return this.previewSheetOpen ? 42 : CELL;
+    },
+    gapSize() {
+      return this.previewSheetOpen ? 4 : GAP;
+    },
+    cellStyle(c, r) {
+      var cell = this.cellSize();
+      var gap = this.gapSize();
+      return {
+        left: (c * (cell + gap)) + 'px',
+        top: (r * (cell + gap)) + 'px',
+        width: cell + 'px',
+        height: cell + 'px'
+      };
+    },
+    unitStyle(item) {
+      var cell = this.cellSize();
+      var gap = this.gapSize();
+      var h = item.gridH || 1;
+      var w = item.gridW || 1;
+      var c = item.posCol || 0;
+      var r = item.posRow || 0;
+      return {
+        left: (c * (cell + gap)) + 'px',
+        top: (r * (cell + gap)) + 'px',
+        width: (w * cell + (w - 1) * gap) + 'px',
+        height: (h * cell + (h - 1) * gap) + 'px'
+      };
+    },
+    layoutUnitStyle(item) {
+      var style = this.unitStyle(item);
+      if (this.layoutDrag && this.layoutDrag.roleId === item.roleId && this.layoutHover) {
+        var cell = this.cellSize();
+        var gap = this.gapSize();
+        var h = item.gridH || 1;
+        var w = item.gridW || 1;
+        style.left = (this.layoutHover.col * (cell + gap)) + 'px';
+        style.top = (this.layoutHover.row * (cell + gap)) + 'px';
+        style.width = (w * cell + (w - 1) * gap) + 'px';
+        style.height = (h * cell + (h - 1) * gap) + 'px';
+      }
+      return style;
+    },
+    isOnField(roleId) {
+      return this.draftLayouts.some((x) => x.roleId === roleId);
+    },
+    isAnchor(c, r, list) {
+      return (list || []).some((x) => x.posCol === c && x.posRow === r);
+    },
+    occupied(exceptRoleId) {
+      var board = [];
+      for (var r = 0; r < ROWS; r++) {
+        board[r] = [];
+        for (var c = 0; c < COLS; c++) board[r][c] = false;
+      }
+      this.draftLayouts.forEach((item) => {
+        if (exceptRoleId && item.roleId === exceptRoleId) return;
+        var h = item.gridH || 1;
+        var w = item.gridW || 1;
+        for (var rr = item.posRow; rr < item.posRow + h; rr++) {
+          for (var cc = item.posCol; cc < item.posCol + w; cc++) {
+            if (rr >= 0 && rr < ROWS && cc >= 0 && cc < COLS) board[rr][cc] = true;
+          }
+        }
+      });
+      return board;
+    },
+    canPlaceAt(role, col, row, exceptRoleId) {
+      if (!role) return false;
+      var h = role.gridH || 1;
+      var w = role.gridW || 1;
+      if (col < 0 || row < 0 || col + w > COLS || row + h > ROWS) return false;
+      var board = this.occupied(exceptRoleId);
+      for (var r = row; r < row + h; r++) {
+        for (var c = col; c < col + w; c++) {
+          if (board[r][c]) return false;
+        }
+      }
+      return true;
+    },
+    isLayoutCellHot(c, r) {
+      if (!this.layoutDrag || !this.layoutHover) return false;
+      var w = this.layoutDrag.gridW || 1;
+      var h = this.layoutDrag.gridH || 1;
+      return c >= this.layoutHover.col && c < this.layoutHover.col + w
+        && r >= this.layoutHover.row && r < this.layoutHover.row + h
+        && this.layoutHover.valid;
+    },
+    isLayoutCellInvalid(c, r) {
+      if (!this.layoutDrag || !this.layoutHover || this.layoutHover.valid) return false;
+      var w = this.layoutDrag.gridW || 1;
+      var h = this.layoutDrag.gridH || 1;
+      return c >= this.layoutHover.col && c < this.layoutHover.col + w
+        && r >= this.layoutHover.row && r < this.layoutHover.row + h;
+    },
+    selectRole(role) {
+      this.selectedRoleId = role.id;
+    },
+    selectPlaced(item) {
+      this.selectedRoleId = item.roleId;
+    },
+    bindLayoutDragListeners() {
+      if (this._layoutMoveBound) return;
+      this._layoutMoveBound = (ev) => this.onLayoutPointerMove(ev);
+      this._layoutUpBound = (ev) => this.onLayoutPointerUp(ev);
+      window.addEventListener('pointermove', this._layoutMoveBound, { passive: false });
+      window.addEventListener('pointerup', this._layoutUpBound);
+      window.addEventListener('pointercancel', this._layoutUpBound);
+    },
+    unbindLayoutDragListeners() {
+      if (!this._layoutMoveBound) return;
+      window.removeEventListener('pointermove', this._layoutMoveBound);
+      window.removeEventListener('pointerup', this._layoutUpBound);
+      window.removeEventListener('pointercancel', this._layoutUpBound);
+      this._layoutMoveBound = null;
+      this._layoutUpBound = null;
+    },
+    beginLayoutDrag(e, roleLike, fromBoard) {
+      if (e.button != null && e.button !== 0) return;
+      this.selectedRoleId = roleLike.id || roleLike.roleId;
+      this.layoutDrag = {
+        roleId: roleLike.id || roleLike.roleId,
+        roleName: roleLike.name || roleLike.roleName,
+        mainRole: roleLike.mainRole,
+        gridH: roleLike.gridH || 1,
+        gridW: roleLike.gridW || 1,
+        pointerId: e.pointerId,
+        fromBoard: !!fromBoard
+      };
+      this.layoutOverRoster = false;
+      this.layoutGhost = {
+        show: true,
+        x: e.clientX,
+        y: e.clientY,
+        name: this.layoutDrag.roleName || '角色'
+      };
+      this.bindLayoutDragListeners();
+      this.updateLayoutHover(e.clientX, e.clientY);
+    },
+    onLayoutRosterDown(e, role) {
+      this.beginLayoutDrag(e, role, false);
+    },
+    onLayoutUnitDown(e, item) {
+      var role = this.roles.find((r) => r.id === item.roleId) || {
+        id: item.roleId,
+        name: item.roleName,
+        mainRole: item.mainRole,
+        gridH: item.gridH,
+        gridW: item.gridW
+      };
+      this.beginLayoutDrag(e, role, true);
+    },
+    isOverLayoutRoster(clientX, clientY) {
+      var el = this.$refs.layoutRoster;
+      if (Array.isArray(el)) el = el[0];
+      if (!el) return false;
+      var rect = el.getBoundingClientRect();
+      return clientX >= rect.left && clientX <= rect.right
+        && clientY >= rect.top && clientY <= rect.bottom;
+    },
+    updateLayoutHover(clientX, clientY) {
+      if (!this.layoutDrag) {
+        this.layoutHover = null;
+        this.layoutOverRoster = false;
+        return;
+      }
+      this.layoutOverRoster = this.isOverLayoutRoster(clientX, clientY);
+      var el = this.$refs.layoutBoard;
+      if (Array.isArray(el)) el = el[0];
+      if (!el) {
+        this.layoutHover = null;
+        return;
+      }
+      var rect = el.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) {
+        this.layoutHover = null;
+        return;
+      }
+      if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) {
+        this.layoutHover = null;
+        return;
+      }
+      var pad = 10;
+      var innerW = rect.width - pad * 2;
+      var innerH = rect.height - pad * 2;
+      if (innerW <= 0 || innerH <= 0) {
+        this.layoutHover = null;
+        return;
+      }
+      var w = this.layoutDrag.gridW || 1;
+      var h = this.layoutDrag.gridH || 1;
+      var col = Math.floor((clientX - rect.left - pad) / innerW * COLS);
+      var row = Math.floor((clientY - rect.top - pad) / innerH * ROWS);
+      col = Math.max(0, Math.min(COLS - w, col));
+      row = Math.max(0, Math.min(ROWS - h, row));
+      var role = { gridH: h, gridW: w };
+      var valid = this.canPlaceAt(role, col, row, this.layoutDrag.roleId);
+      this.layoutHover = { col: col, row: row, valid: valid };
+    },
+    onLayoutPointerMove(e) {
+      if (!this.layoutDrag) return;
+      if (this.layoutDrag.pointerId != null && e.pointerId !== this.layoutDrag.pointerId) return;
+      e.preventDefault();
+      this.layoutGhost = {
+        show: true,
+        x: e.clientX,
+        y: e.clientY,
+        name: this.layoutDrag.roleName || '角色'
+      };
+      this.updateLayoutHover(e.clientX, e.clientY);
+    },
+    onLayoutPointerUp(e) {
+      if (!this.layoutDrag) return;
+      if (this.layoutDrag.pointerId != null && e.pointerId !== this.layoutDrag.pointerId) return;
+      var drag = this.layoutDrag;
+      var hover = this.layoutHover;
+      var overRoster = this.layoutOverRoster || this.isOverLayoutRoster(e.clientX, e.clientY);
+      this.layoutDrag = null;
+      this.layoutGhost = { show: false, x: 0, y: 0, name: '' };
+      this.layoutHover = null;
+      this.layoutOverRoster = false;
+      this.unbindLayoutDragListeners();
+      if (drag.fromBoard && overRoster) {
+        this.removeRoleFromField(drag.roleId);
+        return;
+      }
+      if (!hover) return;
+      if (!hover.valid) {
+        this.showToast('无法放置：越界或重叠');
+        return;
+      }
+      var role = this.roles.find((r) => r.id === drag.roleId);
+      if (!role) return;
+      this.placeRoleAt(role, hover.col, hover.row);
+    },
+    placeRoleAt(role, c, r) {
+      if (!this.canPlaceAt(role, c, r, role.id)) {
+        this.showToast('无法放置：越界或重叠');
+        return;
+      }
+      var next = this.draftLayouts.filter((x) => x.roleId !== role.id);
+      next.push({
+        roleId: role.id,
+        roleName: role.name,
+        mainRole: role.mainRole,
+        gridH: role.gridH,
+        gridW: role.gridW,
+        posCol: c,
+        posRow: r
+      });
+      this.draftLayouts = next;
+      this.selectedRoleId = role.id;
+      this.saveLayout();
+    },
+    removeRoleFromField(roleId) {
+      if (!roleId) return;
+      if (!this.draftLayouts.some((x) => x.roleId === roleId)) return;
+      this.draftLayouts = this.draftLayouts.filter((x) => x.roleId !== roleId);
+      if (this.selectedRoleId === roleId) this.selectedRoleId = null;
+      this.saveLayout();
+    },
+    saveLayout() {
+      if (this.layoutSaving) {
+        this._layoutSavePending = true;
+        return;
+      }
+      this.layoutSaving = true;
+      this._layoutSavePending = false;
+      var payload = this.draftLayouts.map((x) => ({
+        roleId: x.roleId,
+        posCol: x.posCol,
+        posRow: x.posRow
+      }));
+      var snap = this.layoutSnap(this.draftLayouts);
+      var self = this;
+      GameApi.playerLayoutSave(payload)
+        .then((res) => {
+          if (self.layoutSnap(self.draftLayouts) !== snap) return;
+          self.draftLayouts = (res.data || []).map((x) => Object.assign({}, x));
+          self.savedLayoutSnap = self.layoutSnap(self.draftLayouts);
+        })
+        .catch((err) => self.authCatch(err))
+        .finally(() => {
+          self.layoutSaving = false;
+          if (self._layoutSavePending || self.layoutDirty) {
+            self._layoutSavePending = false;
+            self.saveLayout();
+          }
+        });
+    },
+    loadLevelMonsters() {
+      this.levelMonsters = [];
+      if (!this.selectedLevelId) return;
+      this.monsterLoading = true;
+      GameApi.stageLevelMonsterList(this.selectedLevelId)
+        .then((res) => {
+          this.levelMonsters = res.data || [];
+          this.monsterCountMap[this.selectedLevelId] = this.levelMonsters.length;
+        })
+        .catch((err) => this.authCatch(err))
+        .finally(() => { this.monsterLoading = false; });
+    },
+    startBattle() {
+      if (!this.selectedLevelId) {
+        this.showToast('请先选择关卡');
+        return;
+      }
+      localStorage.setItem(APP_CONFIG.selectedLevelKey || 'selectedLevelId', this.selectedLevelId);
+      location.href = (APP_CONFIG.battlePage || 'battle.html')
+        + '?levelId=' + encodeURIComponent(this.selectedLevelId);
+    }
+  }
+}).mount('#app');
+</script>
+</body>
+</html>

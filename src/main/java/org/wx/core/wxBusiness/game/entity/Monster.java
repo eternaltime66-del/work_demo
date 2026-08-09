@@ -10,6 +10,7 @@ import lombok.EqualsAndHashCode;
 import org.wx.core.wxBase.annotation.BizIdPrefix;
 import org.wx.core.wxBase.base.WxBaseEntity;
 import org.wx.core.wxBase.factory.ErrorFactory;
+import org.wx.core.wxBusiness.game.entity.enums.MonsterCategory;
 import org.wx.core.wxBusiness.game.entity.enums.MonsterRarity;
 import org.wx.core.wxBusiness.game.unit.BattleGrid;
 
@@ -29,6 +30,9 @@ public class Monster extends WxBaseEntity<Monster> {
 
     /** 稀有度：普通/稀有/史诗/BOSS/特殊 */
     private MonsterRarity rarity;
+
+    /** 角色分类：怪物 / 召唤物 */
+    private MonsterCategory roleCategory;
 
     /** 占地高度 */
     private Integer gridH;

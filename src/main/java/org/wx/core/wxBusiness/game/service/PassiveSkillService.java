@@ -7,18 +7,19 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.wx.core.wxBase.base.WxServiceImpl;
 import org.wx.core.wxBase.factory.ErrorFactory;
-import org.wx.core.wxBusiness.game.entity.PassiveCombatEffect;
+import org.wx.core.wxBusiness.game.entity.ActiveSkill;
+import org.wx.core.wxBusiness.game.entity.Item;
 import org.wx.core.wxBusiness.game.entity.PassiveCondition;
 import org.wx.core.wxBusiness.game.entity.PassiveEffect;
 import org.wx.core.wxBusiness.game.entity.PassiveSkill;
-import org.wx.core.wxBusiness.game.entity.enums.PassiveAnchorType;
+import org.wx.core.wxBusiness.game.entity.SkillOutput;
+import org.wx.core.wxBusiness.game.entity.enums.BattleStartApplyRule;
+import org.wx.core.wxBusiness.game.entity.enums.CompareOp;
 import org.wx.core.wxBusiness.game.entity.enums.PassiveConditionMode;
 import org.wx.core.wxBusiness.game.entity.enums.PassiveConditionType;
 import org.wx.core.wxBusiness.game.entity.enums.PassiveEffectAttrKey;
 import org.wx.core.wxBusiness.game.entity.enums.PassiveSkillType;
-import org.wx.core.wxBusiness.game.entity.enums.PeriodicTriggerMode;
 import org.wx.core.wxBusiness.game.entity.enums.SkillChargeMatchMode;
-import org.wx.core.wxBusiness.game.entity.enums.SkillEffectType;
 import org.wx.core.wxBusiness.game.mapper.PassiveSkillMapper;
 
 import java.math.BigDecimal;
@@ -36,6 +37,12 @@ public class PassiveSkillService extends WxServiceImpl<PassiveSkillMapper, Passi
     private PassiveEffectService passiveEffectService;
     @Resource
     private PassiveCombatEffectService passiveCombatEffectService;
+    @Resource
+    private SkillOutputService skillOutputService;
+    @Resource
+    private ItemService itemService;
+    @Resource
+    private ActiveSkillService activeSkillService;
 
     @Override
     public IPage<PassiveSkill> pageQuery(PassiveSkill entity) {
@@ -48,22 +55,47 @@ public class PassiveSkillService extends WxServiceImpl<PassiveSkillMapper, Passi
         PassiveSkill skill = this.getById(id);
         ErrorFactory.notNull(skill, "被动技能不存在");
         skill.setConditions(passiveConditionService.listBySkillId(id));
-        if (skill.getPassiveType() != null && skill.getPassiveType().isInCombat()) {
-            skill.setCombatEffects(passiveCombatEffectService.listBySkillId(id));
+        fillConditionNames(skill.getConditions());
+        if (skill.getPassiveType() != null && skill.getPassiveType().isBattlePassive()) {
+            skill.setOutputs(skillOutputService.listByPassiveSkillId(id));
             skill.setEffects(List.of());
-            if (skill.getPassiveType() == PassiveSkillType.IN_ANCHOR) {
-                skill.setStackModeLabel(anchorListLabel(skill.getAnchorType()));
-            } else if (skill.getPassiveType() == PassiveSkillType.IN_SUSTAINED) {
-                skill.setStackModeLabel("持续·" + periodicListLabel(skill.getPeriodicTriggerMode()));
-            } else {
-                skill.setStackModeLabel(periodicListLabel(skill.getPeriodicTriggerMode()));
-            }
+            skill.setCombatEffects(List.of());
+            skill.setStackModeLabel(skill.getPassiveType().label());
+        } else if (skill.getPassiveType() != null && skill.getPassiveType().isLegacyCombat()) {
+            skill.setCombatEffects(passiveCombatEffectService.listBySkillId(id));
+            skill.setOutputs(skillOutputService.listByPassiveSkillId(id));
+            skill.setEffects(List.of());
+            skill.setStackModeLabel(skill.getPassiveType().label());
         } else {
             skill.setEffects(passiveEffectService.listBySkillId(id));
             skill.setCombatEffects(List.of());
+            skill.setOutputs(List.of());
             fillStackModeLabel(skill, skill.getEffects());
         }
         return skill;
+    }
+
+    private void fillConditionNames(List<PassiveCondition> conditions) {
+        if (conditions == null || conditions.isEmpty()) {
+            return;
+        }
+        for (PassiveCondition c : conditions) {
+            if (c == null) {
+                continue;
+            }
+            if (StringUtils.hasText(c.getRefItemId())) {
+                Item item = itemService.getById(c.getRefItemId());
+                if (item != null) {
+                    c.setRefItemName(item.getName());
+                }
+            }
+            if (StringUtils.hasText(c.getRefSkillId())) {
+                ActiveSkill sk = activeSkillService.getById(c.getRefSkillId());
+                if (sk != null) {
+                    c.setRefSkillName(sk.getName());
+                }
+            }
+        }
     }
 
     private void fillStackModeLabels(List<PassiveSkill> skills) {
@@ -88,24 +120,12 @@ public class PassiveSkillService extends WxServiceImpl<PassiveSkillMapper, Passi
             if (s == null) {
                 continue;
             }
-            if (s.getPassiveType() == PassiveSkillType.IN_ANCHOR) {
-                s.setStackModeLabel(anchorListLabel(s.getAnchorType()));
-            } else if (s.getPassiveType() == PassiveSkillType.IN_PERIODIC) {
-                s.setStackModeLabel(periodicListLabel(s.getPeriodicTriggerMode()));
-            } else if (s.getPassiveType() == PassiveSkillType.IN_SUSTAINED) {
-                s.setStackModeLabel("持续·" + periodicListLabel(s.getPeriodicTriggerMode()));
+            if (s.getPassiveType() != null && (s.getPassiveType().isBattlePassive() || s.getPassiveType().isLegacyCombat())) {
+                s.setStackModeLabel(s.getPassiveType().label());
             } else {
                 fillStackModeLabel(s, bySkill.get(s.getId()));
             }
         }
-    }
-
-    private static String anchorListLabel(PassiveAnchorType type) {
-        return type != null ? type.getLabel() : "—";
-    }
-
-    private static String periodicListLabel(PeriodicTriggerMode mode) {
-        return mode != null ? mode.getLabel() : "—";
     }
 
     private void fillStackModeLabel(PassiveSkill skill, List<PassiveEffect> effects) {
@@ -142,6 +162,7 @@ public class PassiveSkillService extends WxServiceImpl<PassiveSkillMapper, Passi
     public void saveWithConditions(PassiveSkill entity) {
         ErrorFactory.notEmpty(entity.getName(), "请输入被动名称");
         ErrorFactory.notNull(entity.getPassiveType(), "被动类型不能为空");
+        ErrorFactory.throwError(entity.getPassiveType().isLegacyCombat(), "旧战斗被动类型已废弃，请使用开战/判定/脉冲/战斗事件");
         if (entity.getConditionMode() == null) {
             entity.setConditionMode(PassiveConditionMode.UNLIMITED);
         }
@@ -158,28 +179,24 @@ public class PassiveSkillService extends WxServiceImpl<PassiveSkillMapper, Passi
             validateConditions(conditions);
         }
 
-        boolean inCombat = entity.getPassiveType() != null && entity.getPassiveType().isInCombat();
-        if (entity.getPassiveType() == PassiveSkillType.IN_ANCHOR) {
-            clearPeriodicFields(entity);
-            validateAnchor(entity);
-            List<PassiveCombatEffect> combatEffects = entity.getCombatEffects();
-            ErrorFactory.throwError(combatEffects == null || combatEffects.isEmpty(), "请至少添加一条效果");
-            validateCombatEffects(combatEffects, false);
-        } else if (entity.getPassiveType() == PassiveSkillType.IN_PERIODIC) {
-            clearAnchorFields(entity);
-            validatePeriodic(entity);
-            List<PassiveCombatEffect> combatEffects = entity.getCombatEffects();
-            ErrorFactory.throwError(combatEffects == null || combatEffects.isEmpty(), "请至少添加一条效果");
-            validateCombatEffects(combatEffects, false);
-        } else if (entity.getPassiveType() == PassiveSkillType.IN_SUSTAINED) {
-            clearAnchorFields(entity);
-            validateSustained(entity);
-            List<PassiveCombatEffect> combatEffects = entity.getCombatEffects();
-            ErrorFactory.throwError(combatEffects == null || combatEffects.isEmpty(), "请至少添加一条效果");
-            validateCombatEffects(combatEffects, true);
+        boolean battle = entity.getPassiveType().isBattlePassive();
+        if (battle) {
+            validateBattlePassive(entity);
+            List<SkillOutput> outputs = entity.getOutputs();
+            ErrorFactory.throwError(outputs == null || outputs.isEmpty(), "请至少添加一条输出");
+            validateOutputs(outputs);
+            clearLegacyAnchorFields(entity);
         } else {
-            clearAnchorFields(entity);
-            clearPeriodicFields(entity);
+            entity.setCombatEvent(null);
+            entity.setStartApplyRule(null);
+            entity.setStartElapsedAv(null);
+            entity.setLeftFormulaJson(null);
+            entity.setRightFormulaJson(null);
+            entity.setCompareOp(null);
+            entity.setMaxTriggerPerBattle(null);
+            entity.setSkillMatchMode(null);
+            entity.setRefSkillId(null);
+            entity.setRefSkillType(null);
             List<PassiveEffect> effects = entity.getEffects();
             ErrorFactory.throwError(effects == null || effects.isEmpty(), "请至少添加一条效果");
             validateEffects(entity.getPassiveType(), effects);
@@ -211,37 +228,22 @@ public class PassiveSkillService extends WxServiceImpl<PassiveSkillMapper, Passi
             }
         }
 
-        if (inCombat) {
+        if (battle) {
             passiveEffectService.removeBySkillId(entity.getId());
             passiveCombatEffectService.removeBySkillId(entity.getId());
+            skillOutputService.removeByPassiveSkillId(entity.getId());
             int effectSort = 0;
-            for (PassiveCombatEffect e : entity.getCombatEffects()) {
-                PassiveCombatEffect row = new PassiveCombatEffect();
-                row.setSkillId(entity.getId());
-                row.setName(e.getName());
-                row.setTargetType(e.getTargetType());
-                row.setEffectType(e.getEffectType());
-                row.setAttrKey(e.getAttrKey());
-                row.setAttrDir(e.getAttrDir());
-                row.setFormulaJson(e.getFormulaJson());
-                row.setHitSegments(e.getHitSegments() != null && e.getHitSegments() > 0 ? e.getHitSegments() : 1);
-                row.setTriggerRate(e.getTriggerRate() != null ? e.getTriggerRate() : 100);
-                if (entity.getPassiveType() == PassiveSkillType.IN_SUSTAINED) {
-                    row.setDurationAv(0);
-                } else {
-                    row.setDurationAv(e.getDurationAv() != null && e.getDurationAv() > 0 ? e.getDurationAv() : 0);
-                }
+            for (SkillOutput e : entity.getOutputs()) {
+                SkillOutput row = copyOutput(e);
+                row.setId(null);
+                row.setPassiveSkillId(entity.getId());
+                row.setSkillId(null);
                 row.setSort(e.getSort() != null ? e.getSort() : effectSort);
-                row.setRemark(e.getRemark());
-                row.setMore(e.getMore());
-                if (e.getEffectType() != SkillEffectType.ATTR_MODIFY) {
-                    row.setAttrKey(null);
-                    row.setAttrDir(null);
-                }
-                passiveCombatEffectService.save(row);
+                skillOutputService.save(row);
                 effectSort++;
             }
         } else {
+            skillOutputService.removeByPassiveSkillId(entity.getId());
             passiveCombatEffectService.removeBySkillId(entity.getId());
             passiveEffectService.removeBySkillId(entity.getId());
             int effectSort = 0;
@@ -260,98 +262,81 @@ public class PassiveSkillService extends WxServiceImpl<PassiveSkillMapper, Passi
         }
     }
 
+    private SkillOutput copyOutput(SkillOutput e) {
+        SkillOutput row = new SkillOutput();
+        row.setName(e.getName());
+        row.setOutputKind(e.getOutputKind());
+        row.setTargetType(e.getTargetType());
+        row.setAttrKey(e.getAttrKey());
+        row.setAttrDir(e.getAttrDir());
+        row.setEffectType(e.getEffectType());
+        row.setDamageElement(e.getDamageElement());
+        row.setFormulaJson(e.getFormulaJson());
+        row.setHitSegments(e.getHitSegments() != null && e.getHitSegments() > 0 ? e.getHitSegments() : 1);
+        row.setTriggerRate(e.getTriggerRate() != null ? e.getTriggerRate() : 100);
+        row.setDurationAv(e.getDurationAv() != null ? e.getDurationAv() : 0);
+        row.setBuffDefId(e.getBuffDefId());
+        row.setRemark(e.getRemark());
+        row.setMore(e.getMore());
+        return row;
+    }
+
+    private void validateBattlePassive(PassiveSkill entity) {
+        PassiveSkillType t = entity.getPassiveType();
+        if (t == PassiveSkillType.BATTLE_JUDGE || t == PassiveSkillType.BATTLE_PULSE) {
+            ErrorFactory.notEmpty(entity.getLeftFormulaJson(), "请配置左公式");
+            ErrorFactory.notEmpty(entity.getRightFormulaJson(), "请配置右公式");
+            // 脉冲固定「每当达到」= GTE；判定需选比较符
+            if (t == PassiveSkillType.BATTLE_PULSE) {
+                entity.setCompareOp(CompareOp.GTE);
+            } else {
+                ErrorFactory.notNull(entity.getCompareOp(), "请选择比较符");
+            }
+            entity.setStartApplyRule(null);
+            entity.setStartElapsedAv(null);
+            entity.setCombatEvent(null);
+        } else if (t == PassiveSkillType.BATTLE_COMBAT) {
+            ErrorFactory.notNull(entity.getCombatEvent(), "请选择战斗事件");
+            entity.setStartApplyRule(null);
+            entity.setLeftFormulaJson(null);
+            entity.setRightFormulaJson(null);
+            if (entity.getCombatEvent() != null
+                    && (entity.getCombatEvent().name().contains("CAST") || entity.getCombatEvent().name().contains("RECEIVE"))) {
+                if (entity.getSkillMatchMode() == null) {
+                    entity.setSkillMatchMode(SkillChargeMatchMode.ANY);
+                }
+            }
+        } else if (t == PassiveSkillType.BATTLE_START) {
+            if (entity.getStartApplyRule() == null) {
+                entity.setStartApplyRule(BattleStartApplyRule.IMMEDIATE);
+            }
+            entity.setCombatEvent(null);
+            entity.setLeftFormulaJson(null);
+            entity.setRightFormulaJson(null);
+            if (entity.getStartApplyRule() != BattleStartApplyRule.IMMEDIATE) {
+                ErrorFactory.throwError(entity.getStartElapsedAv() == null || entity.getStartElapsedAv() <= 0,
+                        "请配置行动值间隔/阈值");
+            }
+        }
+    }
+
+    private void validateOutputs(List<SkillOutput> outputs) {
+        skillOutputService.validateOutputs(outputs);
+    }
+
+    private void clearLegacyAnchorFields(PassiveSkill entity) {
+        entity.setAnchorType(null);
+        entity.setPeriodicTriggerMode(null);
+    }
+
     @Transactional(rollbackFor = Exception.class)
     public void removeWithConditions(String id) {
         ErrorFactory.notEmpty(id, "ID不能为空");
         passiveConditionService.removeBySkillId(id);
         passiveEffectService.removeBySkillId(id);
         passiveCombatEffectService.removeBySkillId(id);
+        skillOutputService.removeByPassiveSkillId(id);
         this.removeById(id);
-    }
-
-    private void clearAnchorFields(PassiveSkill entity) {
-        entity.setAnchorType(null);
-        entity.setSkillMatchMode(null);
-        entity.setRefSkillType(null);
-        entity.setRefSkillId(null);
-    }
-
-    private void clearPeriodicFields(PassiveSkill entity) {
-        entity.setPeriodicTriggerMode(null);
-        entity.setLeftFormulaJson(null);
-        entity.setCompareOp(null);
-        entity.setRightFormulaJson(null);
-        entity.setMaxTriggerPerBattle(null);
-    }
-
-    private void validatePeriodic(PassiveSkill entity) {
-        ErrorFactory.notNull(entity.getPeriodicTriggerMode(), "请选择触发模式");
-        ErrorFactory.notEmpty(entity.getLeftFormulaJson(), "请配置上公式");
-        ErrorFactory.throwError("[]".equals(entity.getLeftFormulaJson().trim()), "请配置上公式");
-        ErrorFactory.notNull(entity.getCompareOp(), "请选择比较符");
-        ErrorFactory.notEmpty(entity.getRightFormulaJson(), "请配置下公式");
-        ErrorFactory.throwError("[]".equals(entity.getRightFormulaJson().trim()), "请配置下公式");
-        if (entity.getMaxTriggerPerBattle() == null) {
-            entity.setMaxTriggerPerBattle(0);
-        }
-        ErrorFactory.throwError(entity.getMaxTriggerPerBattle() < 0, "触发次数不能为负");
-    }
-
-    private void validateSustained(PassiveSkill entity) {
-        ErrorFactory.notNull(entity.getPeriodicTriggerMode(), "请选择触发模式");
-        ErrorFactory.notEmpty(entity.getLeftFormulaJson(), "请配置上公式");
-        ErrorFactory.throwError("[]".equals(entity.getLeftFormulaJson().trim()), "请配置上公式");
-        ErrorFactory.notNull(entity.getCompareOp(), "请选择比较符");
-        ErrorFactory.notEmpty(entity.getRightFormulaJson(), "请配置下公式");
-        ErrorFactory.throwError("[]".equals(entity.getRightFormulaJson().trim()), "请配置下公式");
-        entity.setMaxTriggerPerBattle(0);
-    }
-
-    private void validateAnchor(PassiveSkill entity) {
-        ErrorFactory.notNull(entity.getAnchorType(), "请选择锚点");
-        PassiveAnchorType anchor = entity.getAnchorType();
-        if (anchor.needsSkillMatch()) {
-            ErrorFactory.notNull(entity.getSkillMatchMode(), "请选择技能匹配范围");
-            SkillChargeMatchMode mode = entity.getSkillMatchMode();
-            if (mode == SkillChargeMatchMode.ANY_TYPE) {
-                ErrorFactory.notNull(entity.getRefSkillType(), "请选择技能类型");
-                entity.setRefSkillId(null);
-            } else if (mode == SkillChargeMatchMode.SPECIFIC) {
-                ErrorFactory.notEmpty(entity.getRefSkillId(), "请选择指定技能");
-                entity.setRefSkillType(null);
-            } else {
-                entity.setRefSkillType(null);
-                entity.setRefSkillId(null);
-            }
-        } else {
-            entity.setSkillMatchMode(null);
-            entity.setRefSkillType(null);
-            entity.setRefSkillId(null);
-        }
-    }
-
-    private void validateCombatEffects(List<PassiveCombatEffect> effects, boolean sustainedOnlyAttr) {
-        for (PassiveCombatEffect e : effects) {
-            ErrorFactory.notEmpty(e.getName(), "请输入效果名称");
-            ErrorFactory.notNull(e.getTargetType(), "请选择效果目标");
-            ErrorFactory.notNull(e.getEffectType(), "请选择效果类型");
-            ErrorFactory.notEmpty(e.getFormulaJson(), "请配置效果公式");
-            ErrorFactory.throwError("[]".equals(e.getFormulaJson().trim()), "请配置效果公式");
-            if (sustainedOnlyAttr) {
-                ErrorFactory.throwError(e.getEffectType() != SkillEffectType.ATTR_MODIFY,
-                        "持续效果只能配置属性修改");
-            }
-            if (e.getEffectType() == SkillEffectType.ATTR_MODIFY) {
-                ErrorFactory.notNull(e.getAttrKey(), "请选择修改属性");
-                ErrorFactory.notNull(e.getAttrDir(), "请选择增加/减少");
-            }
-            if (e.getHitSegments() != null) {
-                ErrorFactory.throwError(e.getHitSegments() < 1, "段数至少为 1");
-            }
-            if (e.getDurationAv() != null) {
-                ErrorFactory.throwError(e.getDurationAv() < 0, "生效行动值不能为负");
-            }
-        }
     }
 
     private void validateEffects(PassiveSkillType passiveType, List<PassiveEffect> effects) {
@@ -362,9 +347,9 @@ public class PassiveSkillService extends WxServiceImpl<PassiveSkillMapper, Passi
             ErrorFactory.throwError(e.getValueNum().compareTo(BigDecimal.ZERO) < 0, "效果数值不能为负数");
             PassiveEffectAttrKey key = e.getAttrKey();
             if (passiveType == PassiveSkillType.OUT_BASIC) {
-                ErrorFactory.throwError(!key.isBasic(), "基础属性被动只能配置攻击/生命/防御");
+                ErrorFactory.throwError(!key.isBasic(), "基础型·基础属性只能配置攻击/生命/防御");
             } else if (passiveType == PassiveSkillType.OUT_ADVANCED) {
-                ErrorFactory.throwError(!key.isAdvanced(), "高级属性被动只能配置吸血/攻速/伤害比例/最终攻防血");
+                ErrorFactory.throwError(!key.isAdvanced(), "基础型·高级属性只能配置吸血/攻速/伤害比例/最终攻防血");
             }
         }
     }
@@ -382,8 +367,6 @@ public class PassiveSkillService extends WxServiceImpl<PassiveSkillMapper, Passi
                     ErrorFactory.notEmpty(c.getLeftFormulaJson(), "请配置左侧公式");
                     ErrorFactory.notNull(c.getCompareOp(), "请选择比较符");
                     ErrorFactory.notEmpty(c.getRightFormulaJson(), "请配置右侧公式");
-                    ErrorFactory.throwError("[]".equals(c.getLeftFormulaJson().trim()), "请配置左侧公式");
-                    ErrorFactory.throwError("[]".equals(c.getRightFormulaJson().trim()), "请配置右侧公式");
                 }
                 default -> ErrorFactory.throwError(true, "未知条件类型");
             }

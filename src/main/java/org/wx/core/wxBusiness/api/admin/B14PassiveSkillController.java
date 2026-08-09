@@ -17,7 +17,7 @@ import org.wx.core.wxBusiness.log.annotation.WxRequestLog;
 import java.util.List;
 
 /**
- * 后台-被动技能（战斗外基础/高级属性等）
+ * 后台-被动技能（基础型 / 战斗型，技能 V2）
  */
 @RestController
 @RequestMapping("/back/passive/skill")

@@ -10,6 +10,7 @@ import org.wx.core.wxBase.factory.ErrorFactory;
 import org.wx.core.wxBusiness.game.battle.AtkSpeedCalcUnit;
 import org.wx.core.wxBusiness.game.entity.PlayerRole;
 import org.wx.core.wxBusiness.game.entity.RoleBaseStat;
+import org.wx.core.wxBusiness.game.entity.enums.PlayerRoleCategory;
 import org.wx.core.wxBusiness.game.mapper.PlayerRoleMapper;
 
 import java.math.BigDecimal;
@@ -57,9 +58,11 @@ public class PlayerRoleService extends WxServiceImpl<PlayerRoleMapper, PlayerRol
         if (Wx.isEmpty(uid)) {
             return;
         }
-        long hasMain = this.find()
+        long hasMain = this.lambdaQuery()
                 .eq(PlayerRole::getUid, uid)
-                .eq(PlayerRole::getMainRole, true)
+                .and(w -> w.eq(PlayerRole::getMainRole, true)
+                        .or()
+                        .eq(PlayerRole::getRoleCategory, PlayerRoleCategory.HERO))
                 .count();
         if (hasMain > 0) {
             return;
@@ -76,6 +79,11 @@ public class PlayerRoleService extends WxServiceImpl<PlayerRoleMapper, PlayerRol
      */
     @Transactional(rollbackFor = Exception.class)
     public PlayerRole createFromBaseStat(String uid, String baseStatId) {
+        return createFromBaseStat(uid, baseStatId, null);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public PlayerRole createFromBaseStat(String uid, String baseStatId, PlayerRoleCategory preferCategory) {
         ErrorFactory.throwError(Wx.isEmpty(uid), "uid不能为空");
         ErrorFactory.throwError(Wx.isEmpty(baseStatId), "基础数值配置不能为空");
 
@@ -98,23 +106,115 @@ public class PlayerRoleService extends WxServiceImpl<PlayerRoleMapper, PlayerRol
         role.setExtraDef(nvl(conf.getExtraDef()));
         role.setDealDmgRatio(nvlRatio(conf.getDealDmgRatio(), HUNDRED));
         role.setTakenDmgRatio(nvlRatio(conf.getTakenDmgRatio(), HUNDRED));
+        role.setDealElementDmgRatio(nvlRatio(conf.getDealElementDmgRatio(), HUNDRED));
+        role.setTakenElementDmgRatio(nvlRatio(conf.getTakenElementDmgRatio(), HUNDRED));
+        role.setDealPhysDmgRatio(nvlRatio(conf.getDealPhysDmgRatio(), HUNDRED));
+        role.setTakenPhysDmgRatio(nvlRatio(conf.getTakenPhysDmgRatio(), HUNDRED));
         role.setLifeStealRatio(nvlRatio(conf.getLifeStealRatio(), BigDecimal.ZERO));
         role.setFinalAtkRatio(nvlRatio(conf.getFinalAtkRatio(), HUNDRED));
         role.setFinalHpRatio(nvlRatio(conf.getFinalHpRatio(), HUNDRED));
         role.setFinalDefRatio(nvlRatio(conf.getFinalDefRatio(), HUNDRED));
         role.setAtkSpeedUpRatio(nvlRatio(conf.getAtkSpeedUpRatio(), BigDecimal.ZERO));
         role.setAtkSpeedDownRatio(nvlRatio(conf.getAtkSpeedDownRatio(), BigDecimal.ZERO));
-        role.setMainRole(Boolean.TRUE.equals(conf.getMainRole()));
-        if (Boolean.TRUE.equals(role.getMainRole())) {
+        role.setInheritAtkRatio(conf.getInheritAtkRatio());
+        role.setInheritDefRatio(conf.getInheritDefRatio());
+        role.setInheritHpRatio(conf.getInheritHpRatio());
+        PlayerRoleCategory templateCat = conf.getRoleCategory();
+        boolean asHero = Boolean.TRUE.equals(conf.getMainRole())
+                || templateCat == PlayerRoleCategory.HERO
+                || preferCategory == PlayerRoleCategory.HERO;
+        if (asHero) {
+            assertNoOtherHero(uid, null);
+            role.setMainRole(true);
+            role.setRoleCategory(PlayerRoleCategory.HERO);
             role.setGridH(2);
             role.setGridW(2);
+            role.setInheritAtkRatio(null);
+            role.setInheritDefRatio(null);
+            role.setInheritHpRatio(null);
         } else {
+            role.setMainRole(false);
+            PlayerRoleCategory cat;
+            if (preferCategory == PlayerRoleCategory.SUMMON || preferCategory == PlayerRoleCategory.PARTNER) {
+                cat = preferCategory;
+            } else if (templateCat == PlayerRoleCategory.SUMMON || templateCat == PlayerRoleCategory.PARTNER) {
+                cat = templateCat;
+            } else {
+                cat = PlayerRoleCategory.PARTNER;
+            }
+            role.setRoleCategory(cat);
             role.setGridH(1);
             role.setGridW(1);
+            if (cat == PlayerRoleCategory.SUMMON) {
+                role.setInheritAtkRatio(nvlRatio(conf.getInheritAtkRatio(), HUNDRED));
+                role.setInheritDefRatio(nvlRatio(conf.getInheritDefRatio(), HUNDRED));
+                role.setInheritHpRatio(nvlRatio(conf.getInheritHpRatio(), HUNDRED));
+                role.setBaseAtk(0);
+                role.setBaseHp(0);
+                role.setBaseDef(0);
+            }
         }
         this.save(role);
         playerRoleSkillService.ensureNormalSkill(role.getId());
         return role;
+    }
+
+    /** 后台更新：主角唯一、分类锁定、不可改为非主角 */
+    public void updateAdmin(PlayerRole entity) {
+        ErrorFactory.throwError(entity == null || Wx.isEmpty(entity.getId()), "角色不存在");
+        PlayerRole db = this.getById(entity.getId());
+        ErrorFactory.throwError(db == null, "角色不存在");
+
+        PlayerRoleCategory oldCat = resolveCategory(db);
+        PlayerRoleCategory newCat = entity.getRoleCategory() != null ? entity.getRoleCategory() : oldCat;
+
+        if (oldCat == PlayerRoleCategory.HERO) {
+            ErrorFactory.throwError(newCat != PlayerRoleCategory.HERO, "主角的角色分类不可更改");
+            entity.setRoleCategory(PlayerRoleCategory.HERO);
+            entity.setMainRole(true);
+        } else {
+            ErrorFactory.throwError(newCat == PlayerRoleCategory.HERO, "不能将角色改为主角，请通过主角模板发放");
+            entity.setRoleCategory(newCat == null ? PlayerRoleCategory.PARTNER : newCat);
+            entity.setMainRole(false);
+        }
+        if (entity.getRoleCategory() == PlayerRoleCategory.HERO) {
+            assertNoOtherHero(db.getUid(), db.getId());
+            entity.setGridH(entity.getGridH() == null ? 2 : entity.getGridH());
+            entity.setGridW(entity.getGridW() == null ? 2 : entity.getGridW());
+        }
+        prepareRatios(entity);
+        this.updateById(entity);
+    }
+
+    /** 后台删除：主角不可删 */
+    public void removeAdmin(String id) {
+        ErrorFactory.throwError(Wx.isEmpty(id), "角色不存在");
+        PlayerRole db = this.getById(id);
+        ErrorFactory.throwError(db == null, "角色不存在");
+        ErrorFactory.throwError(resolveCategory(db) == PlayerRoleCategory.HERO, "主角不可删除");
+        this.removeById(id);
+    }
+
+    private void assertNoOtherHero(String uid, String excludeId) {
+        var q = this.lambdaQuery()
+                .eq(PlayerRole::getUid, uid)
+                .and(w -> w.eq(PlayerRole::getMainRole, true)
+                        .or()
+                        .eq(PlayerRole::getRoleCategory, PlayerRoleCategory.HERO));
+        if (!Wx.isEmpty(excludeId)) {
+            q.ne(PlayerRole::getId, excludeId);
+        }
+        ErrorFactory.throwError(q.count() > 0, "每个玩家只能有一个主角");
+    }
+
+    private static PlayerRoleCategory resolveCategory(PlayerRole role) {
+        if (role == null) {
+            return PlayerRoleCategory.PARTNER;
+        }
+        if (role.getRoleCategory() != null) {
+            return role.getRoleCategory();
+        }
+        return Boolean.TRUE.equals(role.getMainRole()) ? PlayerRoleCategory.HERO : PlayerRoleCategory.PARTNER;
     }
 
     private static final BigDecimal HUNDRED = new BigDecimal("100");
@@ -137,6 +237,18 @@ public class PlayerRoleService extends WxServiceImpl<PlayerRoleMapper, PlayerRol
         }
         if (role.getTakenDmgRatio() == null) {
             role.setTakenDmgRatio(HUNDRED);
+        }
+        if (role.getDealElementDmgRatio() == null) {
+            role.setDealElementDmgRatio(HUNDRED);
+        }
+        if (role.getTakenElementDmgRatio() == null) {
+            role.setTakenElementDmgRatio(HUNDRED);
+        }
+        if (role.getDealPhysDmgRatio() == null) {
+            role.setDealPhysDmgRatio(HUNDRED);
+        }
+        if (role.getTakenPhysDmgRatio() == null) {
+            role.setTakenPhysDmgRatio(HUNDRED);
         }
         if (role.getLifeStealRatio() == null) {
             role.setLifeStealRatio(BigDecimal.ZERO);

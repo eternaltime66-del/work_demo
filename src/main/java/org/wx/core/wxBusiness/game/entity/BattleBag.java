@@ -11,8 +11,6 @@ import org.wx.core.wxBase.base.WxBaseEntity;
 import org.wx.core.wxBusiness.game.entity.enums.ItemType;
 import org.wx.core.wxBusiness.game.entity.vo.CraftItemDetailVo;
 
-import java.math.BigDecimal;
-
 /**
  * 战斗背包
  */
@@ -47,9 +45,6 @@ public class BattleBag extends WxBaseEntity<BattleBag> {
 
     @TableField(exist = false)
     private Integer maxStack;
-
-    @TableField(exist = false)
-    private BigDecimal weight;
 
     /** 物品详情（属性/槽位/默认技能与被动） */
     @TableField(exist = false)

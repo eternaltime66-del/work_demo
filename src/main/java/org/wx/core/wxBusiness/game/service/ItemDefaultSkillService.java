@@ -42,37 +42,36 @@ public class ItemDefaultSkillService extends WxServiceImpl<ItemDefaultSkillMappe
         return list;
     }
 
+    /**
+     * 按提交列表整表替换；未选技能的行自动丢弃，允许清空。
+     */
     @Transactional(rollbackFor = Exception.class)
     public void saveForItem(String itemId, List<ItemDefaultSkill> skills) {
         ErrorFactory.notEmpty(itemId, "物品不能为空");
         Item item = itemService.getById(itemId);
         ErrorFactory.notNull(item, "物品不存在");
 
-        int slotCount = item.getChargeSkillSlotCount() != null ? item.getChargeSkillSlotCount() : 0;
-        ErrorFactory.throwError(slotCount <= 0, "请先设置默认充能技能槽数量");
-
-        List<ItemDefaultSkill> rows = skills != null ? skills : List.of();
-        // 允许空槽：未配置的槽不落库；有配置的槽按序号保存
-        ErrorFactory.throwError(rows.size() > slotCount, "技能槽数量超出装备设定");
-
         Set<String> used = new HashSet<>();
         List<ItemDefaultSkill> cleaned = new ArrayList<>();
-        for (int i = 0; i < slotCount; i++) {
-            ItemDefaultSkill row = i < rows.size() ? rows.get(i) : null;
-            if (row == null || !StringUtils.hasText(row.getSkillId())) {
-                continue;
+        int slot = 0;
+        if (skills != null) {
+            for (ItemDefaultSkill row : skills) {
+                if (row == null || !StringUtils.hasText(row.getSkillId())) {
+                    continue;
+                }
+                ErrorFactory.throwError(!used.add(row.getSkillId()), "同一技能不能重复配置");
+                ActiveSkill skill = activeSkillService.getById(row.getSkillId());
+                ErrorFactory.notNull(skill, "技能不存在");
+                ErrorFactory.throwError(skill.getSkillType() == null || skill.getSkillType() == ActiveSkillType.NORMAL,
+                        "只能配置大招/小技能");
+                ItemDefaultSkill save = new ItemDefaultSkill();
+                save.setItemId(itemId);
+                save.setSkillId(row.getSkillId());
+                save.setSlotNo(slot);
+                save.setSort(slot);
+                cleaned.add(save);
+                slot++;
             }
-            ErrorFactory.throwError(!used.add(row.getSkillId()), "同一技能不能重复配置");
-            ActiveSkill skill = activeSkillService.getById(row.getSkillId());
-            ErrorFactory.notNull(skill, "技能不存在");
-            ErrorFactory.throwError(skill.getSkillType() == null || skill.getSkillType() == ActiveSkillType.NORMAL,
-                    "技能槽只能配置大招/小技能");
-            ItemDefaultSkill save = new ItemDefaultSkill();
-            save.setItemId(itemId);
-            save.setSkillId(row.getSkillId());
-            save.setSlotNo(i);
-            save.setSort(i);
-            cleaned.add(save);
         }
 
         this.remove(new LambdaQueryWrapper<ItemDefaultSkill>().eq(ItemDefaultSkill::getItemId, itemId));

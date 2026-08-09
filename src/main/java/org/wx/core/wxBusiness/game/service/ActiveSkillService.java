@@ -8,12 +8,16 @@ import org.wx.core.wxBase.base.WxServiceImpl;
 import org.wx.core.wxBusiness.game.entity.ActiveSkill;
 import org.wx.core.wxBusiness.game.entity.SkillCharge;
 import org.wx.core.wxBusiness.game.entity.SkillEffect;
+import org.wx.core.wxBusiness.game.entity.SkillOutput;
 import org.wx.core.wxBusiness.game.entity.enums.ActiveSkillType;
 import org.wx.core.wxBusiness.game.entity.enums.ChargeConditionType;
 import org.wx.core.wxBusiness.game.entity.enums.ChargeScope;
+import org.wx.core.wxBusiness.game.entity.enums.DamageElement;
 import org.wx.core.wxBusiness.game.entity.enums.NeedChargeMode;
 import org.wx.core.wxBusiness.game.entity.enums.SkillEffectTarget;
 import org.wx.core.wxBusiness.game.entity.enums.SkillEffectType;
+import org.wx.core.wxBusiness.game.entity.enums.SkillOutputKind;
+import org.wx.core.wxBusiness.game.battle.SkillSchoolUnit;
 import org.wx.core.wxBusiness.game.mapper.ActiveSkillMapper;
 
 import java.util.List;
@@ -21,15 +25,43 @@ import java.util.List;
 @Service
 public class ActiveSkillService extends WxServiceImpl<ActiveSkillMapper, ActiveSkill> {
 
+    @Override
+    public boolean save(ActiveSkill entity) {
+        normalizeMeta(entity);
+        return super.save(entity);
+    }
+
+    @Override
+    public boolean updateById(ActiveSkill entity) {
+        normalizeMeta(entity);
+        return super.updateById(entity);
+    }
+
+    @Override
+    public boolean saveOrUpdate(ActiveSkill entity) {
+        normalizeMeta(entity);
+        return super.saveOrUpdate(entity);
+    }
+
+    private void normalizeMeta(ActiveSkill entity) {
+        if (entity == null) {
+            return;
+        }
+        entity.setSkillSchool(SkillSchoolUnit.normalizeSchool(entity.getSkillSchool()));
+        entity.setDamageElement(SkillSchoolUnit.normalizeElement(entity.getDamageElement()));
+    }
+
     public static final String DEFAULT_NORMAL_CODE = "DEFAULT_NORMAL";
 
     @Resource
     private SkillChargeService skillChargeService;
     @Resource
     private SkillEffectService skillEffectService;
+    @Resource
+    private SkillOutputService skillOutputService;
 
     /**
-     * 删除技能并级联删除充能 / 效果配置
+     * 删除技能并级联删除充能 / 旧效果 / V2 输出
      */
     @Transactional(rollbackFor = Exception.class)
     public void removeWithChildren(String skillId) {
@@ -38,6 +70,7 @@ public class ActiveSkillService extends WxServiceImpl<ActiveSkillMapper, ActiveS
         }
         skillChargeService.remove(skillChargeService.find().eq(SkillCharge::getSkillId, skillId).wrapper());
         skillEffectService.remove(skillEffectService.find().eq(SkillEffect::getSkillId, skillId).wrapper());
+        skillOutputService.removeBySkillId(skillId);
         this.removeById(skillId);
     }
 
@@ -47,16 +80,18 @@ public class ActiveSkillService extends WxServiceImpl<ActiveSkillMapper, ActiveS
      */
     @Transactional(rollbackFor = Exception.class)
     public ActiveSkill ensureDefaultNormalSkill() {
-        // 顺带把库里所有普攻对齐为：SELF_BASE_ACTION + 每1行动值+1
         syncAllNormalChargeDefaults();
         ActiveSkill exist = this.find().eq(ActiveSkill::getCode, DEFAULT_NORMAL_CODE).one();
         if (exist != null) {
+            ensureDefaultNormalOutput(exist.getId());
             return exist;
         }
         ActiveSkill skill = new ActiveSkill();
         skill.setName("普攻");
         skill.setCode(DEFAULT_NORMAL_CODE);
         skill.setSkillType(ActiveSkillType.NORMAL);
+        skill.setSkillSchool(SkillSchoolUnit.DEFAULT_SCHOOL);
+        skill.setDamageElement(DamageElement.PHYSICAL);
         skill.setNeedChargeMode(NeedChargeMode.SELF_BASE_ACTION);
         skill.setNeedCharge(0);
         skill.setMaxCastSkill(0);
@@ -69,22 +104,49 @@ public class ActiveSkillService extends WxServiceImpl<ActiveSkillMapper, ActiveS
         this.save(skill);
 
         ensureActionValueChargeEveryOne(skill.getId());
-
-        SkillEffect effect = new SkillEffect();
-        effect.setSkillId(skill.getId());
-        effect.setName("普攻伤害");
-        effect.setTargetType(SkillEffectTarget.FIRST);
-        effect.setEffectType(SkillEffectType.DAMAGE);
-        effect.setHitSegments(1);
-        effect.setTriggerRate(100);
-        effect.setSort(0);
-        effect.setFormulaJson(
-                "[{\"kind\":\"PARAM\",\"paramMode\":\"READ\",\"readRole\":\"SELF\",\"readKey\":\"ATK\"}"
-                        + ",{\"kind\":\"OP\",\"op\":\"*\"}"
-                        + ",{\"kind\":\"PARAM\",\"paramMode\":\"LITERAL\",\"value\":\"1\"}]"
-        );
-        skillEffectService.save(effect);
+        ensureDefaultNormalOutput(skill.getId());
         return skill;
+    }
+
+    private void ensureDefaultNormalOutput(String skillId) {
+        if (Wx.isEmpty(skillId)) {
+            return;
+        }
+        List<SkillOutput> outs = skillOutputService.listBySkillId(skillId);
+        if (outs != null && !outs.isEmpty()) {
+            return;
+        }
+        String formula = "[{\"kind\":\"PARAM\",\"paramMode\":\"READ\",\"readRole\":\"SELF\",\"readKey\":\"ATK\"}"
+                + ",{\"kind\":\"OP\",\"op\":\"*\"}"
+                + ",{\"kind\":\"PARAM\",\"paramMode\":\"LITERAL\",\"value\":\"1\"}]";
+        SkillOutput out = new SkillOutput();
+        out.setSkillId(skillId);
+        out.setName("普攻伤害");
+        out.setOutputKind(SkillOutputKind.EFFECT);
+        out.setTargetType(SkillEffectTarget.FIRST);
+        out.setEffectType(SkillEffectType.DAMAGE);
+        out.setDamageElement(DamageElement.PHYSICAL);
+        out.setHitSegments(1);
+        out.setTriggerRate(100);
+        out.setDurationAv(0);
+        out.setSort(0);
+        out.setFormulaJson(formula);
+        skillOutputService.save(out);
+
+        // 兼容旧战斗路径：若无 SkillEffect 也补一条
+        List<SkillEffect> effects = skillEffectService.listBySkillId(skillId);
+        if (effects == null || effects.isEmpty()) {
+            SkillEffect effect = new SkillEffect();
+            effect.setSkillId(skillId);
+            effect.setName("普攻伤害");
+            effect.setTargetType(SkillEffectTarget.FIRST);
+            effect.setEffectType(SkillEffectType.DAMAGE);
+            effect.setHitSegments(1);
+            effect.setTriggerRate(100);
+            effect.setSort(0);
+            effect.setFormulaJson(formula);
+            skillEffectService.save(effect);
+        }
     }
 
     /**

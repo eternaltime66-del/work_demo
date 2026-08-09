@@ -51,4 +51,34 @@ public class StageLevelMonster extends WxBaseEntity<StageLevelMonster> {
 
     @TableField(exist = false)
     private Integer baseHp;
+
+    @TableField(exist = false)
+    private Integer baseAtk;
+
+    @TableField(exist = false)
+    private Integer baseDef;
+
+    @TableField(exist = false)
+    private Integer baseAction;
+
+    @TableField(exist = false)
+    private String normalSkillId;
+
+    @TableField(exist = false)
+    private String normalSkillName;
+
+    @TableField(exist = false)
+    private String smallSkillId;
+
+    @TableField(exist = false)
+    private String smallSkillName;
+
+    @TableField(exist = false)
+    private String ultimateSkillId;
+
+    @TableField(exist = false)
+    private String ultimateSkillName;
+
+    @TableField(exist = false)
+    private String remarkText;
 }

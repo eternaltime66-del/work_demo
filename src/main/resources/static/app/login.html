@@ -1,0 +1,185 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>登录</title>
+  <link rel="icon" type="image/png" href="art/ui/game-app-icon.png">
+  <link rel="apple-touch-icon" href="art/ui/game-app-icon.png">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/auth.css">
+  <script src="js/dev-live.js"></script>
+  <script src="js/vue.global.prod.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/art.js"></script>
+</head>
+<body>
+<div id="app" class="page">
+  <div class="bg-glow bg-glow-1"></div>
+  <div class="bg-glow bg-glow-2"></div>
+
+  <div class="brand">
+    <div class="brand-badge art-slot" data-art="brand/logo.png">
+      <img class="brand-logo" alt="" hidden>
+      <span class="brand-fallback">G</span>
+    </div>
+    <h1>欢迎回来</h1>
+    <p>登录后进入游戏首页</p>
+  </div>
+
+  <div class="card">
+    <div class="tabs">
+      <button class="tab" :class="{ active: mode === 'password' }" @click="mode = 'password'; clearErrors()">密码登录</button>
+      <button class="tab" :class="{ active: mode === 'code' }" @click="mode = 'code'; clearErrors()">验证码登录</button>
+    </div>
+
+    <div class="field">
+      <label>邮箱</label>
+      <div class="input-wrap" :class="{ error: !!errors.email }">
+        <input v-model.trim="form.email" type="email" placeholder="请输入邮箱" autocomplete="email" @input="errors.email = ''">
+      </div>
+      <div v-if="errors.email" class="field-error">{{ errors.email }}</div>
+    </div>
+
+    <div class="field" v-if="mode === 'password'">
+      <label>密码</label>
+      <div class="input-wrap" :class="{ error: !!errors.password }">
+        <input v-model="form.password" type="password" placeholder="请输入密码" autocomplete="current-password" @input="errors.password = ''">
+      </div>
+      <div v-if="errors.password" class="field-error">{{ errors.password }}</div>
+    </div>
+
+    <div class="field" v-else>
+      <label>验证码</label>
+      <div class="input-wrap" :class="{ error: !!errors.emsCode }">
+        <input v-model.trim="form.emsCode" type="text" maxlength="6" placeholder="请输入验证码" inputmode="numeric" @input="errors.emsCode = ''">
+        <button class="code-btn" :disabled="countdown > 0 || sendingCode" @click="sendCode">
+          {{ countdown > 0 ? countdown + 's' : (sendingCode ? '发送中…' : '获取验证码') }}
+        </button>
+      </div>
+      <div v-if="errors.emsCode" class="field-error">{{ errors.emsCode }}</div>
+    </div>
+
+    <button class="btn-primary btn-block" :disabled="loading" @click="submit">
+      {{ loading ? '登录中...' : '立即登录' }}
+    </button>
+
+    <div class="links">
+      <a href="register.html">注册账号</a>
+      <span></span>
+    </div>
+
+    <div class="tip">调试期间验证码固定为 <strong>123456</strong></div>
+  </div>
+
+  <div v-if="toast.show" class="toast" :class="toast.type">{{ toast.text }}</div>
+</div>
+
+<script src="js/api.js"></script>
+<script>
+const { createApp } = Vue;
+
+createApp({
+  data() {
+    return {
+      mode: 'password',
+      loading: false,
+      sendingCode: false,
+      countdown: 0,
+      timer: null,
+      form: { email: '', password: '', emsCode: '' },
+      errors: { email: '', password: '', emsCode: '' },
+      toast: { show: false, text: '', type: 'error' }
+    };
+  },
+  mounted() {
+    if (GameApi.getToken()) location.href = (APP_CONFIG.homePage || 'index.html');
+    this.$nextTick(() => {
+      if (!window.ArtSlots) return;
+      ArtSlots.apply(this.$el);
+      var badge = this.$el.querySelector('.brand-badge');
+      if (!badge) return;
+      ArtSlots.probe('brand/logo.png').then(function (url) {
+        var img = badge.querySelector('.brand-logo');
+        var fb = badge.querySelector('.brand-fallback');
+        if (url && img) {
+          img.src = url;
+          img.hidden = false;
+          if (fb) fb.hidden = true;
+          badge.classList.add('art-ready');
+        }
+      });
+    });
+  },
+  beforeUnmount() {
+    if (this.timer) clearInterval(this.timer);
+  },
+  methods: {
+    clearErrors() {
+      this.errors = { email: '', password: '', emsCode: '' };
+    },
+    showToast(text, type) {
+      this.toast = { show: true, text, type: type || 'error' };
+      setTimeout(() => { this.toast.show = false; }, 2200);
+    },
+    validateEmail() {
+      if (!this.form.email) {
+        this.errors.email = '请输入邮箱';
+        return false;
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.form.email)) {
+        this.errors.email = '邮箱格式不正确';
+        return false;
+      }
+      this.errors.email = '';
+      return true;
+    },
+    startCountdown() {
+      this.countdown = 60;
+      this.timer = setInterval(() => {
+        this.countdown -= 1;
+        if (this.countdown <= 0) { clearInterval(this.timer); this.timer = null; }
+      }, 1000);
+    },
+    sendCode() {
+      if (!this.validateEmail() || this.countdown > 0) return;
+      this.sendingCode = true;
+      GameApi.sendEmailCode(this.form.email)
+        .then(() => { this.showToast('验证码已发送', 'success'); this.startCountdown(); })
+        .catch((err) => this.showToast(err.message))
+        .finally(() => { this.sendingCode = false; });
+    },
+    submit() {
+      this.clearErrors();
+      if (!this.validateEmail()) return;
+      if (this.mode === 'password') {
+        if (!this.form.password) { this.errors.password = '请输入密码'; return; }
+        this.loading = true;
+        GameApi.emailLogin(this.form.email, this.form.password)
+          .then((res) => {
+            GameApi.saveToken(res.token);
+            this.showToast('登录成功', 'success');
+            setTimeout(() => { location.href = (APP_CONFIG.homePage || 'index.html'); }, 400);
+          })
+          .catch((err) => this.showToast(err.message))
+          .finally(() => { this.loading = false; });
+        return;
+      }
+      if (!this.form.emsCode) { this.errors.emsCode = '请输入验证码'; return; }
+      this.loading = true;
+      GameApi.emailLoginByCode(this.form.email, this.form.emsCode)
+        .then((res) => {
+          GameApi.saveToken(res.token);
+          this.showToast('登录成功', 'success');
+          setTimeout(() => { location.href = (APP_CONFIG.homePage || 'index.html'); }, 400);
+        })
+        .catch((err) => this.showToast(err.message))
+        .finally(() => { this.loading = false; });
+    }
+  }
+}).mount('#app');
+</script>
+</body>
+</html>

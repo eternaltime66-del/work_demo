@@ -1,10 +1,10 @@
 package org.wx.core.wxBusiness.game.entity.enums;
 
 /**
- * 战斗外被动-效果属性。
+ * 基础型被动-效果属性。
  * <ul>
- *   <li>基础：攻击/生命/防御，平坦加减</li>
- *   <li>高级：吸血、攻速、最终攻防血比例为加法；造成/受到伤害比例叠乘</li>
+ *   <li>基础属性：攻击/生命/防御，平坦加减</li>
+ *   <li>高级属性：吸血、攻速、最终攻防血比例为加法；伤害比例类为先后顺序乘法叠乘</li>
  * </ul>
  */
 public enum PassiveEffectAttrKey {
@@ -16,6 +16,10 @@ public enum PassiveEffectAttrKey {
     ATK_SPEED("攻速", false, StackMode.ADD_PERCENT),
     DEAL_DMG_RATIO("造成伤害比例", false, StackMode.MULT_PERCENT),
     TAKEN_DMG_RATIO("受到伤害比例", false, StackMode.MULT_PERCENT),
+    DEAL_ELEMENT_DMG_RATIO("造成元素伤害比例", false, StackMode.MULT_PERCENT),
+    TAKEN_ELEMENT_DMG_RATIO("受到元素伤害比例", false, StackMode.MULT_PERCENT),
+    DEAL_PHYS_DMG_RATIO("造成物理伤害比例", false, StackMode.MULT_PERCENT),
+    TAKEN_PHYS_DMG_RATIO("受到物理伤害比例", false, StackMode.MULT_PERCENT),
     FINAL_ATK("最终攻击", false, StackMode.ADD_PERCENT),
     FINAL_HP("最终生命", false, StackMode.ADD_PERCENT),
     FINAL_DEF("最终防御", false, StackMode.ADD_PERCENT);
@@ -51,6 +55,12 @@ public enum PassiveEffectAttrKey {
     /** 最终攻击/生命/防御比例 */
     public boolean isFinalRatio() {
         return this == FINAL_ATK || this == FINAL_HP || this == FINAL_DEF;
+    }
+
+    public boolean isDamageRatio() {
+        return this == DEAL_DMG_RATIO || this == TAKEN_DMG_RATIO
+                || this == DEAL_ELEMENT_DMG_RATIO || this == TAKEN_ELEMENT_DMG_RATIO
+                || this == DEAL_PHYS_DMG_RATIO || this == TAKEN_PHYS_DMG_RATIO;
     }
 
     public StackMode getStackMode() {

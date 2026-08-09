@@ -37,6 +37,12 @@ public class Recipe extends WxBaseEntity<Recipe> {
     /** 是否启用 */
     private Boolean enable;
 
+    /**
+     * 解锁所需主线章节（CHAPTER 的 Stage.id）。
+     * 空=不限制；非空时需该章节对玩家已解锁（章内任一小关可打）才可合成。
+     */
+    private String unlockChapterId;
+
     private String remark;
 
     @TableField(exist = false)

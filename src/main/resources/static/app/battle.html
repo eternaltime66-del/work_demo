@@ -1,0 +1,3461 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>战斗</title>
+  <link rel="icon" type="image/png" href="art/ui/game-app-icon.png">
+  <link rel="apple-touch-icon" href="art/ui/game-app-icon.png">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/modal.css">
+  <link rel="stylesheet" href="css/warehouse.css">
+  <link rel="stylesheet" href="css/battle.css?v=20260809b">
+  <script src="js/dev-live.js"></script>
+  <script src="js/vue.global.prod.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/art.js"></script>
+</head>
+<body>
+<div id="app" class="page battle-page">
+  <div class="bg-glow bg-glow-1"></div>
+  <div class="bg-glow bg-glow-2"></div>
+
+  <header class="battle-header">
+    <div class="bh-left">
+      <button type="button" class="bh-back hit-44" aria-label="返回" @click="goBack">‹</button>
+      <button
+        type="button"
+        class="bh-pause hit-44"
+        :class="{ active: paused }"
+        :disabled="!canPause"
+        @click="togglePause"
+      >{{ paused ? '继续' : '暂停' }}</button>
+    </div>
+    <div class="bh-title" v-if="!battleStarted">
+      <strong>战斗</strong>
+      <span v-if="levelTitle" class="ellipsis">{{ levelTitle }}</span>
+    </div>
+    <div class="bh-axis" v-if="battleStarted" aria-live="polite" :title="'轴 ' + axisDisplay">
+      <span class="bh-axis-num num">{{ axisTimeText }}</span>
+    </div>
+    <div class="bh-actions">
+      <button
+        type="button"
+        class="bh-skip hit-44"
+        :disabled="!showSpeedCtrl"
+        @click="skipReplay"
+      >跳过</button>
+      <button
+        type="button"
+        class="bh-speed hit-44"
+        :disabled="!showSpeedCtrl"
+        @click="cycleSpeed"
+      >»{{ playbackSpeed }}x</button>
+      <button type="button" class="bh-home hit-44" @click="goHome">首页</button>
+    </div>
+  </header>
+
+  <div v-if="loading" class="loading-wrap">
+    <div class="skeleton-block" style="height:120px;margin-bottom:10px"></div>
+    <div class="skeleton-block" style="height:120px"></div>
+  </div>
+
+  <div v-else-if="error" class="error-wrap">
+    <div>{{ error }}</div>
+    <button type="button" class="btn-battle-ghost" @click="goBack">返回出击</button>
+  </div>
+
+  <template v-else>
+    <div class="battle-main">
+      <div
+        class="arena"
+        ref="arena"
+        :class="[
+          { fighting: fighting || replaying, win: outcome === 'WIN', lose: outcome === 'LOSE', paused: paused },
+          shakeClass
+        ]"
+      >
+        <div v-if="paused" class="battle-pause-overlay" @click="togglePause">
+          <span>已暂停</span>
+          <em>点击继续</em>
+        </div>
+        <div class="fx-layer" aria-hidden="true">
+          <div
+            v-for="f in floaters"
+            :key="f.id"
+            class="floater"
+            :class="[f.cls, f.dir === 'down' ? 'dir-down' : 'dir-up']"
+            :style="{ '--x': f.x + 'px', '--y': f.y + 'px', '--push': (f.push || 0) + 'px' }"
+          >{{ f.text }}</div>
+          <!-- 普攻冲刺残影：走特效层，避免被棋盘 overflow:hidden 裁切 -->
+          <div
+            v-for="g in strikeGhosts"
+            :key="g.id"
+            class="strike-ghost"
+            :class="{ impact: g.phase === 'impact', flip: g.flip }"
+            :style="strikeGhostStyle(g)"
+          ></div>
+        </div>
+
+        <div class="side-block enemy-side">
+          <div class="formation-board enemy">
+            <div class="formation-grid">
+              <div class="formation-cells" aria-hidden="true">
+                <div v-for="n in 30" :key="'ec-' + n" class="formation-cell"></div>
+              </div>
+              <div class="formation-units">
+                <div
+                  v-for="(m, idx) in monsters"
+                  :key="unitKey(m, 'm', idx)"
+                  class="formation-unit"
+                  :data-uid="unitUid(m)"
+                  :class="unitBoardClass(m, 'enemy')"
+                  :style="unitGridStyle(m)"
+                  @click="focusUnit(unitUid(m))"
+                >
+                  <i class="unit-shadow art-slot" data-art="ui/unit-shadow.png"></i>
+                  <i class="unit-aura art-slot" :data-art="'ui/aura-' + auraKey(m.rarity) + '.png'"></i>
+                  <div
+                    class="unit-sprite art-slot"
+                    :class="{ 'has-spr': hasSprite(m) }"
+                    :data-art="spriteArt(m)"
+                  ></div>
+                  <div class="unit-hp" aria-hidden="true">
+                    <i :style="{ width: unitHpPct(unitUid(m)) + '%' }"></i>
+                  </div>
+                  <div class="unit-skill-bars" v-if="monsterSkillBars(unitUid(m)).length" aria-hidden="true">
+                    <div
+                      v-for="r in monsterSkillBars(unitUid(m))"
+                      :key="r.key"
+                      class="usk-bar"
+                      :class="[r.cls, { full: r.pct >= 100 }]"
+                      :title="r.title"
+                    >
+                      <i :style="{ width: r.pct + '%' }"></i>
+                    </div>
+                  </div>
+                  <span class="unit-tag name-enemy">{{ shortName(m.monsterName || m.name) }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="clash-line" :class="{ sweep: clashSweep }" aria-hidden="true">
+          <i class="clash-beam art-slot" data-art="ui/clash-line.png"></i>
+          <span>⚔</span>
+        </div>
+
+        <div class="side-block ally-side">
+          <div class="formation-board ally">
+            <div class="formation-grid">
+              <div class="formation-cells" aria-hidden="true">
+                <div v-for="n in 30" :key="'ac-' + n" class="formation-cell"></div>
+              </div>
+              <div class="formation-units">
+                <div
+                  v-for="(u, idx) in allies"
+                  :key="unitKey(u, 'a', idx)"
+                  class="formation-unit player"
+                  :data-uid="unitUid(u)"
+                  :class="unitBoardClass(u, 'ally')"
+                  :style="unitGridStyle(u)"
+                  @click="focusUnit(unitUid(u))"
+                >
+                  <i class="unit-shadow art-slot" data-art="ui/unit-shadow.png"></i>
+                  <i class="unit-aura art-slot" data-art="ui/aura-rare.png"></i>
+                  <div
+                    class="unit-sprite art-slot"
+                    :class="{ 'has-spr': hasSprite(u) }"
+                    :data-art="spriteArt(u)"
+                  ></div>
+                  <div class="unit-hp ally" aria-hidden="true">
+                    <i :style="{ width: unitHpPct(unitUid(u)) + '%' }"></i>
+                  </div>
+                  <span class="unit-tag name-ally">{{ allyUiName(u) }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="focus-bar" v-if="focusUnitView">
+      <div class="fb-face">{{ focusUnitView.ch }}</div>
+      <div class="fb-mid">
+        <div class="fb-name">
+          <div class="fb-name-left">
+            <span class="fb-name-text">{{ focusUnitView.name }}</span>
+            <span class="fb-hpnum num">{{ focusUnitView.hp }}/{{ focusUnitView.maxHp }}</span>
+          </div>
+          <div class="fb-buffs" v-if="focusUnitView.buffs.length">
+            <span
+              v-for="(b, bi) in focusUnitView.buffs"
+              :key="'bf-' + bi"
+              class="buff"
+              :class="b.dir === 'DOWN' ? 'down' : 'up'"
+              :title="buffChipTitle(b)"
+            >
+              <span class="buff-icon">{{ buffAttrIcon(b.attrKey) }}</span><span class="buff-arrow">{{ b.dir === 'DOWN' ? '⬇' : '⬆' }}</span><em v-if="b.stack > 1">{{ b.stack }}</em>
+            </span>
+          </div>
+        </div>
+        <div class="hpbar">
+          <i class="hp-ghost" :style="{ width: focusUnitView.ghostPct + '%' }"></i>
+          <i class="hp-fill" :style="{ width: focusUnitView.hpPct + '%' }"></i>
+        </div>
+        <div
+          class="fb-charges hide-scrollbar"
+          v-if="focusUnitView.normalRing || focusUnitView.charges.length"
+          ref="fbCharges"
+          @pointerdown="onFbChargesDown"
+          @pointermove="onFbChargesMove"
+          @pointerup="onFbChargesUp"
+          @pointercancel="onFbChargesUp"
+        >
+          <div
+            v-if="focusUnitView.normalRing"
+            class="fb-normal-ring usk-ring"
+            :class="[focusUnitView.side === 'ENEMY' ? 'side-enemy' : 'side-ally', { full: focusUnitView.normalRing.full }]"
+            title="普攻充能"
+          >
+            <svg class="usk-svg" viewBox="0 0 32 32">
+              <circle class="usk-track" cx="16" cy="16" r="12"></circle>
+              <circle
+                class="usk-prog"
+                cx="16" cy="16" r="12"
+                :stroke-dasharray="focusUnitView.normalRing.circ"
+                :stroke-dashoffset="focusUnitView.normalRing.offset"
+              ></circle>
+            </svg>
+            <span class="usk-label">普</span>
+          </div>
+          <div
+            v-for="c in focusUnitView.charges"
+            :key="c.skillId"
+            class="fb-charge"
+            :class="['mode-' + c.mode, { full: c.full }]"
+          >
+            <span class="cg-name">{{ c.name || '充能' }}</span>
+            <span v-if="c.mode === 'gem'" class="cg-gems" :title="c.cur + '/' + c.max">
+              <i
+                v-for="k in c.max"
+                :key="'gem-' + c.skillId + '-' + k"
+                class="cg-gem"
+                :class="{ on: k <= c.cur }"
+              ></i>
+            </span>
+            <span v-else-if="c.mode === 'battery'" class="batt" :title="c.cur + '/' + c.max">
+              <i
+                v-for="k in c.max"
+                :key="'bat-' + c.skillId + '-' + k"
+                :class="{ on: k <= c.cur }"
+              ></i>
+            </span>
+            <span v-else class="cg-bar" :title="c.cur + '/' + c.max">
+              <i :style="{ width: c.pct + '%' }"></i>
+            </span>
+            <span class="cg-num num">{{ c.cur }}/{{ c.max }}</span>
+          </div>
+        </div>
+      </div>
+      <button type="button" class="fb-detail hit-44" @click="openRosterDetail">详情</button>
+    </div>
+
+    <div v-if="rosterDetailOpen" class="roster-detail-mask" @click.self="closeRosterDetail">
+      <div class="roster-detail-panel">
+        <div class="roster-detail-head">
+          <h3>角色详情</h3>
+          <button type="button" class="item-detail-close hit-44" aria-label="关闭" @click="closeRosterDetail">×</button>
+        </div>
+        <div class="roster-detail-body hide-scrollbar">
+          <section class="roster-section" v-if="rosterAllyRows.length">
+            <header class="roster-section-head">我方</header>
+            <div
+              v-for="row in rosterAllyRows"
+              :key="'ra-' + row.uid"
+              class="focus-bar roster-card"
+              :class="{ dead: row.dead, ally: true }"
+            >
+              <div class="fb-face">{{ row.ch }}</div>
+              <div class="fb-mid">
+                <div class="fb-name">
+                  <div class="fb-name-left">
+                    <span class="fb-name-text">{{ row.name }}</span>
+                    <span class="fb-hpnum num">{{ row.hp }}/{{ row.maxHp }}</span>
+                  </div>
+                  <div class="fb-buffs" v-if="row.buffs.length">
+                    <span
+                      v-for="(b, bi) in row.buffs"
+                      :key="'rab-' + row.uid + '-' + bi"
+                      class="buff"
+                      :class="b.dir === 'DOWN' ? 'down' : 'up'"
+                      :title="buffChipTitle(b)"
+                    >
+                      <span class="buff-icon">{{ buffAttrIcon(b.attrKey) }}</span><span class="buff-arrow">{{ b.dir === 'DOWN' ? '⬇' : '⬆' }}</span><em v-if="b.stack > 1">{{ b.stack }}</em>
+                    </span>
+                  </div>
+                </div>
+                <div class="hpbar">
+                  <i class="hp-ghost" :style="{ width: row.ghostPct + '%' }"></i>
+                  <i class="hp-fill" :style="{ width: row.hpPct + '%' }"></i>
+                </div>
+                <div
+                  class="fb-charges hide-scrollbar"
+                  v-if="row.normalRing || row.charges.length"
+                  @pointerdown="onFbChargesDown"
+                  @pointermove="onFbChargesMove"
+                  @pointerup="onFbChargesUp"
+                  @pointercancel="onFbChargesUp"
+                >
+                  <div
+                    v-if="row.normalRing"
+                    class="fb-normal-ring usk-ring side-ally"
+                    :class="{ full: row.normalRing.full }"
+                    title="普攻充能"
+                  >
+                    <svg class="usk-svg" viewBox="0 0 32 32">
+                      <circle class="usk-track" cx="16" cy="16" r="12"></circle>
+                      <circle
+                        class="usk-prog"
+                        cx="16" cy="16" r="12"
+                        :stroke-dasharray="row.normalRing.circ"
+                        :stroke-dashoffset="row.normalRing.offset"
+                      ></circle>
+                    </svg>
+                    <span class="usk-label">普</span>
+                  </div>
+                  <div
+                    v-for="c in row.charges"
+                    :key="'rac-' + row.uid + '-' + c.skillId"
+                    class="fb-charge"
+                    :class="['mode-' + c.mode, { full: c.full }]"
+                  >
+                    <span class="cg-name">{{ c.name || '充能' }}</span>
+                    <span v-if="c.mode === 'gem'" class="cg-gems" :title="c.cur + '/' + c.max">
+                      <i v-for="k in c.max" :key="'rag-' + row.uid + '-' + c.skillId + '-' + k" class="cg-gem" :class="{ on: k <= c.cur }"></i>
+                    </span>
+                    <span v-else-if="c.mode === 'battery'" class="batt" :title="c.cur + '/' + c.max">
+                      <i v-for="k in c.max" :key="'rabt-' + row.uid + '-' + c.skillId + '-' + k" :class="{ on: k <= c.cur }"></i>
+                    </span>
+                    <span v-else class="cg-bar" :title="c.cur + '/' + c.max">
+                      <i :style="{ width: c.pct + '%' }"></i>
+                    </span>
+                    <span class="cg-num num">{{ c.cur }}/{{ c.max }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+          <section class="roster-section" v-if="rosterEnemyRows.length">
+            <header class="roster-section-head is-enemy">敌方</header>
+            <div
+              v-for="row in rosterEnemyRows"
+              :key="'re-' + row.uid"
+              class="focus-bar roster-card"
+              :class="{ dead: row.dead, enemy: true }"
+            >
+              <div class="fb-face is-enemy">{{ row.ch }}</div>
+              <div class="fb-mid">
+                <div class="fb-name">
+                  <div class="fb-name-left">
+                    <span class="fb-name-text">{{ row.name }}</span>
+                    <span class="fb-hpnum num">{{ row.hp }}/{{ row.maxHp }}</span>
+                  </div>
+                  <div class="fb-buffs" v-if="row.buffs.length">
+                    <span
+                      v-for="(b, bi) in row.buffs"
+                      :key="'reb-' + row.uid + '-' + bi"
+                      class="buff"
+                      :class="b.dir === 'DOWN' ? 'down' : 'up'"
+                      :title="buffChipTitle(b)"
+                    >
+                      <span class="buff-icon">{{ buffAttrIcon(b.attrKey) }}</span><span class="buff-arrow">{{ b.dir === 'DOWN' ? '⬇' : '⬆' }}</span><em v-if="b.stack > 1">{{ b.stack }}</em>
+                    </span>
+                  </div>
+                </div>
+                <div class="hpbar">
+                  <i class="hp-ghost" :style="{ width: row.ghostPct + '%' }"></i>
+                  <i class="hp-fill is-enemy" :style="{ width: row.hpPct + '%' }"></i>
+                </div>
+                <div
+                  class="fb-charges hide-scrollbar"
+                  v-if="row.normalRing || row.charges.length"
+                  @pointerdown="onFbChargesDown"
+                  @pointermove="onFbChargesMove"
+                  @pointerup="onFbChargesUp"
+                  @pointercancel="onFbChargesUp"
+                >
+                  <div
+                    v-if="row.normalRing"
+                    class="fb-normal-ring usk-ring side-enemy"
+                    :class="{ full: row.normalRing.full }"
+                    title="普攻充能"
+                  >
+                    <svg class="usk-svg" viewBox="0 0 32 32">
+                      <circle class="usk-track" cx="16" cy="16" r="12"></circle>
+                      <circle
+                        class="usk-prog"
+                        cx="16" cy="16" r="12"
+                        :stroke-dasharray="row.normalRing.circ"
+                        :stroke-dashoffset="row.normalRing.offset"
+                      ></circle>
+                    </svg>
+                    <span class="usk-label">普</span>
+                  </div>
+                  <div
+                    v-for="c in row.charges"
+                    :key="'rec-' + row.uid + '-' + c.skillId"
+                    class="fb-charge"
+                    :class="['mode-' + c.mode, { full: c.full }]"
+                  >
+                    <span class="cg-name">{{ c.name || '充能' }}</span>
+                    <span v-if="c.mode === 'gem'" class="cg-gems" :title="c.cur + '/' + c.max">
+                      <i v-for="k in c.max" :key="'reg-' + row.uid + '-' + c.skillId + '-' + k" class="cg-gem" :class="{ on: k <= c.cur }"></i>
+                    </span>
+                    <span v-else-if="c.mode === 'battery'" class="batt" :title="c.cur + '/' + c.max">
+                      <i v-for="k in c.max" :key="'rebt-' + row.uid + '-' + c.skillId + '-' + k" :class="{ on: k <= c.cur }"></i>
+                    </span>
+                    <span v-else class="cg-bar" :title="c.cur + '/' + c.max">
+                      <i :style="{ width: c.pct + '%' }"></i>
+                    </span>
+                    <span class="cg-num num">{{ c.cur }}/{{ c.max }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+          <div class="sd-empty" v-if="!rosterAllyRows.length && !rosterEnemyRows.length">暂无角色</div>
+        </div>
+      </div>
+    </div>
+
+    <div
+      class="log-drawer"
+      :class="{ open: logDrawerOpen, has: visibleLogs.length }"
+      @pointerdown="onLogDrawerDown"
+      @pointermove="onLogDrawerMove"
+      @pointerup="onLogDrawerUp"
+      @pointercancel="onLogDrawerUp"
+    >
+      <div class="log-drawer-handle"></div>
+      <div class="battle-log-head">
+        <span>战斗日志</span>
+        <span class="battle-log-count">
+          <template v-if="visibleLogs.length">{{ visibleLogs.length }}{{ pendingLogs.length ? ' / ' + (visibleLogs.length + pendingLogs.length) : '' }}</template>
+          <template v-if="visibleLogs.length"> · {{ logDrawerOpen ? '下滑收起' : '上滑展开' }}</template>
+        </span>
+      </div>
+      <div class="battle-log-list" ref="logList" @click="onBattleLogClick">
+        <div v-if="!visibleLogs.length" class="battle-log-empty">战斗进行中，日志将在此播放</div>
+        <template v-for="(block, bIdx) in visibleLogBlocks" :key="'logb-' + bIdx">
+          <div v-if="block.kind === 'special'" class="battle-log-line" :class="block.cls" v-html="block.html"></div>
+          <div v-else class="battle-log-group" :class="block.groupCls">
+            <div
+              v-for="(row, rIdx) in block.rows"
+              :key="'logr-' + bIdx + '-' + rIdx"
+              class="battle-log-line"
+              :class="row.cls"
+              v-html="row.html"
+            ></div>
+          </div>
+        </template>
+      </div>
+    </div>
+  </template>
+
+  <div v-if="resultBanner" class="result-banner" :class="resultBanner">
+    {{ resultBanner === 'win' ? '胜利' : '失败' }}
+  </div>
+
+  <div v-if="resultModal.show" class="result-mask" @click.self="closeResultModal">
+    <div class="result-modal" :class="resultModal.outcome === 'WIN' ? 'is-win' : 'is-lose'">
+      <h2 class="result-level-title" v-if="levelTitle">{{ levelTitle }}</h2>
+      <div class="result-stat-row">
+        <div class="result-outcome">{{ resultModal.outcome === 'WIN' ? '战斗胜利' : '战斗失败' }}</div>
+        <div class="result-time" v-if="resultModal.durationText">用时 {{ resultModal.durationText }}</div>
+      </div>
+
+      <template v-if="resultModal.outcome === 'WIN'">
+        <template v-if="resultModal.firstClear">
+          <div class="result-section-label">首通奖励</div>
+          <div v-if="resultModal.levelFirstRewards.length" class="result-loot">
+            <div
+              v-for="(r, i) in resultModal.levelFirstRewards"
+              :key="'fr-lv-' + (r.itemId || i)"
+              class="result-loot-row is-first"
+              :style="{ '--stagger': i }"
+            >
+              <div class="result-loot-icon">🎁</div>
+              <div class="result-loot-name">{{ r.itemName || r.itemId || '未知物品' }}</div>
+              <div class="result-loot-qty">×{{ r.qty != null ? r.qty : 1 }}</div>
+            </div>
+          </div>
+          <div v-else class="result-loot-empty">无</div>
+
+          <template v-if="resultModal.chapterFirstRewards.length">
+            <div class="result-section-label">大关首通</div>
+            <div class="result-loot">
+              <div
+                v-for="(r, i) in resultModal.chapterFirstRewards"
+                :key="'fr-ch-' + (r.itemId || i)"
+                class="result-loot-row is-first"
+                :style="{ '--stagger': i }"
+              >
+                <div class="result-loot-icon">🎁</div>
+                <div class="result-loot-name">{{ r.itemName || r.itemId || '未知物品' }}</div>
+                <div class="result-loot-qty">×{{ r.qty != null ? r.qty : 1 }}</div>
+              </div>
+            </div>
+          </template>
+          <div class="result-loot-note">已放入仓库</div>
+        </template>
+
+        <template v-if="resultModal.drops.length">
+          <div class="result-section-label">获得材料</div>
+          <div class="result-loot">
+            <div
+              v-for="(d, i) in resultModal.drops"
+              :key="d.itemId || ('drop-' + i)"
+              class="result-loot-row"
+              :style="{ '--stagger': i }"
+            >
+              <div class="result-loot-icon">
+                <img v-if="itemIconIsImage(d.icon)" :src="itemIconSrc(d.icon)" :alt="d.itemName">
+                <span v-else>{{ d.icon || '📦' }}</span>
+              </div>
+              <div class="result-loot-name">{{ d.itemName || '未知材料' }}</div>
+              <div class="result-loot-qty">×{{ d.quantity || 0 }}</div>
+            </div>
+          </div>
+          <div class="result-loot-note">已放入仓库</div>
+        </template>
+        <div v-else class="result-loot-empty">本场无掉落</div>
+      </template>
+      <div v-else class="result-lose-tip">再调整阵容或升级后再战</div>
+
+      <div class="result-actions">
+        <button
+          v-if="resultModal.outcome === 'WIN'"
+          type="button"
+          class="result-btn primary"
+          :disabled="!nextLevelId"
+          @click="goNextLevel"
+        >{{ battleMode === 'tower' ? (nextLevelId ? '下一层' : '已通关') : (nextLevelId ? '下一关' : '已是最后一关') }}</button>
+        <button type="button" class="result-btn gold" v-if="battleMode !== 'tower'" @click="fightAgain">再战一次</button>
+        <button type="button" class="result-btn gold" v-else @click="goBack">返回出击</button>
+        <div class="result-actions-row">
+          <button type="button" class="result-btn ghost" @click="goHome">回去首页</button>
+          <button type="button" class="result-btn ghost" @click="viewLogs">查看日志</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div
+    v-if="skillDetailOpen"
+    class="skill-detail-mask"
+    :class="{ 'modal-under': buffDetailOpen }"
+    @click.self="closeSkillDetail"
+  >
+    <div class="skill-detail-panel">
+      <div class="skill-detail-head">
+        <h3>{{ skillDetailKind === 'passive' ? '被动详情' : '技能详情' }}</h3>
+        <button type="button" class="item-detail-close hit-44" aria-label="关闭" @click="closeSkillDetail">×</button>
+      </div>
+      <div v-if="skillDetailLoading" class="skill-detail-body">
+        <div class="skeleton-block" style="height:64px;margin-bottom:10px"></div>
+        <div class="skeleton-block" style="height:14px;width:70%;margin-bottom:8px"></div>
+        <div class="skeleton-block" style="height:14px;width:45%"></div>
+      </div>
+      <div v-else-if="skillDetailKind === 'active' && skillDetail && skillDetail.skill" class="skill-detail-body">
+        <div class="sd-hero">
+          <span class="sd-type-pill" :class="'is-' + (skillDetail.skill.skillType || 'NORMAL')">
+            {{ skillTypeLabel(skillDetail.skill.skillType) }}
+          </span>
+          <div class="sd-name">{{ skillDetail.skill.name || '技能' }}</div>
+          <div class="sd-code" v-if="skillDetail.skill.code">{{ skillDetail.skill.code }}</div>
+        </div>
+        <div class="sd-meta">
+          <div class="sd-chip">
+            <span class="sd-chip-label">所需充能</span>
+            <span class="sd-chip-val">{{ skillNeedChargeText(skillDetail.skill) }}</span>
+          </div>
+          <div class="sd-chip">
+            <span class="sd-chip-label">流派</span>
+            <span class="sd-chip-val sd-chip-val-sm">{{ skillDetail.skill.skillSchool || '无' }}</span>
+          </div>
+          <div class="sd-chip">
+            <span class="sd-chip-label">元素</span>
+            <span class="sd-chip-val sd-chip-val-sm">{{ damageElementLabel(skillDetail.skill.damageElement) }}</span>
+          </div>
+        </div>
+        <p class="sd-remark" v-if="skillDetail.skill.remark">{{ skillDetail.skill.remark }}</p>
+        <section class="sd-card is-charge" v-if="skillDetail.charges && skillDetail.charges.length">
+          <header class="sd-card-head">充能条件</header>
+          <ul class="sd-list">
+            <li v-for="(c, idx) in skillDetail.charges" :key="c.id || idx">
+              <span class="sd-idx">{{ idx + 1 }}</span>
+              <span class="sd-text">{{ formatChargeConditionSummary(c) }}</span>
+            </li>
+          </ul>
+        </section>
+        <section class="sd-card is-effect" v-if="skillDetailEffectRows.length">
+          <header class="sd-card-head">释放效果</header>
+          <ul class="sd-list">
+            <li
+              v-for="(e, idx) in skillDetailEffectRows"
+              :key="e.id || ('eff-' + idx)"
+              :class="{ 'is-clickable': isAppendBuffClickable(e) }"
+              @click="isAppendBuffClickable(e) && openBuffDetail(e.buffDefId)"
+            >
+              <span class="sd-idx">{{ idx + 1 }}</span>
+              <span class="sd-text">
+                <template v-if="e.outputKind === 'APPEND_BUFF'">
+                  {{ formatAppendBuffLead(e) }}
+                  <span class="sd-link is-underline" :class="{ muted: !e.buffDefId }">{{ appendBuffLinkLabel(e) }}</span>
+                  {{ formatAppendBuffTail(e) }}
+                </template>
+                <template v-else><span v-html="formatDescHtml(formatEffectSummary(e))"></span></template>
+              </span>
+            </li>
+          </ul>
+        </section>
+      </div>
+      <div v-else-if="skillDetailKind === 'passive' && skillDetail" class="skill-detail-body">
+        <div class="sd-hero">
+          <span class="sd-type-pill is-PASSIVE">被动</span>
+          <div class="sd-name">{{ skillDetail.name || '被动' }}</div>
+          <div class="sd-code">{{ passiveTypeLabel(skillDetail.passiveType) }}</div>
+        </div>
+        <p class="sd-remark" v-if="skillDetail.remark">{{ skillDetail.remark }}</p>
+        <section class="sd-card is-charge" v-if="passiveConditionLines.length">
+          <header class="sd-card-head">生效条件</header>
+          <ul class="sd-list">
+            <li v-for="(line, idx) in passiveConditionLines" :key="'pc-' + idx">
+              <span class="sd-idx">{{ idx + 1 }}</span>
+              <span class="sd-text">{{ line }}</span>
+            </li>
+          </ul>
+        </section>
+        <section class="sd-card is-attr" v-if="skillDetail.effects && skillDetail.effects.length">
+          <header class="sd-card-head">属性效果</header>
+          <ul class="sd-list">
+            <li v-for="(e, idx) in skillDetail.effects" :key="e.id || idx">
+              <span class="sd-idx">{{ idx + 1 }}</span>
+              <span class="sd-text">
+                {{ passiveAttrLabel(e.attrKey) }}
+                <em class="sd-em">{{ attrDirLabel(e.attrDir) }}{{ e.valueNum != null ? e.valueNum : '' }}</em>
+              </span>
+            </li>
+          </ul>
+        </section>
+        <section class="sd-card is-effect" v-if="skillDetail.outputs && skillDetail.outputs.length">
+          <header class="sd-card-head">战斗输出</header>
+          <ul class="sd-list">
+            <li
+              v-for="(o, idx) in skillDetail.outputs"
+              :key="o.id || idx"
+              :class="{ 'is-clickable': isAppendBuffClickable(o) }"
+              @click="isAppendBuffClickable(o) && openBuffDetail(o.buffDefId)"
+            >
+              <span class="sd-idx">{{ idx + 1 }}</span>
+              <span class="sd-text">
+                <template v-if="o.outputKind === 'APPEND_BUFF'">
+                  {{ formatAppendBuffLead(o) }}
+                  <span class="sd-link is-underline" :class="{ muted: !o.buffDefId }">{{ appendBuffLinkLabel(o) }}</span>
+                  {{ formatAppendBuffTail(o) }}
+                </template>
+                <template v-else><span v-html="formatDescHtml(formatEffectSummary(o))"></span></template>
+              </span>
+            </li>
+          </ul>
+        </section>
+        <div class="sd-empty"
+          v-if="!passiveConditionLines.length && (!skillDetail.effects || !skillDetail.effects.length) && (!skillDetail.outputs || !skillDetail.outputs.length)">
+          暂无效果配置
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div v-if="buffDetailOpen" class="buff-detail-mask" @click.self="closeBuffDetail">
+    <div class="skill-detail-panel">
+      <div class="skill-detail-head">
+        <h3>BUFF 详情</h3>
+        <button type="button" class="item-detail-close hit-44" aria-label="关闭" @click="closeBuffDetail">×</button>
+      </div>
+      <div v-if="buffDetailLoading" class="skill-detail-body">
+        <div class="skeleton-block" style="height:64px;margin-bottom:10px"></div>
+        <div class="skeleton-block" style="height:14px;width:70%;margin-bottom:8px"></div>
+        <div class="skeleton-block" style="height:14px;width:45%"></div>
+      </div>
+      <div v-else-if="buffDetail" class="skill-detail-body">
+        <div class="sd-hero">
+          <span class="sd-type-pill" :class="buffDetail.beneficial === false ? 'is-ULTIMATE' : 'is-SMALL'">
+            {{ buffDetail.beneficial === false ? '减益' : '增益' }}
+          </span>
+          <div class="sd-name">{{ buffDetail.name || 'BUFF' }}</div>
+          <div class="sd-code">{{ buffKindLabel(buffDetail.buffKind) }}</div>
+        </div>
+        <div class="sd-meta">
+          <div class="sd-chip">
+            <span class="sd-chip-label">持续</span>
+            <span class="sd-chip-val sd-chip-val-sm">{{ formatBuffDuration(buffDetail) }}</span>
+          </div>
+          <div class="sd-chip">
+            <span class="sd-chip-label">叠加</span>
+            <span class="sd-chip-val sd-chip-val-sm">{{ formatBuffStack(buffDetail) }}</span>
+          </div>
+          <div class="sd-chip">
+            <span class="sd-chip-label">驱散</span>
+            <span class="sd-chip-val sd-chip-val-sm">{{ buffDetail.dispelable === false ? '不可驱散' : '可驱散' }}</span>
+          </div>
+        </div>
+        <p class="sd-remark" v-if="buffDetail.remark">{{ buffDetail.remark }}</p>
+        <section class="sd-card is-effect" v-if="buffDetailEffectLines.length">
+          <header class="sd-card-head">效果</header>
+          <ul class="sd-list">
+            <li v-for="(line, idx) in buffDetailEffectLines" :key="'bf-' + idx">
+              <span class="sd-idx">{{ idx + 1 }}</span>
+              <span class="sd-text" v-html="formatDescHtml(line)"></span>
+            </li>
+          </ul>
+        </section>
+        <div class="sd-empty" v-else>暂无效果配置</div>
+      </div>
+    </div>
+  </div>
+
+  <div v-if="toast.show" class="toast" :class="toast.type">{{ toast.text }}</div>
+</div>
+
+<script src="js/api.js"></script>
+<script>
+const { createApp } = Vue;
+
+/** 总轴映射：100 行动值 = 2000ms 墙钟（1x）；倍速再除以 playbackSpeed */
+const AV_MS = 2000 / 100;
+/** 时间显示：100 轴 = 2 秒 */
+const AV_PER_SEC = 100 / 2;
+/**
+ * 【暂关】等动画播完再走轴：同 tick 节拍等待。
+ * 当前轴为独立时钟，永不因动画停顿；需要时可改 true 并恢复 scheduleNextEventAt 路径。
+ */
+const USE_EVENT_ANIM_WAIT = false;
+/** 同一行动值上连续事件（CAST→HIT→HEAL）的可读节拍（仅 USE_EVENT_ANIM_WAIT 时） */
+const SAME_TICK_MS = 72;
+/** 仅用于高亮等表现，不再驱动回放主时钟 */
+const EVENT_DUR = {
+  CAST: 380,
+  DEATH: 480,
+  _gap: 120
+};
+
+function queryParam(name) {
+  return new URLSearchParams(location.search).get(name) || '';
+}
+
+createApp({
+  data() {
+    return {
+      loading: true,
+      error: '',
+      levelId: '',
+      battleMode: '',
+      levelTitle: '',
+      stageTree: [],
+      towerNextLevelId: '',
+      monsters: [],
+      allies: [],
+      battleStarted: false,
+      fighting: false,
+      replaying: false,
+      outcome: '',
+      visibleLogs: [],
+      pendingLogs: [],
+      actingUid: '',
+      hitUid: '',
+      /** uid -> idle|attack|hit */
+      poseMap: {},
+      /** charCode -> { attack:bool, hit:bool } 探测到的专属帧 */
+      poseArt: {},
+      /** uid -> { x, y } 棋盘内位移（备用；主表现用 strikeGhosts） */
+      lungeMap: {},
+      /** 普攻冲刺残影（画在 .fx-layer，不被棋盘裁切） */
+      strikeGhosts: [],
+      /** uid -> true 冲刺中压暗本体 */
+      dashAwayMap: {},
+      _poseTimers: {},
+      _lungeTimers: {},
+      deadUids: {},
+      hpMap: {},
+      ghostHp: {},
+      chargeMap: {},
+      /** uid -> { NORMAL|SMALL|ULTIMATE: { skillId, need, avEvery, avGain, baseCur, baseAv } } */
+      unitSkillSlots: {},
+      /** uid -> skillId -> slot（全量技能，焦点充能用） */
+      unitSkillById: {},
+      buffMap: {},
+      focusUid: '',
+      floaters: [],
+      floaterSeq: 0,
+      shakeClass: '',
+      clashSweep: false,
+      resultBanner: '',
+      logDrawerOpen: false,
+      logDrag: null,
+      fbChargesDrag: null,
+      replayTimer: null,
+      rafId: 0,
+      rafNextAt: 0,
+      replayMode: '',
+      replayData: null,
+      replayLogs: [],
+      replayEvents: [],
+      replayIndex: 0,
+      eventIndex: 0,
+      logCursor: 0,
+      replayAvT: 0,
+      logAvT: 0,
+      axisDisplay: 0,
+      /** 自由轴：墙钟原点 + 对应轴值，轴只跟时间走 */
+      axisWallOrigin: 0,
+      axisAvOrigin: 0,
+      axisFinalAv: 0,
+      axisLerp: null,
+      skipRequested: false,
+      paused: false,
+      pauseFrozenAv: 0,
+      playbackSpeed: 1,
+      resultModal: {
+        show: false,
+        outcome: '',
+        ticks: null,
+        durationText: '',
+        drops: [],
+        firstClear: false,
+        levelFirstRewards: [],
+        chapterFirstRewards: []
+      },
+      toast: { show: false, text: '', type: 'error' },
+      reducedMotion: false,
+      skillDetailOpen: false,
+      skillDetailLoading: false,
+      skillDetailKind: 'active',
+      skillDetail: null,
+      buffDetailOpen: false,
+      buffDetailLoading: false,
+      buffDetail: null,
+      rosterDetailOpen: false
+    };
+  },
+  computed: {
+    showSpeedCtrl() {
+      return this.battleStarted && (this.fighting || this.replaying) && !this.resultModal.show;
+    },
+    canPause() {
+      return this.replaying && !this.resultModal.show;
+    },
+    rosterAllyRows() {
+      var self = this;
+      return (this.allies || []).map(function (u) {
+        return self.buildUnitDetailView(self.unitUid(u), 'ALLY');
+      }).filter(Boolean);
+    },
+    rosterEnemyRows() {
+      var self = this;
+      return (this.monsters || []).map(function (u) {
+        return self.buildUnitDetailView(self.unitUid(u), 'ENEMY');
+      }).filter(Boolean);
+    },
+    /** V2 优先 outputs；否则旧 effects */
+    skillDetailEffectRows() {
+      var d = this.skillDetail;
+      if (!d || this.skillDetailKind !== 'active') return [];
+      if (d.outputs && d.outputs.length) return d.outputs;
+      return d.effects || [];
+    },
+    buffDetailEffectLines() {
+      return this.buildBuffEffectLines(this.buffDetail);
+    },
+    /** 被动详情：装备条件 + 战斗触发规则 */
+    passiveConditionLines() {
+      if (this.skillDetailKind !== 'passive' || !this.skillDetail) return [];
+      return this.buildPassiveConditionLines(this.skillDetail);
+    },
+    /** 100轴=2秒 → 换算成「X.XX秒」或「M分 S.SS秒」 */
+    axisTimeText() {
+      return this.formatAvAsTime(this.axisDisplay);
+    },
+    nextLevelId() {
+      if (this.battleMode === 'tower') {
+        return this.towerNextLevelId || '';
+      }
+      var list = this.flattenLevels(this.stageTree);
+      for (var i = 0; i < list.length; i++) {
+        if (list[i].id === this.levelId) return list[i + 1] ? list[i + 1].id : '';
+      }
+      return '';
+    },
+    allyNameSet() {
+      var set = {};
+      (this.allies || []).forEach((a) => {
+        var n = a && (a.roleName || a.name);
+        if (n) set[n] = true;
+      });
+      Object.keys(this.hpMap || {}).forEach((k) => {
+        var s = this.hpMap[k];
+        if (s && s.side === 'ALLY' && s.name) set[s.name] = true;
+      });
+      return set;
+    },
+    enemyNameSet() {
+      var set = {};
+      (this.monsters || []).forEach((m) => {
+        var n = m && (m.monsterName || m.name);
+        if (n) set[n] = true;
+      });
+      Object.keys(this.hpMap || {}).forEach((k) => {
+        var s = this.hpMap[k];
+        if (s && s.side === 'ENEMY' && s.name) set[s.name] = true;
+      });
+      return set;
+    },
+    /** 底部状态条固定主角，不随行动/点击切换到怪 */
+    heroUid() {
+      var allies = this.allies || [];
+      for (var i = 0; i < allies.length; i++) {
+        var u = allies[i];
+        if (!u) continue;
+        if (u.mainRole || u.code === 'hero' || u.name === '主角' || u.roleName === '主角') {
+          return this.unitUid(u);
+        }
+      }
+      var first = allies[0];
+      return first ? this.unitUid(first) : '';
+    },
+    focusUnitView() {
+      return this.buildUnitDetailView(this.heroUid, 'ALLY');
+    },
+    visibleLogBlocks() {
+      var blocks = [];
+      var group = -1;
+      var current = null;
+      var lines = this.visibleLogs || [];
+      for (var i = 0; i < lines.length; i++) {
+        var line = lines[i] || '';
+        var treeDepth = this.logTreeDepth(line);
+        var child = treeDepth > 0 || /^\s+/.test(line);
+        var isBootHead = /^\[[^\]]+\]$/.test(line)
+          || line === '充能技能' || /\]充能技能$/.test(line)
+          || line === '锚点被动' || line === '周期被动'
+          || line.indexOf('装备充能技能') === 0
+          || line.indexOf('装备锚点被动') === 0
+          || line.indexOf('装备周期被动') === 0;
+        var isResultHead = line.indexOf('战斗胜利') >= 0 || line.indexOf('战斗失败') >= 0
+          || line.indexOf('总计掉落') >= 0;
+        if (isBootHead) {
+          group += 1;
+          current = { kind: 'group', groupCls: 'log-group-equip', rows: [] };
+          blocks.push(current);
+          current.rows.push({ cls: [this.logLineClass(line), 'is-head'].join(' '), html: this.escapeHtml(line) });
+          continue;
+        }
+        if (isResultHead) {
+          current = { kind: 'group', groupCls: 'log-group-result', rows: [] };
+          blocks.push(current);
+          current.rows.push({ cls: [this.logLineClass(line), 'is-head'].join(' '), html: this.escapeHtml(line) });
+          continue;
+        }
+        if (!child) {
+          group += 1;
+          current = { kind: 'group', groupCls: 'log-group-' + (group % 4), rows: [] };
+          blocks.push(current);
+          current.rows.push({ cls: [this.logLineClass(line), 'is-head'].join(' '), html: this.formatLogHtml(line) });
+        } else {
+          if (!current) {
+            group += 1;
+            current = { kind: 'group', groupCls: 'log-group-' + (group % 4), rows: [] };
+            blocks.push(current);
+          }
+          var depthCls = treeDepth >= 2 ? 'is-child is-child-2' : 'is-child is-child-1';
+          var html = current.groupCls === 'log-group-equip'
+            ? this.formatTreeLogHtml(line)
+            : this.formatLogHtml(line);
+          current.rows.push({ cls: [this.logLineClass(line), depthCls].join(' '), html: html });
+        }
+      }
+      return blocks;
+    }
+  },
+  mounted() {
+    if (!GameApi.getToken()) {
+      location.href = (APP_CONFIG.loginPage || 'login.html');
+      return;
+    }
+    this.reducedMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    var savedSpeed = Number(localStorage.getItem('battlePlaybackSpeed') || 1);
+    if (savedSpeed === 1 || savedSpeed === 2 || savedSpeed === 3) this.playbackSpeed = savedSpeed;
+    this.battleMode = queryParam('mode') || '';
+    this.levelId = queryParam('levelId')
+      || localStorage.getItem(APP_CONFIG.selectedLevelKey || 'selectedLevelId')
+      || '';
+    if (this.battleMode === 'tower') {
+      this.levelTitle = '无尽塔';
+      this.bootTower();
+      return;
+    }
+    if (!this.levelId) {
+      this.loading = false;
+      this.error = '未选择关卡';
+      return;
+    }
+    this.boot();
+  },
+  beforeUnmount() {
+    this.stopReplayClock();
+    this.resetCombatPoses();
+  },
+  watch: {
+    focusUid() {
+      this.$nextTick(() => { if (window.ArtSlots) ArtSlots.apply(this.$el); });
+    },
+    replaying() {
+      this.$nextTick(() => { if (window.ArtSlots) ArtSlots.apply(this.$el); });
+    },
+    allies: {
+      deep: false,
+      handler() {
+        this.preloadPoseArt();
+        this.$nextTick(() => { if (window.ArtSlots) ArtSlots.apply(this.$el); });
+      }
+    },
+    monsters: {
+      deep: false,
+      handler() {
+        this.preloadPoseArt();
+        this.$nextTick(() => { if (window.ArtSlots) ArtSlots.apply(this.$el); });
+      }
+    }
+  },
+  methods: {
+    showToast(text, type) {
+      this.toast = { show: true, text: text || '', type: type || 'error' };
+      setTimeout(() => { this.toast.show = false; }, 2400);
+    },
+    authCatch(err) {
+      this.showToast(err.message || '加载失败');
+      if (err.result && (err.result.code === '403' || String(err.message).indexOf('登录') >= 0)) {
+        GameApi.clearToken();
+        setTimeout(() => { location.href = (APP_CONFIG.loginPage || 'login.html'); }, 800);
+      }
+    },
+    shortName(name) {
+      if (!name) return '?';
+      return name.length > 5 ? name.slice(0, 5) : name;
+    },
+    /** 战斗 UI 展示名：主角显示为「我」 */
+    allyUiName(u) {
+      if (!u) return '我';
+      if (u.mainRole || u.code === 'hero') return '我';
+      var name = u.roleName || u.name || '';
+      if (name === '主角') return '我';
+      return this.shortName(name) || '我';
+    },
+    unitUid(u) {
+      if (!u) return '';
+      return u.uid || u.unitId || '';
+    },
+    unitKey(u, prefix, idx) {
+      return this.unitUid(u) || (prefix + '-' + idx);
+    },
+    findUnitByUid(uid) {
+      if (!uid) return null;
+      var a = (this.allies || []).find((x) => this.unitUid(x) === uid);
+      if (a) return a;
+      return (this.monsters || []).find((x) => this.unitUid(x) === uid) || null;
+    },
+    auraKey(r) {
+      var k = String(r || 'normal').toLowerCase();
+      if (['rare', 'epic', 'boss', 'special', 'normal'].indexOf(k) >= 0) return k;
+      return { RARE: 'rare', EPIC: 'epic', BOSS: 'boss', SPECIAL: 'special' }[r] || 'normal';
+    },
+    /** 角色素材目录码：主角 hero；怪物 MST_* */
+    spriteCode(u) {
+      if (!u) return '';
+      if (u.mainRole || u.code === 'hero' || u.name === '主角' || u.roleName === '主角') {
+        return 'hero';
+      }
+      return u.code || u.sourceId || u.monsterId || '';
+    },
+    /**
+     * 战斗立绘：idle / attack / hit
+     * 路径 char/{code}/idle_4.png | attack.png | hit.png（ArtSlots 探测，失败则占位）
+     */
+    spriteArt(u) {
+      var code = this.spriteCode(u);
+      if (!code) return '';
+      var uid = this.unitUid(u);
+      var pose = (uid && this.poseMap[uid]) || 'idle';
+      var avail = this.poseArt[code] || {};
+      if (pose === 'attack' && avail.attack) return 'char/' + code + '/attack.png';
+      if (pose === 'hit' && avail.hit) return 'char/' + code + '/hit.png';
+      return 'char/' + code + '/idle_4.png';
+    },
+    hasSprite() {
+      // 实际是否显示立绘由 ArtSlots 探测后加 art-ready；勿提前 has-spr，避免素材缺失时空白
+      return false;
+    },
+    rarityClass(r) {
+      return {
+        NORMAL: 'rarity-normal', RARE: 'rarity-rare', EPIC: 'rarity-epic',
+        BOSS: 'rarity-boss', SPECIAL: 'rarity-special'
+      }[r] || 'rarity-normal';
+    },
+    unitGridStyle(item) {
+      var col = (item.posCol || 0) + 1;
+      var row = (item.posRow || 0) + 1;
+      var w = item.gridW || 1;
+      var h = item.gridH || 1;
+      var style = {
+        gridColumn: col + ' / span ' + w,
+        gridRow: row + ' / span ' + h,
+        '--row': row
+      };
+      var uid = this.unitUid(item);
+      var lunge = uid && this.lungeMap[uid];
+      if (lunge) {
+        style['--lunge-x'] = (lunge.x || 0) + 'px';
+        style['--lunge-y'] = (lunge.y || 0) + 'px';
+      }
+      return style;
+    },
+    unitBoardClass(u, side) {
+      var uid = this.unitUid(u);
+      var w = Number(u && u.gridW) || 1;
+      var h = Number(u && u.gridH) || 1;
+      var pose = (uid && this.poseMap[uid]) || 'idle';
+      return [
+        this.rarityClass(u.rarity),
+        'side-' + side,
+        {
+          main: !!u.mainRole,
+          acting: this.actingUid === uid && pose === 'idle',
+          hit: this.hitUid === uid,
+          lunge: !!(uid && this.lungeMap[uid]),
+          'is-attacking': pose === 'attack',
+          'is-hurt': pose === 'hit',
+          'dash-away': !!(uid && this.dashAwayMap[uid]),
+          dead: !!this.deadUids[uid],
+          focus: this.heroUid === uid,
+          'size-1x1': w === 1 && h === 1
+        }
+      ];
+    },
+    isDeadUid(uid) {
+      return !!(uid && this.deadUids[uid]);
+    },
+    unitHpPct(uid) {
+      var s = this.hpMap[uid];
+      if (!s || !s.maxHp) return this.deadUids[uid] ? 0 : 100;
+      return Math.max(0, Math.min(100, (s.hp / s.maxHp) * 100));
+    },
+    focusUnit() {
+      /* 状态条固定主角，忽略棋盘点击切换 */
+    },
+    buildUnitDetailView(uid, sideHint) {
+      if (!uid) return null;
+      var hp = this.hpMap[uid];
+      if (!hp) return null;
+      var ghost = this.ghostHp[uid];
+      var ghostPct = ghost != null && hp.maxHp
+        ? Math.max(0, Math.min(100, (ghost / hp.maxHp) * 100))
+        : (hp.maxHp ? (hp.hp / hp.maxHp) * 100 : 100);
+      var unit = this.findUnitByUid(uid);
+      var side = sideHint || hp.side || 'ALLY';
+      var name;
+      if (side === 'ENEMY') {
+        name = (unit && (unit.monsterName || unit.name)) || hp.name || '敌人';
+      } else {
+        name = this.allyUiName(unit) || this.allyUiName({ name: hp.name }) || '我';
+      }
+      return {
+        uid: uid,
+        side: side,
+        name: name,
+        ch: String(name).charAt(0) || '?',
+        hp: hp.hp,
+        maxHp: hp.maxHp,
+        hpPct: hp.maxHp ? Math.max(0, Math.min(100, (hp.hp / hp.maxHp) * 100)) : 100,
+        ghostPct: ghostPct,
+        charges: this.focusChargeList(uid),
+        normalRing: this.unitNormalRing(uid),
+        buffs: this.buffMap[uid] || [],
+        dead: !!this.deadUids[uid] || (hp.hp <= 0)
+      };
+    },
+    /** 单位行动周期：快照 atkSpeed 字段实际存的是行动值 action */
+    actionNeedOf(uid) {
+      var u = this.findUnitByUid(uid);
+      var action = u && u.atkSpeed != null ? Number(u.atkSpeed) : 0;
+      if (action > 0) return Math.max(1, Math.round(action));
+      return 100;
+    },
+    /**
+     * 普攻槽展示用：need=0（无门槛）时按行动周期 + 每1AV+1 模拟充能，
+     * 避免详情/场上「普」一直满格不动。
+     */
+    effectiveNormalSlot(uid) {
+      var bag = this.unitSkillSlots[uid];
+      if (!bag || !bag.NORMAL) return null;
+      var slot = bag.NORMAL;
+      if ((slot.need || 0) > 0) return slot;
+      return Object.assign({}, slot, {
+        need: this.actionNeedOf(uid),
+        avEvery: slot.avEvery > 0 ? slot.avEvery : 1,
+        avGain: slot.avGain > 0 ? slot.avGain : 1
+      });
+    },
+    /** 详情充能行左侧「普」环 */
+    unitNormalRing(uid) {
+      var slot = this.effectiveNormalSlot(uid);
+      if (!slot) return null;
+      var R = 12;
+      var circ = 2 * Math.PI * R;
+      var pct = this.skillChargePct(slot, Number(this.axisDisplay) || 0);
+      return {
+        label: '普',
+        pct: pct,
+        circ: circ.toFixed(2),
+        offset: (circ * (1 - pct / 100)).toFixed(2),
+        full: pct >= 100
+      };
+    },
+    /** 无门槛普攻：行动开始时归零展示充能 */
+    resetZeroNeedNormalRing(uid, t) {
+      var bag = this.unitSkillSlots[uid];
+      if (!bag || !bag.NORMAL) return;
+      if ((bag.NORMAL.need || 0) > 0) return;
+      var nextBag = Object.assign({}, this.unitSkillSlots);
+      var nextSlots = Object.assign({}, bag);
+      var slot = Object.assign({}, nextSlots.NORMAL);
+      slot.baseCur = 0;
+      slot.baseAv = t != null ? Number(t) : (this.replayAvT || this.axisDisplay || 0);
+      if (!(slot.avEvery > 0)) slot.avEvery = 1;
+      if (!(slot.avGain > 0)) slot.avGain = 1;
+      nextSlots.NORMAL = slot;
+      nextBag[uid] = nextSlots;
+      this.unitSkillSlots = nextBag;
+    },
+    openRosterDetail() {
+      this.rosterDetailOpen = true;
+    },
+    closeRosterDetail() {
+      this.rosterDetailOpen = false;
+    },
+    applyMonsterDisplayNames(list) {
+      var arr = list || [];
+      var counts = {};
+      arr.forEach((m) => {
+        var base = (m && (m.monsterName || m.name)) || '怪物';
+        counts[base] = (counts[base] || 0) + 1;
+      });
+      var seq = {};
+      arr.forEach((m, idx) => {
+        if (!m) return;
+        var base = m.monsterName || m.name || '怪物';
+        if (counts[base] > 1) {
+          seq[base] = (seq[base] || 0) + 1;
+          m.monsterName = base + seq[base];
+        } else {
+          m.monsterName = base;
+        }
+        m.uid = m.uid || ('E' + (idx + 1));
+      });
+      return arr;
+    },
+    assignAllyUids() {
+      (this.allies || []).forEach((u, idx) => {
+        if (u) u.uid = u.uid || u.unitId || ('A' + (idx + 1));
+      });
+    },
+    initStandbyHp() {
+      var map = {};
+      (this.monsters || []).forEach((m) => {
+        var uid = this.unitUid(m);
+        if (!uid) return;
+        var max = Math.max(1, m.baseHp || 1);
+        map[uid] = { hp: max, maxHp: max, side: 'ENEMY', name: m.monsterName || m.name };
+      });
+      (this.allies || []).forEach((u) => {
+        var uid = this.unitUid(u);
+        if (!uid) return;
+        var max = Math.max(1, (u.baseHp || 0) + (u.extraHp || 0) || 1);
+        map[uid] = { hp: max, maxHp: max, side: 'ALLY', name: u.roleName || u.name };
+      });
+      this.hpMap = map;
+      this.ghostHp = {};
+      this.focusUid = this.heroUid || '';
+    },
+    initFromSnaps(units) {
+      var map = {};
+      var allies = [];
+      var enemies = [];
+      var slots = {};
+      var skillByUid = {};
+      var chargeByUid = {};
+      (units || []).forEach((u) => {
+        if (!u) return;
+        var uid = u.uid || u.unitId;
+        if (!uid) return;
+        var max = Math.max(1, u.maxHp || 1);
+        var hp = u.hp == null ? max : Math.max(0, u.hp);
+        map[uid] = { hp: hp, maxHp: max, side: u.side || '', name: u.name };
+        var row = {
+          uid: uid,
+          unitId: uid,
+          name: u.name,
+          roleName: u.side === 'ALLY' ? u.name : undefined,
+          monsterName: u.side === 'ENEMY' ? u.name : undefined,
+          side: u.side,
+          posCol: u.posCol || 0,
+          posRow: u.posRow || 0,
+          gridW: u.gridW || 1,
+          gridH: u.gridH || 1,
+          rarity: u.rarity,
+          code: u.code,
+          mainRole: u.code === 'hero',
+          atkSpeed: u.atkSpeed
+        };
+        if (u.side === 'ALLY') allies.push(row);
+        else enemies.push(row);
+        var bag = {};
+        var byId = {};
+        var chargeSeed = {};
+        (u.skills || []).forEach(function (sk) {
+          if (!sk) return;
+          var sid = sk.skillId || sk.id;
+          if (!sid) return;
+          var st = String(sk.skillType || '').toUpperCase() || 'SMALL';
+          var slot = {
+            skillId: sid,
+            skillType: st,
+            need: Math.max(0, Number(sk.need) || 0),
+            avEvery: sk.avEvery > 0 ? sk.avEvery : 0,
+            avGain: sk.avGain > 0 ? sk.avGain : 0,
+            baseCur: 0,
+            baseAv: 0,
+            name: sk.name || ''
+          };
+          byId[sid] = slot;
+          // 怪物环：各类型保留首条
+          if (!bag[st]) bag[st] = slot;
+          // 焦点充能：技/大 need>0 开战即展示（永不展示普攻）
+          if (slot.need > 0 && st !== 'NORMAL') {
+            chargeSeed[sid] = {
+              cur: 0,
+              max: slot.need,
+              name: slot.name || '充能',
+              skillType: st,
+              avEvery: slot.avEvery,
+              avGain: slot.avGain,
+              baseCur: 0,
+              baseAv: 0
+            };
+          }
+        });
+        if (Object.keys(bag).length) slots[uid] = bag;
+        if (Object.keys(byId).length) skillByUid[uid] = byId;
+        if (Object.keys(chargeSeed).length) chargeByUid[uid] = chargeSeed;
+      });
+      if (Object.keys(map).length) {
+        this.hpMap = map;
+        this.ghostHp = {};
+        this.unitSkillSlots = slots;
+        this.unitSkillById = skillByUid;
+        this.chargeMap = chargeByUid;
+        if (allies.length) this.allies = allies;
+        if (enemies.length) this.monsters = enemies;
+        this.focusUid = this.heroUid || '';
+      } else {
+        this.initStandbyHp();
+      }
+    },
+    /** 开战补种焦点充能：技能快照 + 装备日志 + CHARGE 事件预扫 */
+    seedFocusChargesFromData(data) {
+      data = data || {};
+      var cmap = Object.assign({}, this.chargeMap || {});
+      var self = this;
+      function ensureEntry(uid, sid, patch) {
+        if (!uid || !sid || !patch) return;
+        var st = String(patch.skillType || '').toUpperCase();
+        if (st === 'NORMAL') return;
+        var max = Math.max(0, Number(patch.max) || 0);
+        if (max <= 0) return;
+        var umap = Object.assign({}, cmap[uid] || {});
+        var prev = umap[sid] || {};
+        umap[sid] = {
+          cur: prev.cur != null ? prev.cur : 0,
+          max: prev.max > 0 ? prev.max : max,
+          name: prev.name || patch.name || '充能',
+          skillType: prev.skillType || st || 'SMALL',
+          avEvery: prev.avEvery || patch.avEvery || 0,
+          avGain: prev.avGain || patch.avGain || 0,
+          baseCur: prev.baseCur != null ? prev.baseCur : 0,
+          baseAv: prev.baseAv != null ? prev.baseAv : 0
+        };
+        cmap[uid] = umap;
+      }
+      // 1) 已从 snap 种入的保留；再扫一遍 unitSkillById
+      Object.keys(this.unitSkillById || {}).forEach(function (uid) {
+        var byId = self.unitSkillById[uid] || {};
+        Object.keys(byId).forEach(function (sid) {
+          var s = byId[sid];
+          if (!s || s.skillType === 'NORMAL' || !(s.need > 0)) return;
+          ensureEntry(uid, sid, {
+            max: s.need,
+            name: s.name,
+            skillType: s.skillType,
+            avEvery: s.avEvery,
+            avGain: s.avGain
+          });
+        });
+      });
+      // 2) 预扫 CHARGE：用真实 skillId 开战占位（cur=0）
+      var nameToSid = {};
+      (data.events || []).forEach(function (ev) {
+        if (!ev || ev.type !== 'CHARGE') return;
+        if (String(ev.skillType || '').toUpperCase() === 'NORMAL') return;
+        var sid = ev.skillId || (ev.skillName ? 'name:' + ev.skillName : '');
+        if (!ev.uid || !sid) return;
+        if (ev.skillName) nameToSid[ev.skillName] = sid;
+        ensureEntry(ev.uid, sid, {
+          max: ev.max,
+          name: ev.skillName,
+          skillType: ev.skillType || 'SMALL'
+        });
+        // 仅同步己方单位充能到主角条（勿把敌方技能映到「我」）
+        var heroUid = self.heroUid;
+        if (heroUid && heroUid !== ev.uid) {
+          var srcHp = self.hpMap[ev.uid];
+          if (srcHp && srcHp.side === 'ALLY') {
+            ensureEntry(heroUid, sid, {
+              max: ev.max,
+              name: ev.skillName,
+              skillType: ev.skillType || 'SMALL'
+            });
+          }
+        }
+      });
+      // 3) 日志树「 └ 1. 重击 充能5」或旧版「装备充能技能：重击（需5：…）」
+      var hero = this.heroUid;
+      (data.logs || []).forEach(function (line) {
+        if (!line) return;
+        var raw = String(line);
+        var name = '';
+        var need = 0;
+        var mTree = raw.match(/└\s*\d+\.\s*(.+?)\s+充能\s*(\d+)\s*$/);
+        if (mTree) {
+          name = mTree[1].trim();
+          need = Number(mTree[2]);
+        } else if (raw.indexOf('装备充能技能') >= 0) {
+          var body = raw.replace(/^[\s\S]*装备充能技能：/, '');
+          body.split(/[；;]/).forEach(function (part) {
+            var m = String(part).match(/^\s*(.+?)（需(\d+)/);
+            if (!m) return;
+            seedEquipChargeName(m[1].trim(), Number(m[2]));
+          });
+          return;
+        } else {
+          return;
+        }
+        seedEquipChargeName(name, need);
+      });
+      function seedEquipChargeName(name, need) {
+        if (!name || !(need > 0) || /普攻/.test(name)) return;
+        var sid = nameToSid[name] || '';
+        var byId = self.unitSkillById[hero] || {};
+        Object.keys(byId).forEach(function (id) {
+          if (!sid && byId[id] && byId[id].name === name) sid = id;
+        });
+        var umapHero = cmap[hero] || {};
+        Object.keys(umapHero).forEach(function (id) {
+          if (!sid && umapHero[id] && umapHero[id].name === name) sid = id;
+        });
+        if (!sid) sid = 'equip:' + name;
+        var targets = hero ? [hero] : [];
+        Object.keys(self.hpMap || {}).forEach(function (uid) {
+          if (self.hpMap[uid] && self.hpMap[uid].side === 'ALLY' && targets.indexOf(uid) < 0) {
+            targets.push(uid);
+          }
+        });
+        targets.forEach(function (uid) {
+          ensureEntry(uid, sid, { max: need, name: name, skillType: 'SMALL' });
+        });
+      }
+      this.chargeMap = cmap;
+    },
+    /** 焦点条充能列表：1–5 宝石 / 6–10 电池格 / >10 黄条；普攻永不显示 */
+    focusChargeList(uid) {
+      var byId = this.unitSkillById[uid] || {};
+      var umap = this.chargeMap[uid] || {};
+      var idSet = {};
+      Object.keys(byId).forEach(function (id) {
+        var s = byId[id];
+        if (s && s.need > 0 && s.skillType !== 'NORMAL') idSet[id] = 1;
+      });
+      Object.keys(umap).forEach(function (id) {
+        var c = umap[id];
+        if (!c) return;
+        var meta = byId[id];
+        var type = String((c.skillType || (meta && meta.skillType) || '')).toUpperCase();
+        if (type === 'NORMAL') return;
+        var max = Number(c.max != null ? c.max : (meta && meta.need)) || 0;
+        if (max > 0) idSet[id] = 1;
+      });
+      var order = [];
+      ['SMALL', 'ULTIMATE'].forEach(function (t) {
+        Object.keys(byId).forEach(function (id) {
+          if (byId[id].skillType === t && idSet[id] && order.indexOf(id) < 0) order.push(id);
+        });
+      });
+      Object.keys(idSet).forEach(function (id) {
+        if (order.indexOf(id) < 0) order.push(id);
+      });
+      var axis = Number(this.axisDisplay) || 0;
+      var out = [];
+      for (var i = 0; i < order.length; i++) {
+        var sid = order[i];
+        var meta = byId[sid] || {};
+        var c = umap[sid] || {};
+        if (String(c.skillType || meta.skillType || '').toUpperCase() === 'NORMAL') continue;
+        var max = Math.max(0, Number(c.max != null ? c.max : meta.need) || 0);
+        if (max <= 0) continue;
+        var every = c.avEvery > 0 ? c.avEvery : (meta.avEvery || 0);
+        var gain = c.avGain > 0 ? c.avGain : (meta.avGain || 0);
+        var cur;
+        if (every > 0 && gain > 0) {
+          var baseCur = c.baseCur != null ? Number(c.baseCur) : 0;
+          var baseAv = c.baseAv != null ? Number(c.baseAv) : 0;
+          // 连续插值，避免每 every 才跳一格
+          cur = baseCur + (Math.max(0, axis - baseAv) / every) * gain;
+        } else {
+          cur = c.cur != null ? Number(c.cur) : 0;
+        }
+        cur = Math.max(0, Math.min(max, cur));
+        var mode = 'bar';
+        if (max <= 5) mode = 'gem';
+        else if (max <= 10) mode = 'battery';
+        out.push({
+          skillId: sid,
+          name: c.name || meta.name || '充能',
+          cur: cur,
+          max: max,
+          mode: mode,
+          pct: Math.max(0, Math.min(100, (cur / max) * 100)),
+          full: cur >= max
+        });
+      }
+      return out;
+    },
+    applyFocusChargeEvent(ev) {
+      if (!ev || !ev.uid) return;
+      if (String(ev.skillType || '').toUpperCase() === 'NORMAL') return;
+      var sid = ev.skillId;
+      var byId = this.unitSkillById[ev.uid] || {};
+      if (!sid && ev.skillName) {
+        Object.keys(byId).forEach(function (id) {
+          if (!sid && byId[id] && byId[id].name === ev.skillName) sid = id;
+        });
+        if (!sid) sid = 'name:' + ev.skillName;
+      }
+      if (!sid && ev.skillType) {
+        Object.keys(byId).forEach(function (id) {
+          if (!sid && byId[id] && byId[id].skillType === ev.skillType) sid = id;
+        });
+        if (!sid) {
+          var bag = this.unitSkillSlots[ev.uid] || {};
+          var slot = bag[ev.skillType];
+          if (slot) sid = slot.skillId;
+        }
+      }
+      if (!sid) return;
+      var meta = byId[sid];
+      if (meta && meta.skillType === 'NORMAL') return;
+      var umap = Object.assign({}, this.chargeMap[ev.uid] || {});
+      // 合并开战占位（equip:名 / name:名）到真实 skillId，避免双条
+      if (ev.skillName) {
+        ['equip:' + ev.skillName, 'name:' + ev.skillName].forEach(function (alias) {
+          if (alias !== sid && umap[alias]) {
+            if (!umap[sid]) umap[sid] = umap[alias];
+            delete umap[alias];
+          }
+        });
+        Object.keys(umap).forEach(function (id) {
+          if (id !== sid && umap[id] && umap[id].name === ev.skillName && String(id).indexOf('equip:') === 0) {
+            if (!umap[sid]) umap[sid] = umap[id];
+            delete umap[id];
+          }
+        });
+      }
+      var prev = umap[sid] || {};
+      var nextMax = ev.max != null ? Math.max(0, Number(ev.max) || 0) : (prev.max != null ? prev.max : (meta && meta.need) || 0);
+      if (nextMax <= 0) return;
+      var nextCur = ev.cur != null ? Math.max(0, Number(ev.cur) || 0) : (prev.cur || 0);
+      umap[sid] = {
+        cur: nextCur,
+        max: nextMax,
+        name: ev.skillName || prev.name || (meta && meta.name) || '充能',
+        skillType: ev.skillType || prev.skillType || (meta && meta.skillType) || 'SMALL',
+        avEvery: prev.avEvery || (meta && meta.avEvery) || 0,
+        avGain: prev.avGain || (meta && meta.avGain) || 0,
+        baseCur: nextCur,
+        baseAv: ev.t != null ? Number(ev.t) : (this.replayAvT || this.axisDisplay || 0)
+      };
+      var cmap = Object.assign({}, this.chargeMap);
+      cmap[ev.uid] = umap;
+      // 同步到主角条（装备充能事件若落在其它己方 uid，也映到主角）
+      var hero = this.heroUid;
+      if (hero && hero !== ev.uid && this.hpMap[ev.uid] && this.hpMap[ev.uid].side === 'ALLY') {
+        var humap = Object.assign({}, cmap[hero] || {});
+        humap[sid] = Object.assign({}, umap[sid]);
+        cmap[hero] = humap;
+      }
+      this.chargeMap = cmap;
+    },
+    /**
+     * 怪物血条下三段充能条（普/技/大），总宽=血条，每段 1/3。
+     * 无对应技能时该段保持空轨；有任一技能槽才显示整组。
+     */
+    monsterSkillBars(uid) {
+      var bag = this.unitSkillSlots[uid];
+      if (!bag) return [];
+      var order = [
+        { type: 'NORMAL', cls: 'usk-normal', title: '普攻' },
+        { type: 'SMALL', cls: 'usk-small', title: '技能' },
+        { type: 'ULTIMATE', cls: 'usk-ult', title: '大招' }
+      ];
+      var axis = Number(this.axisDisplay) || 0;
+      var out = [];
+      var any = false;
+      for (var i = 0; i < order.length; i++) {
+        var meta = order[i];
+        var slot = meta.type === 'NORMAL' ? this.effectiveNormalSlot(uid) : bag[meta.type];
+        var pct = 0;
+        if (slot) {
+          any = true;
+          pct = this.skillChargePct(slot, axis);
+        }
+        out.push({
+          key: meta.type,
+          cls: meta.cls,
+          title: meta.title,
+          pct: pct
+        });
+      }
+      return any ? out : [];
+    },
+    /** @deprecated 兼容旧调用名 → monsterSkillBars */
+    monsterSkillRings(uid) {
+      return this.monsterSkillBars(uid);
+    },
+    skillChargePct(slot, axisAv) {
+      if (!slot) return 0;
+      var need = Math.max(0, Number(slot.need) || 0);
+      // 无门槛：不常亮满条（普攻由 effectiveNormalSlot 注入行动周期 need）
+      if (need <= 0) return 0;
+      var cur = Math.max(0, Number(slot.baseCur) || 0);
+      var every = Number(slot.avEvery) || 0;
+      var gain = Number(slot.avGain) || 0;
+      // 按该技能自己的 every/gain/need 上涨（不是全局固定速率）
+      // ACTION_VALUE：连续插值；SKILL_CHARGE：avEvery=0，只吃 CHARGE/CAST
+      if (every > 0 && gain > 0) {
+        var dAv = Math.max(0, (axisAv || 0) - (Number(slot.baseAv) || 0));
+        cur += (dAv / every) * gain;
+      }
+      return Math.max(0, Math.min(100, (cur / need) * 100));
+    },
+    /**
+     * 释放后强制把该技能条写成剩余充能（默认 0）并重置计时原点，
+     * 避免小技能/大招释放后条仍停在满格。
+     */
+    onSkillCastCharge(ev) {
+      if (!ev || !ev.uid) return;
+      var type = String(ev.skillType || '').toUpperCase();
+      // 无门槛普攻且无 cur：走行动周期重置
+      if (type === 'NORMAL' && ev.cur == null && ev.max == null) {
+        this.resetZeroNeedNormalRing(ev.uid, ev.t);
+        return;
+      }
+      this.applySkillChargeEvent({
+        uid: ev.uid,
+        skillId: ev.skillId,
+        skillType: type || ev.skillType,
+        skillName: ev.skillName,
+        cur: ev.cur != null ? ev.cur : 0,
+        max: ev.max,
+        t: ev.t
+      });
+    },
+    applySkillChargeEvent(ev) {
+      if (!ev || !ev.uid) return;
+      var bag = this.unitSkillSlots[ev.uid];
+      if (!bag) return;
+      // 优先 skillId 定位槽位（释放重置更稳），再回落 skillType
+      var type = '';
+      if (ev.skillId) {
+        Object.keys(bag).forEach(function (k) {
+          if (bag[k] && bag[k].skillId === ev.skillId) type = k;
+        });
+      }
+      if (!type && ev.skillType) type = String(ev.skillType).toUpperCase();
+      if (!type || !bag[type]) return;
+      var nextBag = Object.assign({}, this.unitSkillSlots);
+      var nextSlots = Object.assign({}, bag);
+      var slot = Object.assign({}, nextSlots[type]);
+      if (ev.max != null) slot.need = Math.max(0, Number(ev.max) || 0);
+      // cur=0 是合法值（释放清空），不能用 || 吃掉；缺省也写 0
+      if (ev.cur != null) {
+        slot.baseCur = Math.max(0, Number(ev.cur) || 0);
+      }
+      slot.baseAv = ev.t != null ? Number(ev.t) : (this.replayAvT || this.axisDisplay || 0);
+      nextSlots[type] = slot;
+      nextBag[ev.uid] = nextSlots;
+      this.unitSkillSlots = nextBag;
+    },
+    setHpUid(uid, hp, maxHp) {
+      if (!uid || !this.hpMap[uid]) return;
+      var s = this.hpMap[uid];
+      var next = Object.assign({}, this.hpMap);
+      var max = maxHp != null ? maxHp : s.maxHp;
+      var val = Math.max(0, Math.min(max, hp));
+      next[uid] = { hp: val, maxHp: max, side: s.side, name: s.name };
+      this.hpMap = next;
+      var ghost = Object.assign({}, this.ghostHp);
+      if (ghost[uid] == null) ghost[uid] = s.hp;
+      this.ghostHp = ghost;
+      var self = this;
+      setTimeout(function () {
+        var g = Object.assign({}, self.ghostHp);
+        g[uid] = val;
+        self.ghostHp = g;
+      }, 380);
+    },
+    markDead(uid) {
+      if (!uid) return;
+      var dead = Object.assign({}, this.deadUids);
+      dead[uid] = true;
+      this.deadUids = dead;
+      if (this.hpMap[uid]) this.setHpUid(uid, 0, this.hpMap[uid].maxHp);
+    },
+    spawnFloater(uid, text, cls) {
+      var arena = this.$refs.arena;
+      if (!arena || !uid || text == null || text === '') return;
+      var el = arena.querySelector('[data-uid="' + uid + '"]');
+      if (!el) return;
+      var ar = arena.getBoundingClientRect();
+      var hp = el.querySelector('.unit-hp');
+      var anchor = (hp || el).getBoundingClientRect();
+      var id = ++this.floaterSeq;
+      var isSkill = String(cls || '').indexOf('skill') >= 0;
+      var dir = isSkill ? 'up' : 'down';
+      var x = anchor.left + anchor.width / 2 - ar.left;
+      if (!isSkill) x += (Math.random() * 10 - 5);
+      // 技能名：血条上方；数字：血条位置
+      var y = isSkill
+        ? (anchor.top - ar.top - 4)
+        : (anchor.top + anchor.height / 2 - ar.top);
+      var pushStep = isSkill ? -18 : 18;
+      // 同单位同方向已有飘字往外推，避免叠在一起
+      this.floaters = this.floaters.map(function (f) {
+        if (f.uid === uid && f.dir === dir) {
+          return Object.assign({}, f, { push: (f.push || 0) + pushStep });
+        }
+        return f;
+      });
+      this.floaters = this.floaters.concat([{
+        id: id,
+        uid: uid,
+        text: text,
+        cls: cls || '',
+        dir: dir,
+        x: x,
+        y: y,
+        push: 0
+      }]);
+      var self = this;
+      setTimeout(function () {
+        self.floaters = self.floaters.filter((f) => f.id !== id);
+      }, isSkill ? 1400 : 1200);
+    },
+    spawnSkillFloater(uid, skillName, skillType) {
+      if (!uid || !skillName) return;
+      var cls = 'skill';
+      var t = String(skillType || '').toUpperCase();
+      if (t === 'ULTIMATE' || t === 'ULT' || t === 'BIG') cls += ' ult';
+      else if (t === 'NORMAL' || t === 'BASIC') cls += ' normal';
+      else if (t === 'SMALL') cls += ' small';
+      else if (t === 'PASSIVE') cls += ' passive';
+      this.spawnFloater(uid, skillName, cls);
+    },
+    shake(level) {
+      if (this.reducedMotion) return;
+      this.shakeClass = level === 'l' ? 'shake-l' : (level === 'm' ? 'shake-m' : 'shake-s');
+      var self = this;
+      setTimeout(function () { self.shakeClass = ''; }, 400);
+    },
+    flashHit(uid) {
+      if (this.reducedMotion || !uid) return;
+      this.hitUid = uid;
+      var self = this;
+      setTimeout(function () { if (self.hitUid === uid) self.hitUid = ''; }, 80);
+    },
+    refreshArtSlots() {
+      var self = this;
+      this.$nextTick(function () {
+        if (window.ArtSlots) ArtSlots.apply(self.$el);
+      });
+    },
+    /** 开战前探测各单位 attack.png / hit.png */
+    preloadPoseArt() {
+      if (!window.ArtSlots) return;
+      var codes = {};
+      var list = (this.allies || []).concat(this.monsters || []);
+      for (var i = 0; i < list.length; i++) {
+        var c = this.spriteCode(list[i]);
+        if (c) codes[c] = 1;
+      }
+      var self = this;
+      Object.keys(codes).forEach(function (code) {
+        Promise.all([
+          ArtSlots.probe('char/' + code + '/attack.png'),
+          ArtSlots.probe('char/' + code + '/hit.png')
+        ]).then(function (urls) {
+          var next = Object.assign({}, self.poseArt);
+          next[code] = { attack: !!urls[0], hit: !!urls[1] };
+          self.poseArt = next;
+        });
+      });
+    },
+    clearPoseTimer(uid) {
+      if (!uid || !this._poseTimers[uid]) return;
+      clearTimeout(this._poseTimers[uid]);
+      delete this._poseTimers[uid];
+    },
+    setUnitPose(uid, pose, holdMs) {
+      if (!uid) return;
+      this.clearPoseTimer(uid);
+      var map = Object.assign({}, this.poseMap);
+      if (!pose || pose === 'idle') {
+        delete map[uid];
+      } else {
+        map[uid] = pose;
+      }
+      this.poseMap = map;
+      this.refreshArtSlots();
+      if (pose && pose !== 'idle' && holdMs > 0) {
+        var self = this;
+        this._poseTimers[uid] = setTimeout(function () {
+          delete self._poseTimers[uid];
+          if (self.poseMap[uid] === pose) {
+            var m2 = Object.assign({}, self.poseMap);
+            delete m2[uid];
+            self.poseMap = m2;
+            self.refreshArtSlots();
+          }
+        }, holdMs);
+      }
+    },
+    clearLunge(uid) {
+      if (!uid) return;
+      if (this._lungeTimers[uid]) {
+        clearTimeout(this._lungeTimers[uid]);
+        delete this._lungeTimers[uid];
+      }
+      if (this.lungeMap[uid]) {
+        var m = Object.assign({}, this.lungeMap);
+        delete m[uid];
+        this.lungeMap = m;
+      }
+    },
+    unitEl(uid) {
+      if (!uid || !this.$el) return null;
+      return this.$el.querySelector('.formation-unit[data-uid="' + uid + '"]');
+    },
+    animMs(base, floor) {
+      var sp = Math.max(1, this.playbackSpeed || 1);
+      return Math.max(floor != null ? floor : 120, Math.round(base / sp));
+    },
+    strikeGhostStyle(g) {
+      if (!g) return {};
+      return {
+        left: g.left + 'px',
+        top: g.top + 'px',
+        width: g.w + 'px',
+        height: g.h + 'px',
+        '--dx': g.dx + 'px',
+        '--dy': g.dy + 'px',
+        '--dash-ms': (g.dashMs || 220) + 'ms',
+        backgroundImage: g.url ? ('url("' + g.url + '")') : 'none'
+      };
+    },
+    spriteUrlForUnit(uid, pose) {
+      var u = this.findUnitByUid(uid);
+      if (!u) return '';
+      var code = this.spriteCode(u);
+      if (!code) return '';
+      var file = 'idle_4.png';
+      if (pose === 'attack') file = 'attack.png';
+      else if (pose === 'hit') file = 'hit.png';
+      var root = (window.ArtSlots && ArtSlots.root) ? ArtSlots.root : 'art/';
+      return root + 'char/' + code + '/' + file;
+    },
+    /**
+     * 普攻 CAST：特效层残影冲向目标 → 攻方攻击帧 + 受方受击帧。
+     * （棋盘 overflow:hidden 会裁切单位位移，故不用 transform 冲刺本体）
+     */
+    playNormalStrike(ev) {
+      var attacker = ev && ev.uid;
+      if (!attacker) return;
+      var targets = (ev.targets && ev.targets.length) ? ev.targets : [];
+      var target = targets[0] || null;
+      if (target && target === attacker) target = null;
+      var self = this;
+      var dashMs = this.animMs(220, 180);
+      var strikeMs = this.animMs(480, 360);
+      this.$nextTick(function () {
+        var arena = self.$refs.arena;
+        var aEl = self.unitEl(attacker);
+        var tEl = target ? self.unitEl(target) : null;
+        if (self._lungeTimers[attacker]) clearTimeout(self._lungeTimers[attacker]);
+
+        self.setUnitPose(attacker, 'attack', dashMs + strikeMs);
+
+        if (!arena || !aEl || !target || !tEl || self.reducedMotion) {
+          if (target) self.setUnitPose(target, 'hit', strikeMs);
+          self._lungeTimers[attacker] = setTimeout(function () {
+            delete self._lungeTimers[attacker];
+            if (self.actingUid === attacker) self.actingUid = '';
+          }, strikeMs);
+          return;
+        }
+
+        var ar = arena.getBoundingClientRect();
+        var aR = aEl.getBoundingClientRect();
+        var tR = tEl.getBoundingClientRect();
+        var spr = aEl.querySelector('.unit-sprite');
+        var bg = spr ? getComputedStyle(spr).backgroundImage : '';
+        var url = '';
+        if (bg && bg !== 'none') {
+          var m = bg.match(/url\(["']?(.+?)["']?\)/);
+          if (m) url = m[1];
+        }
+        if (!url) url = self.spriteUrlForUnit(attacker, 'attack');
+
+        var left = aR.left - ar.left;
+        var top = aR.top - ar.top;
+        var dx = ((tR.left + tR.width / 2) - (aR.left + aR.width / 2)) * 0.82;
+        var dy = ((tR.top + tR.height / 2) - (aR.top + aR.height / 2)) * 0.82;
+        var gid = 'sg-' + Date.now() + '-' + Math.floor(Math.random() * 9999);
+        var ghost = {
+          id: gid,
+          url: url,
+          left: Math.round(left),
+          top: Math.round(top),
+          w: Math.round(aR.width),
+          h: Math.round(aR.height),
+          dx: Math.round(dx),
+          dy: Math.round(dy),
+          dashMs: dashMs,
+          flip: !!aEl.closest('.formation-board.enemy'),
+          phase: 'dash'
+        };
+        self.strikeGhosts = self.strikeGhosts.concat([ghost]);
+        var away = Object.assign({}, self.dashAwayMap);
+        away[attacker] = true;
+        self.dashAwayMap = away;
+
+        self._lungeTimers[attacker] = setTimeout(function () {
+          var ghosts = self.strikeGhosts.map(function (g) {
+            return g.id === gid ? Object.assign({}, g, { phase: 'impact' }) : g;
+          });
+          self.strikeGhosts = ghosts;
+          self.setUnitPose(target, 'hit', strikeMs);
+          self.flashHit(target);
+          setTimeout(function () {
+            self.strikeGhosts = self.strikeGhosts.filter(function (g) { return g.id !== gid; });
+            var away2 = Object.assign({}, self.dashAwayMap);
+            delete away2[attacker];
+            self.dashAwayMap = away2;
+            delete self._lungeTimers[attacker];
+            if (self.actingUid === attacker) self.actingUid = '';
+          }, strikeMs);
+        }, dashMs);
+      });
+    },
+    /** 充能技（小技能/大招）造成伤害时：受击方播受击帧 */
+    playChargeHitPose(uid) {
+      if (!uid || this.deadUids[uid]) return;
+      this.setUnitPose(uid, 'hit', this.animMs(420, 320));
+      this.flashHit(uid);
+    },
+    stopReplayClock() {
+      if (this.replayTimer) {
+        clearTimeout(this.replayTimer);
+        this.replayTimer = null;
+      }
+      if (this.rafId) {
+        cancelAnimationFrame(this.rafId);
+        this.rafId = 0;
+      }
+    },
+    eventDuration(type) {
+      var base = EVENT_DUR[type] != null ? EVENT_DUR[type] : EVENT_DUR._gap;
+      return Math.max(40, Math.round(base / this.playbackSpeed));
+    },
+    /** 距下一事件的等待：按总轴 Δt，100AV=2s；同 tick 用短节拍 */
+    formatAvAsTime(av) {
+      var n = Number(av) || 0;
+      if (n < 0) n = 0;
+      var totalSec = n / AV_PER_SEC;
+      if (totalSec < 60) return totalSec.toFixed(2) + '秒';
+      var min = Math.floor(totalSec / 60);
+      var rem = totalSec - min * 60;
+      return min + '分 ' + rem.toFixed(2) + '秒';
+    },
+    waitMsForAvDelta(avDelta, sameTick) {
+      var sp = Math.max(1, this.playbackSpeed || 1);
+      if (avDelta > 0) return Math.round(avDelta * AV_MS / sp);
+      // USE_EVENT_ANIM_WAIT：同 tick 短等待；关闭时同 tick 不等待
+      if (sameTick && USE_EVENT_ANIM_WAIT) return Math.max(28, Math.round(SAME_TICK_MS / sp));
+      return 0;
+    },
+    resetFreeAxisClock(now, av) {
+      this.axisWallOrigin = now || performance.now();
+      this.axisAvOrigin = Number(av) || 0;
+      this.axisLerp = null;
+    },
+    /** 轴永远跟墙钟走，不因事件/动画停顿 */
+    tickFreeAxis(now) {
+      if (!this.axisWallOrigin) this.resetFreeAxisClock(now, 0);
+      var sp = Math.max(1, this.playbackSpeed || 1);
+      var av = this.axisAvOrigin + ((now - this.axisWallOrigin) * sp) / AV_MS;
+      if (this.axisFinalAv > 0 && av > this.axisFinalAv) av = this.axisFinalAv;
+      this.axisDisplay = av;
+      return av;
+    },
+    /*
+     * 【保留】等动画播完再推进事件的旧路径（配合 USE_EVENT_ANIM_WAIT）。
+     * beginAxisLerp / tickAxisDisplay / scheduleNextEventAt
+     */
+    beginAxisLerp(from, to, now, waitMs) {
+      if (waitMs > 0 && to > from) {
+        this.axisLerp = { from: from, to: to, start: now, end: now + waitMs };
+      } else {
+        this.axisLerp = null;
+        this.axisDisplay = Math.round(to);
+      }
+    },
+    tickAxisDisplay(now) {
+      var lerp = this.axisLerp;
+      if (!lerp) {
+        this.axisDisplay = Math.round(this.replayAvT);
+        return;
+      }
+      var span = Math.max(1, lerp.end - lerp.start);
+      var p = (now - lerp.start) / span;
+      if (p >= 1) {
+        this.axisDisplay = Math.round(lerp.to);
+        return;
+      }
+      if (p < 0) p = 0;
+      this.axisDisplay = Math.round(lerp.from + (lerp.to - lerp.from) * p);
+    },
+    scheduleNextEventAt(now) {
+      if (this.eventIndex >= this.replayEvents.length) {
+        this.rafNextAt = now;
+        this.axisLerp = null;
+        return;
+      }
+      var next = this.replayEvents[this.eventIndex] || {};
+      var nextT = next.t != null ? Number(next.t) : this.replayAvT;
+      if (!isFinite(nextT)) nextT = this.replayAvT;
+      var avDelta = Math.max(0, nextT - this.replayAvT);
+      var sameTick = this.eventIndex > 0 && avDelta === 0;
+      var wait = this.waitMsForAvDelta(avDelta, sameTick);
+      this.rafNextAt = now + wait;
+      if (avDelta > 0) this.beginAxisLerp(this.replayAvT, nextT, now, wait);
+      else this.axisLerp = null;
+    },
+    resolveEventsFinalAv(events) {
+      var maxT = 0;
+      (events || []).forEach(function (ev) {
+        if (ev && ev.t != null && isFinite(Number(ev.t))) {
+          var t = Number(ev.t);
+          if (t > maxT) maxT = t;
+        }
+      });
+      return maxT;
+    },
+    pushLogLine(line) {
+      if (line == null) return;
+      this.visibleLogs.push(line);
+      this.pendingLogs = this.replayLogs.slice(this.logCursor);
+      this.$nextTick(() => {
+        var el = this.$refs.logList;
+        if (el) el.scrollTop = el.scrollHeight;
+      });
+    },
+    consumeLogForEvent(ev) {
+      var logs = this.replayLogs || [];
+      if (this.logCursor >= logs.length) return;
+      var type = ev && ev.type;
+      if (type === 'BATTLE_START') return;
+      if (type === 'BATTLE_END') {
+        while (this.logCursor < logs.length) this.pushLogLine(logs[this.logCursor++]);
+        return;
+      }
+      if (type === 'TURN_START' || type === 'CAST') {
+        while (this.logCursor < logs.length) {
+          var line = logs[this.logCursor];
+          var child = line.indexOf('└') >= 0 || /^\s+/.test(line);
+          if (child) break;
+          this.logCursor++;
+          this.pushLogLine(line);
+          if (String(line).indexOf('释放') >= 0 || String(line).indexOf('行动') >= 0) break;
+          if (type === 'TURN_START') break;
+        }
+        return;
+      }
+      while (this.logCursor < logs.length) {
+        var line2 = logs[this.logCursor];
+        var isChild = line2.indexOf('└') >= 0 || /^\s+/.test(line2);
+        if (!isChild) break;
+        this.logCursor++;
+        this.pushLogLine(line2);
+        break;
+      }
+    },
+    applyEvent(ev) {
+      if (!ev || !ev.type) return;
+      var type = ev.type;
+      if (type === 'BATTLE_START') {
+        this.clashSweep = true;
+        var self = this;
+        setTimeout(function () { self.clashSweep = false; }, 700);
+      } else if (type === 'TURN_START') {
+        this.actingUid = ev.uid || '';
+        this.resetZeroNeedNormalRing(ev.uid, ev.t);
+        var self2 = this;
+        var uid = ev.uid;
+        setTimeout(function () { if (self2.actingUid === uid) self2.actingUid = ''; }, this.eventDuration('CAST'));
+      } else if (type === 'CAST') {
+        this.actingUid = ev.uid || '';
+        this.spawnSkillFloater(ev.uid, ev.skillName, ev.skillType);
+        // 释放后同步该技能充能条：有 payload 用剩余值，否则清空再按规则涨
+        this.onSkillCastCharge(ev);
+        this.applyFocusChargeEvent(ev);
+        // 仅普攻：冲刺位移 + 攻击帧 / 受击帧
+        if (String(ev.skillType || '').toUpperCase() === 'NORMAL') {
+          this.playNormalStrike(ev);
+        }
+      } else if (type === 'HIT') {
+        if (ev.target != null && ev.hpAfter != null) {
+          this.setHpUid(ev.target, ev.hpAfter, ev.maxHp);
+        }
+        this.flashHit(ev.target);
+        this.shake(ev.crit ? 'm' : 's');
+        var dmgText = '-' + String(ev.damage != null ? ev.damage : 0);
+        if (ev.crit) dmgText = dmgText + '!';
+        this.spawnFloater(ev.target, dmgText, ev.crit ? 'crit' : 'dmg');
+        // 充能技伤害：受击帧（普攻受击已在 CAST 里播过）
+        var hitSt = String(ev.skillType || '').toUpperCase();
+        if (hitSt === 'SMALL' || hitSt === 'ULTIMATE') {
+          this.playChargeHitPose(ev.target);
+        }
+      } else if (type === 'HEAL') {
+        if (ev.target != null && ev.hpAfter != null) {
+          this.setHpUid(ev.target, ev.hpAfter, ev.maxHp);
+        }
+        this.spawnFloater(ev.target, '+' + (ev.value || 0), 'heal');
+      } else if (type === 'CHARGE') {
+        this.applyFocusChargeEvent(ev);
+        this.applySkillChargeEvent(ev);
+      } else if (type === 'BUFF') {
+        var bmap = Object.assign({}, this.buffMap);
+        var uid = ev.target || ev.uid;
+        var list = (bmap[uid] || []).slice();
+        var key = ev.attrKey || 'ATTR';
+        var found = -1;
+        for (var bi = 0; bi < list.length; bi++) {
+          if (list[bi] && list[bi].attrKey === key) { found = bi; break; }
+        }
+        var chip = {
+          attrKey: key,
+          dir: ev.dir || 'UP',
+          stack: ev.stack || 1,
+          value: ev.value || 0,
+          duration: ev.duration != null ? Number(ev.duration) : 0
+        };
+        if (found >= 0) list[found] = chip;
+        else list.push(chip);
+        bmap[uid] = list.slice(-6);
+        this.buffMap = bmap;
+      } else if (type === 'BUFF_END') {
+        var endMap = Object.assign({}, this.buffMap);
+        var endUid = ev.target || ev.uid;
+        var endList = (endMap[endUid] || []).filter(function (b) {
+          return !b || b.attrKey !== (ev.attrKey || 'ATTR');
+        });
+        if (endList.length) endMap[endUid] = endList;
+        else delete endMap[endUid];
+        this.buffMap = endMap;
+      } else if (type === 'DEATH') {
+        this.markDead(ev.uid);
+      }
+      this.consumeLogForEvent(ev);
+    },
+    playEventReplay(data) {
+      this.replayMode = 'events';
+      this.replayData = data;
+      this.replayEvents = (data.events || []).slice();
+      this.replayLogs = (data.logs || []).slice();
+      // 开战即种入技/大充能（重击宝石等），不依赖首个 CHARGE 事件
+      this.seedFocusChargesFromData(data);
+      this.eventIndex = 0;
+      this.logCursor = 0;
+      this.replayAvT = 0;
+      this.axisDisplay = 0;
+      this.axisLerp = null;
+      this.axisWallOrigin = 0;
+      this.axisAvOrigin = 0;
+      this.axisFinalAv = this.resolveEventsFinalAv(this.replayEvents);
+      this.pendingLogs = this.replayLogs.slice();
+      this.resetCombatPoses();
+      this.fighting = false;
+      this.replaying = true;
+      this.paused = false;
+      this.rafNextAt = 0;
+      if (this.skipRequested) {
+        this.skipReplay();
+        return;
+      }
+      this.startEventReplayLoop();
+    },
+    startEventReplayLoop() {
+      var self = this;
+      if (USE_EVENT_ANIM_WAIT) {
+        var loopWait = function (now) {
+          if (!self.replaying || self.replayMode !== 'events' || self.paused) return;
+          if (!self.rafNextAt) self.scheduleNextEventAt(now);
+          self.tickAxisDisplay(now);
+          if (now >= self.rafNextAt) {
+            if (self.eventIndex >= self.replayEvents.length) {
+              while (self.logCursor < self.replayLogs.length) self.pushLogLine(self.replayLogs[self.logCursor++]);
+              self.finishReplay(self.replayData || {});
+              return;
+            }
+            var ev = self.replayEvents[self.eventIndex++];
+            self.applyEvent(ev);
+            if (ev && ev.t != null && isFinite(Number(ev.t))) {
+              self.replayAvT = Number(ev.t);
+              self.axisDisplay = Math.round(self.replayAvT);
+              self.axisLerp = null;
+            }
+            if (self.eventIndex >= self.replayEvents.length) {
+              while (self.logCursor < self.replayLogs.length) self.pushLogLine(self.replayLogs[self.logCursor++]);
+              self.finishReplay(self.replayData || {});
+              return;
+            }
+            self.scheduleNextEventAt(now);
+          }
+          self.rafId = requestAnimationFrame(loopWait);
+        };
+        this.rafId = requestAnimationFrame(loopWait);
+        return;
+      }
+      var loopFree = function (now) {
+        if (!self.replaying || self.replayMode !== 'events' || self.paused) return;
+        var axisAv = self.tickFreeAxis(now);
+        while (self.eventIndex < self.replayEvents.length) {
+          var ev2 = self.replayEvents[self.eventIndex];
+          var evT = ev2 && ev2.t != null && isFinite(Number(ev2.t)) ? Number(ev2.t) : self.replayAvT;
+          if (evT > axisAv) break;
+          self.eventIndex++;
+          self.applyEvent(ev2);
+          self.replayAvT = evT;
+        }
+        if (self.eventIndex >= self.replayEvents.length && axisAv >= self.axisFinalAv) {
+          while (self.logCursor < self.replayLogs.length) self.pushLogLine(self.replayLogs[self.logCursor++]);
+          self.finishReplay(self.replayData || {});
+          return;
+        }
+        self.rafId = requestAnimationFrame(loopFree);
+      };
+      this.rafId = requestAnimationFrame(loopFree);
+    },
+    /* —— 正则降级路径 —— */
+    playLogReplay(data) {
+      this.replayMode = 'logs';
+      this.replayData = data;
+      this.replayLogs = (data.logs || []).slice();
+      this.replayIndex = 0;
+      this.logAvT = 0;
+      this.replayAvT = 0;
+      this.axisDisplay = 0;
+      this.axisLerp = null;
+      this.axisWallOrigin = 0;
+      this.axisAvOrigin = 0;
+      var maxAv = 0;
+      (this.replayLogs || []).forEach((line) => {
+        var a = this.parseLogActionValue(line);
+        if (a != null && a > maxAv) maxAv = a;
+      });
+      this.axisFinalAv = maxAv;
+      this.pendingLogs = this.replayLogs.slice();
+      this.fighting = false;
+      this.replaying = true;
+      this.paused = false;
+      if (this.skipRequested) {
+        this.skipReplay();
+        return;
+      }
+      this.startLogReplayLoop();
+    },
+    startLogReplayLoop() {
+      if (USE_EVENT_ANIM_WAIT) {
+        this.scheduleLogStep();
+        return;
+      }
+      var self = this;
+      var loopLog = function (now) {
+        if (!self.replaying || self.replayMode !== 'logs' || self.paused) return;
+        var axisAv = self.tickFreeAxis(now);
+        while (self.replayIndex < self.replayLogs.length) {
+          var line = self.replayLogs[self.replayIndex];
+          var av = self.parseLogActionValue(line);
+          if (av != null && isFinite(av) && av > axisAv) break;
+          self.replayIndex++;
+          if (av != null && isFinite(av)) {
+            self.logAvT = av;
+            self.replayAvT = av;
+          }
+          self.pendingLogs = self.replayLogs.slice(self.replayIndex);
+          self.visibleLogs.push(line);
+          self.applyLogAnimLegacy(line);
+        }
+        self.$nextTick(function () {
+          var el = self.$refs.logList;
+          if (el) el.scrollTop = el.scrollHeight;
+        });
+        if (self.replayIndex >= self.replayLogs.length && axisAv >= self.axisFinalAv) {
+          self.pendingLogs = [];
+          self.finishReplay(self.replayData || {});
+          return;
+        }
+        self.rafId = requestAnimationFrame(loopLog);
+      };
+      this.rafId = requestAnimationFrame(loopLog);
+    },
+    /* 【保留】日志逐步等待路径（USE_EVENT_ANIM_WAIT） */
+    scheduleLogStep() {
+      if (this.replayTimer) clearTimeout(this.replayTimer);
+      if (this.rafId) {
+        cancelAnimationFrame(this.rafId);
+        this.rafId = 0;
+      }
+      var delay = this.logStepDelay();
+      var line = (this.replayLogs || [])[this.replayIndex];
+      var nextAv = this.parseLogActionValue(line);
+      var now = performance.now();
+      if (nextAv != null && isFinite(nextAv) && nextAv > this.logAvT && delay > 0) {
+        this.beginAxisLerp(this.logAvT, nextAv, now, delay);
+        var selfTick = this;
+        var tick = function (t) {
+          if (!selfTick.replaying || selfTick.replayMode !== 'logs') return;
+          selfTick.tickAxisDisplay(t);
+          selfTick.rafId = requestAnimationFrame(tick);
+        };
+        this.rafId = requestAnimationFrame(tick);
+      } else {
+        this.axisLerp = null;
+      }
+      var self = this;
+      this.replayTimer = setTimeout(function () { self.advanceLogReplay(); }, delay);
+    },
+    parseLogActionValue(line) {
+      if (!line) return null;
+      var m = String(line).match(/^行动值\s*(\d+)/) || String(line).match(/^\[行动值\s*(\d+)\]/);
+      return m ? Number(m[1]) : null;
+    },
+    logStepDelay() {
+      var line = (this.replayLogs || [])[this.replayIndex];
+      var av = this.parseLogActionValue(line);
+      if (av != null && isFinite(av)) {
+        var delta = Math.max(0, av - this.logAvT);
+        if (delta > 0) return this.waitMsForAvDelta(delta, false);
+      }
+      return this.waitMsForAvDelta(0, true);
+    },
+    advanceLogReplay() {
+      if (!this.replaying || this.replayMode !== 'logs' || this.paused) return;
+      if (this.rafId) {
+        cancelAnimationFrame(this.rafId);
+        this.rafId = 0;
+      }
+      if (this.replayIndex >= this.replayLogs.length) {
+        this.pendingLogs = [];
+        this.finishReplay(this.replayData || {});
+        return;
+      }
+      var line = this.replayLogs[this.replayIndex++];
+      var av = this.parseLogActionValue(line);
+      if (av != null && isFinite(av)) {
+        this.logAvT = av;
+        this.replayAvT = av;
+        this.axisDisplay = Math.round(av);
+        this.axisLerp = null;
+      }
+      this.pendingLogs = this.replayLogs.slice(this.replayIndex);
+      this.visibleLogs.push(line);
+      this.applyLogAnimLegacy(line);
+      this.$nextTick(() => {
+        var el = this.$refs.logList;
+        if (el) el.scrollTop = el.scrollHeight;
+      });
+      this.scheduleLogStep();
+    },
+    resolveUidByName(name) {
+      if (!name) return '';
+      var hit = Object.keys(this.hpMap || {}).find((uid) => this.hpMap[uid] && this.hpMap[uid].name === name);
+      return hit || '';
+    },
+    applyLogAnimLegacy(line) {
+      if (!line) return;
+      var body = String(line).replace(/^行动值\s*\d+\n/, '').replace(/^\[行动值\s*\d+\]\s*/, '');
+      var dmg = body.match(/对\s*(.+?)\s*造成\s*(\d+)/);
+      if (dmg) {
+        var tid = this.resolveUidByName(dmg[1].trim());
+        if (tid && this.hpMap[tid]) {
+          this.setHpUid(tid, this.hpMap[tid].hp - Number(dmg[2]), this.hpMap[tid].maxHp);
+          this.flashHit(tid);
+          this.spawnFloater(tid, '-' + dmg[2], 'dmg');
+          this.shake('s');
+          if (body.indexOf('击杀') >= 0) this.markDead(tid);
+        }
+      }
+      var heal = body.match(/治疗\s*(.+?)\s*(\d+)/);
+      if (heal) {
+        var hid = this.resolveUidByName(heal[1].trim());
+        if (hid && this.hpMap[hid]) {
+          this.setHpUid(hid, this.hpMap[hid].hp + Number(heal[2]), this.hpMap[hid].maxHp);
+          this.spawnFloater(hid, '+' + heal[2], 'heal');
+        }
+      }
+      var cast = body.match(/^(.+?)\s*释放[「『](.+?)[」』]/)
+        || body.match(/^(.+?)\s*释放\s*(.+)$/);
+      if (cast) {
+        var aid = this.resolveUidByName(cast[1].trim());
+        this.actingUid = aid;
+        if (cast[2]) this.spawnSkillFloater(aid, String(cast[2]).trim());
+        var self = this;
+        setTimeout(function () { if (self.actingUid === aid) self.actingUid = ''; }, 400);
+      }
+    },
+    playBattleReplay(data) {
+      if (data && data.events && data.events.length) this.playEventReplay(data);
+      else this.playLogReplay(data);
+    },
+    togglePause() {
+      if (!this.canPause) return;
+      if (this.paused) this.resumeReplay();
+      else this.pauseReplay();
+    },
+    pauseReplay() {
+      if (!this.replaying || this.paused) return;
+      var now = performance.now();
+      if (this.axisWallOrigin && !USE_EVENT_ANIM_WAIT) {
+        var sp = Math.max(1, this.playbackSpeed || 1);
+        var cur = this.axisAvOrigin + ((now - this.axisWallOrigin) * sp) / AV_MS;
+        if (this.axisFinalAv > 0 && cur > this.axisFinalAv) cur = this.axisFinalAv;
+        this.pauseFrozenAv = cur;
+        this.axisDisplay = cur;
+      } else {
+        this.pauseFrozenAv = this.axisDisplay || this.replayAvT || 0;
+      }
+      this.paused = true;
+      this.stopReplayClock();
+    },
+    resumeReplay() {
+      if (!this.paused || !this.replaying) return;
+      this.paused = false;
+      if (!USE_EVENT_ANIM_WAIT) {
+        this.resetFreeAxisClock(performance.now(), this.pauseFrozenAv);
+      }
+      if (this.replayMode === 'events') this.startEventReplayLoop();
+      else this.startLogReplayLoop();
+    },
+    skipReplay() {
+      if (!this.fighting && !this.replaying) return;
+      if (this.fighting && !this.replaying) {
+        this.skipRequested = true;
+        return;
+      }
+      this.paused = false;
+      this.stopReplayClock();
+      if (this.replayMode === 'events') {
+        while (this.eventIndex < this.replayEvents.length) {
+          this.applyEvent(this.replayEvents[this.eventIndex++]);
+        }
+        while (this.logCursor < this.replayLogs.length) this.pushLogLine(this.replayLogs[this.logCursor++]);
+      } else {
+        var rest = this.replayLogs.slice(this.replayIndex);
+        rest.forEach((line) => {
+          this.visibleLogs.push(line);
+          this.applyLogAnimLegacy(line);
+        });
+        this.replayIndex = this.replayLogs.length;
+      }
+      this.pendingLogs = [];
+      this.actingUid = '';
+      this.hitUid = '';
+      this.snapAxisToEnd(this.replayData || {});
+      this.finishReplay(this.replayData || {});
+    },
+    setPlaybackSpeed(sp) {
+      var now = performance.now();
+      // 换倍速时锚定当前轴值，避免跳变
+      if (this.replaying && !this.paused && this.axisWallOrigin && !USE_EVENT_ANIM_WAIT) {
+        var oldSp = Math.max(1, this.playbackSpeed || 1);
+        var cur = this.axisAvOrigin + ((now - this.axisWallOrigin) * oldSp) / AV_MS;
+        this.resetFreeAxisClock(now, cur);
+      } else if (this.paused) {
+        // 暂停中只改倍速，继续时用冻结轴值重启
+      }
+      this.playbackSpeed = sp;
+      localStorage.setItem('battlePlaybackSpeed', String(sp));
+    },
+    cycleSpeed() {
+      if (!this.showSpeedCtrl) return;
+      var next = this.playbackSpeed === 1 ? 2 : (this.playbackSpeed === 2 ? 3 : 1);
+      this.setPlaybackSpeed(next);
+    },
+    snapAxisToEnd(data) {
+      this.axisLerp = null;
+      var events = (data && data.events) || this.replayEvents || [];
+      var lastT = this.replayAvT || 0;
+      for (var i = events.length - 1; i >= 0; i--) {
+        if (events[i] && events[i].t != null && isFinite(Number(events[i].t))) {
+          lastT = Number(events[i].t);
+          break;
+        }
+      }
+      if (!events.length && data && data.ticks != null) lastT = Number(data.ticks) || lastT;
+      this.replayAvT = lastT;
+      this.logAvT = lastT;
+      this.axisDisplay = Math.round(lastT);
+    },
+    resetCombatPoses() {
+      Object.keys(this._poseTimers || {}).forEach((k) => clearTimeout(this._poseTimers[k]));
+      Object.keys(this._lungeTimers || {}).forEach((k) => clearTimeout(this._lungeTimers[k]));
+      this._poseTimers = {};
+      this._lungeTimers = {};
+      this.poseMap = {};
+      this.lungeMap = {};
+      this.strikeGhosts = [];
+      this.dashAwayMap = {};
+      this.refreshArtSlots();
+    },
+    finishReplay(data) {
+      this.stopReplayClock();
+      this.snapAxisToEnd(data);
+      this.replaying = false;
+      this.fighting = false;
+      this.paused = false;
+      this.skipRequested = false;
+      this.actingUid = '';
+      this.hitUid = '';
+      this.resetCombatPoses();
+      this.outcome = (data && data.outcome) || '';
+      var self = this;
+      this.resultBanner = this.outcome === 'WIN' ? 'win' : (this.outcome === 'LOSE' ? 'lose' : '');
+      setTimeout(function () {
+        self.resultBanner = '';
+        self.resultModal = {
+          show: true,
+          outcome: self.outcome,
+          ticks: data && data.ticks != null ? data.ticks : null,
+          durationText: self.formatAvAsTime(self.axisDisplay),
+          drops: (data && data.drops) || [],
+          firstClear: !!(data && data.firstClear),
+          levelFirstRewards: (data && data.levelFirstRewards) || [],
+          chapterFirstRewards: (data && data.chapterFirstRewards) || []
+        };
+      }, 700);
+    },
+    closeResultModal() { this.resultModal.show = false; },
+    viewLogs() {
+      this.resultModal.show = false;
+      this.logDrawerOpen = true;
+    },
+    onLogDrawerDown(e) {
+      if (!this.visibleLogs.length) return;
+      this.logDrag = { y: e.clientY, open: this.logDrawerOpen };
+    },
+    onLogDrawerMove(e) {
+      if (!this.logDrag) return;
+      var dy = this.logDrag.y - e.clientY;
+      if (!this.logDrag.open && dy > 36) this.logDrawerOpen = true;
+      if (this.logDrag.open && dy < -36) this.logDrawerOpen = false;
+    },
+    onLogDrawerUp() { this.logDrag = null; },
+    /** 充能条横向拖拽滚动（手机触摸兜底） */
+    onFbChargesDown(e) {
+      var el = e.currentTarget;
+      if (!el || el.scrollWidth <= el.clientWidth + 2) return;
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      this.fbChargesDrag = {
+        el: el,
+        x: e.clientX,
+        left: el.scrollLeft,
+        moved: false,
+        id: e.pointerId
+      };
+      try { el.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+      el.classList.add('is-dragging');
+    },
+    onFbChargesMove(e) {
+      var d = this.fbChargesDrag;
+      if (!d || !d.el) return;
+      var dx = e.clientX - d.x;
+      if (!d.moved && Math.abs(dx) < 3) return;
+      d.moved = true;
+      d.el.scrollLeft = d.left - dx;
+      e.preventDefault();
+    },
+    onFbChargesUp(e) {
+      var d = this.fbChargesDrag;
+      if (!d) return;
+      if (d.el) {
+        d.el.classList.remove('is-dragging');
+        try {
+          if (d.id != null) d.el.releasePointerCapture(d.id);
+        } catch (err) { /* ignore */ }
+      }
+      this.fbChargesDrag = null;
+    },
+    fightAgain() {
+      this.resultModal.show = false;
+      this.logDrawerOpen = false;
+      this.startFight();
+    },
+    goNextLevel() {
+      if (this.battleMode === 'tower') {
+        if (!this.towerNextLevelId) { this.showToast('无尽塔已结束'); return; }
+        location.href = (APP_CONFIG.battlePage || 'battle.html') + '?mode=tower';
+        return;
+      }
+      if (!this.nextLevelId) { this.showToast('已是最后一关'); return; }
+      localStorage.setItem(APP_CONFIG.selectedLevelKey || 'selectedLevelId', this.nextLevelId);
+      location.href = (APP_CONFIG.battlePage || 'battle.html')
+        + '?levelId=' + encodeURIComponent(this.nextLevelId);
+    },
+    goHome() { location.href = (APP_CONFIG.homePage || 'index.html'); },
+    goBack() { location.href = (APP_CONFIG.homePage || 'index.html') + '#deploy'; },
+    logLineClass(line) {
+      if (!line) return '';
+      if (line.indexOf('胜利') >= 0) return 'is-win';
+      if (line.indexOf('失败') >= 0) return 'is-lose';
+      if (/^\[[^\]]+\]$/.test(line)
+          || line === '充能技能' || /\]充能技能$/.test(line)
+          || line === '锚点被动' || line === '周期被动'
+          || line.indexOf('装备充能技能') >= 0
+          || line.indexOf('装备锚点被动') >= 0
+          || line.indexOf('装备周期被动') >= 0
+          || line.indexOf('充能技能') >= 0
+          || line.indexOf('被动技能') >= 0) return 'is-equip';
+      if (line.indexOf('释放') >= 0) return 'is-cast';
+      if (line.indexOf('击杀') >= 0) return 'is-kill';
+      if (line.indexOf('造成') >= 0) return 'is-dmg';
+      if (line.indexOf('充能 +') >= 0) return 'is-charge';
+      if (line.indexOf('治疗') >= 0) return 'is-heal';
+      if (line.indexOf('└') >= 0 && line.indexOf(' * ') >= 0) return 'is-loot';
+      if (line.indexOf('无掉落') >= 0) return 'is-loot';
+      return '';
+    },
+    logTreeDepth(line) {
+      var s = String(line == null ? '' : line);
+      if (!s) return 0;
+      // 二级：│  └ ...
+      if (/│\s*└/.test(s) || /^\s{2,}│/.test(s) || /^\s{6,}└/.test(s)) return 2;
+      if (s.indexOf('└') >= 0) return 1;
+      if (/^\s+/.test(s)) return 1;
+      return 0;
+    },
+    /** 树形开战日志：保留 │/└ 缩进；{{a/p:id}}名称 → 可点击 */
+    formatTreeLogHtml(line) {
+      var raw = String(line == null ? '' : line);
+      var links = [];
+      var marked = raw.replace(/\{\{(a|p):([^}]+)\}\}([^\n]*)/g, function (_m, kind, id, name) {
+        var i = links.length;
+        links.push({ kind: kind, id: id, name: name });
+        return '\u0001L' + i + '\u0001';
+      });
+      var html = this.escapeHtml(marked)
+        .replace(/ /g, '&nbsp;')
+        .replace(/│/g, '<span class="log-tree-rail">│</span>')
+        .replace(/└/g, '<span class="log-tree-branch">└</span>');
+      for (var i = 0; i < links.length; i++) {
+        var L = links[i];
+        var attr = L.kind === 'a' ? 'data-skill-id' : 'data-passive-id';
+        var link = '<a href="javascript:;" class="log-skill-link" ' + attr + '="'
+          + this.escapeHtml(L.id) + '">' + this.escapeHtml(L.name) + '</a>';
+        html = html.split('\u0001L' + i + '\u0001').join(link);
+      }
+      return html;
+    },
+    onBattleLogClick(e) {
+      var a = e.target && e.target.closest ? e.target.closest('a.log-skill-link') : null;
+      if (!a) return;
+      e.preventDefault();
+      e.stopPropagation();
+      var skillId = a.getAttribute('data-skill-id');
+      var passiveId = a.getAttribute('data-passive-id');
+      if (skillId) this.openSkillDetail(skillId);
+      else if (passiveId) this.openPassiveDetail(passiveId);
+    },
+    openSkillDetail(skillId) {
+      if (!skillId) return;
+      var self = this;
+      this.skillDetailOpen = true;
+      this.skillDetailLoading = true;
+      this.skillDetailKind = 'active';
+      this.skillDetail = null;
+      GameApi.activeSkillDetail(skillId)
+        .then(function (res) {
+          self.skillDetail = res.data || null;
+          if (!self.skillDetail || !self.skillDetail.skill) {
+            self.showToast('技能不存在');
+            self.closeSkillDetail();
+          }
+        })
+        .catch(function (err) {
+          self.authCatch(err);
+          self.closeSkillDetail();
+        })
+        .finally(function () { self.skillDetailLoading = false; });
+    },
+    openPassiveDetail(passiveId) {
+      if (!passiveId) return;
+      var self = this;
+      this.skillDetailOpen = true;
+      this.skillDetailLoading = true;
+      this.skillDetailKind = 'passive';
+      this.skillDetail = null;
+      GameApi.passiveSkillDetail(passiveId)
+        .then(function (res) {
+          self.skillDetail = res.data || null;
+          if (!self.skillDetail) {
+            self.showToast('被动不存在');
+            self.closeSkillDetail();
+          }
+        })
+        .catch(function (err) {
+          self.authCatch(err);
+          self.closeSkillDetail();
+        })
+        .finally(function () { self.skillDetailLoading = false; });
+    },
+    closeSkillDetail() {
+      if (this.buffDetailOpen) {
+        this.closeBuffDetail();
+        return;
+      }
+      this.skillDetailOpen = false;
+      this.skillDetailLoading = false;
+      this.skillDetailKind = 'active';
+      this.skillDetail = null;
+    },
+    isAppendBuffClickable(e) {
+      return !!(e && e.outputKind === 'APPEND_BUFF' && e.buffDefId);
+    },
+    formatAppendBuffLead(e) {
+      if (!e) return '';
+      var rate = e.triggerRate != null ? Number(e.triggerRate) : 100;
+      var ratePart = (rate < 100) ? (Math.max(0, rate) + '% ') : '';
+      return ratePart + '对 ' + this.effectTargetLabel(e.targetType) + ' ';
+    },
+    appendBuffLinkLabel(e) {
+      if (e && e.buffDefName) return '追加「' + e.buffDefName + '」';
+      return '追加BUFF';
+    },
+    formatAppendBuffTail(e) {
+      if (!e) return '';
+      return e.durationAv != null && Number(e.durationAv) > 0
+        ? '（持续 ' + this.formatAvSec(e.durationAv) + '）'
+        : '';
+    },
+    openBuffDetail(buffDefId) {
+      if (!buffDefId) {
+        this.showToast('BUFF 未配置');
+        return;
+      }
+      var self = this;
+      this.buffDetailOpen = true;
+      this.buffDetailLoading = true;
+      this.buffDetail = null;
+      GameApi.buffDefDetail(buffDefId)
+        .then(function (res) {
+          self.buffDetail = res.data || null;
+          if (!self.buffDetail) {
+            self.showToast('BUFF 不存在');
+            self.closeBuffDetail();
+          }
+        })
+        .catch(function (err) {
+          self.authCatch(err);
+          self.closeBuffDetail();
+        })
+        .finally(function () { self.buffDetailLoading = false; });
+    },
+    closeBuffDetail() {
+      this.buffDetailOpen = false;
+      this.buffDetailLoading = false;
+      this.buffDetail = null;
+    },
+    buffKindLabel(v) {
+      return {
+        ATTR: '属性 BUFF',
+        PULSE: '脉冲 BUFF',
+        JUDGE_ATTR: '判定属性 BUFF',
+        JUDGE_BURST: '判定爆发 BUFF'
+      }[v] || v || 'BUFF';
+    },
+    formatBuffDuration(b) {
+      if (!b) return '—';
+      if (b.durationAv != null && Number(b.durationAv) > 0) {
+        return this.formatAvSec(b.durationAv);
+      }
+      return '战斗内永久';
+    },
+    formatBuffStack(b) {
+      if (!b) return '—';
+      if (b.stackMode === 'STACK') {
+        var max = b.maxStacks != null && Number(b.maxStacks) > 0 ? Number(b.maxStacks) : 0;
+        return max > 0 ? ('可叠加（最多 ' + max + ' 层）') : '可叠加';
+      }
+      return '不可叠加';
+    },
+    formatFormulaPlain(raw) {
+      return this.formatEffectFormula({ formulaJson: raw });
+    },
+    buildBuffEffectLines(b) {
+      if (!b) return [];
+      var lines = [];
+      var kind = b.buffKind || '';
+      if (kind === 'JUDGE_ATTR' || kind === 'JUDGE_BURST') {
+        var left = this.formatFormulaPlain(b.leftFormulaJson) || '左式';
+        var right = this.formatFormulaPlain(b.rightFormulaJson) || '右式';
+        lines.push('判定：' + left + ' ' + this.compareOpLabel(b.compareOp) + ' ' + right);
+      }
+      if (kind === 'ATTR' || kind === 'JUDGE_ATTR') {
+        var formula = this.formatFormulaPlain(b.formulaJson);
+        lines.push(
+          this.attrModifyDirLabel(b.attrDir) + this.attrModifyKeyLabel(b.attrKey)
+          + (formula ? ' ' + formula : '')
+        );
+      }
+      if (kind === 'PULSE') {
+        var every = b.pulseEveryAv != null ? this.formatAvSec(b.pulseEveryAv) : '—';
+        var pulseTarget = this.effectTargetLabel(b.pulseTargetType);
+        var pulseFormula = this.formatFormulaPlain(b.formulaJson);
+        if (b.pulseEffectType === 'HEAL') {
+          lines.push('每 ' + every + ' 对 ' + pulseTarget + ' 治疗' + (pulseFormula ? ' ' + pulseFormula : ''));
+        } else {
+          var el = this.damageElementLabel(b.damageElement || 'PHYSICAL');
+          lines.push('每 ' + every + ' 对 ' + pulseTarget + ' 造成 ' + el + '伤害'
+            + (pulseFormula ? ' ' + pulseFormula : ''));
+        }
+      }
+      if (kind === 'JUDGE_BURST') {
+        var burstFormula = this.formatFormulaPlain(b.formulaJson);
+        if (b.pulseEffectType === 'HEAL') {
+          lines.push('成立时 对 持有者 治疗' + (burstFormula ? ' ' + burstFormula : ''));
+        } else if (b.pulseEffectType === 'ATTR_MODIFY') {
+          lines.push(
+            '成立时 '
+            + this.attrModifyDirLabel(b.attrDir) + this.attrModifyKeyLabel(b.attrKey)
+            + (burstFormula ? ' ' + burstFormula : '')
+          );
+        } else {
+          var bel = this.damageElementLabel(b.damageElement || 'PHYSICAL');
+          lines.push('成立时 对 持有者 造成 ' + bel + '伤害'
+            + (burstFormula ? ' ' + burstFormula : ''));
+        }
+      }
+      return lines.filter(Boolean);
+    },
+    skillTypeLabel(type) {
+      return { NORMAL: '普攻', ULTIMATE: '大招', SMALL: '小技能' }[type] || type || '—';
+    },
+    skillNeedChargeText(sk) {
+      if (!sk) return '—';
+      if (sk.needChargeMode === 'SELF_BASE_ACTION') return '自己基础行动值';
+      return sk.needCharge != null ? String(sk.needCharge) : '0';
+    },
+    chargeConditionLabel(type) {
+      return {
+        ACTION_VALUE: '行动值充能',
+        SKILL_CHARGE: '技能充能'
+      }[type] || type || '—';
+    },
+    skillChargeEventLabel(v) {
+      return {
+        CAST: '释放',
+        RECEIVE: '受到',
+        DEAL_DAMAGE: '造成伤害',
+        TAKE_DAMAGE: '受到伤害',
+        KILL: '造成击杀'
+      }[v] || v || '—';
+    },
+    skillChargeMatchLabel(v) {
+      return {
+        ANY: '任意', ANY_TYPE: '指定类型', ANY_SCHOOL: '指定流派',
+        ANY_ELEMENT: '指定元素类型', SPECIFIC: '指定技能'
+      }[v] || v || '—';
+    },
+    skillChargeTargetLabel(c) {
+      if (!c) return '—';
+      if (c.skillChargeMatch === 'ANY_TYPE') return this.skillTypeLabel(c.matchSkillType) || '—';
+      if (c.skillChargeMatch === 'ANY_SCHOOL') return c.matchSkillSchool || '无';
+      if (c.skillChargeMatch === 'ANY_ELEMENT') return this.damageElementLabel(c.matchDamageElement);
+      if (c.skillChargeMatch === 'SPECIFIC') return c.matchSkillName || c.matchSkillId || '—';
+      return '—';
+    },
+    /** 行动值 → 秒（50 AV = 1 秒） */
+    formatAvSec(av) {
+      return this.formatAvAsTime(av);
+    },
+    /** 例：释放 普攻 类型 技能 充能+1 */
+    formatChargeConditionSummary(c) {
+      if (!c) return '—';
+      var gain = c.chargeGain != null ? Number(c.chargeGain) : 0;
+      if (c.conditionType === 'ACTION_VALUE') {
+        return '每 ' + this.formatAvSec(c.everyActionValue || 0) + ' 充能+' + gain;
+      }
+      if (c.conditionType === 'SKILL_CHARGE') {
+        var event = this.skillChargeEventLabel(c.skillChargeEvent);
+        var match = c.skillChargeMatch || 'ANY';
+        if (match === 'ANY_TYPE') {
+          return event + ' ' + this.skillTypeLabel(c.matchSkillType) + ' 类型 技能 充能+' + gain;
+        }
+        if (match === 'ANY_SCHOOL') {
+          return event + ' 流派「' + (c.matchSkillSchool || '无') + '」技能 充能+' + gain;
+        }
+        if (match === 'ANY_ELEMENT') {
+          return event + ' ' + this.damageElementLabel(c.matchDamageElement) + ' 元素技能 充能+' + gain;
+        }
+        if (match === 'SPECIFIC') {
+          return event + ' 「' + (c.matchSkillName || c.matchSkillId || '指定技能') + '」 充能+' + gain;
+        }
+        return event + ' 任意技能 充能+' + gain;
+      }
+      return (c.name || this.chargeConditionLabel(c.conditionType)) + ' 充能+' + gain;
+    },
+    itemTypeLabel(v) {
+      return {
+        MATERIAL: '材料', WEAPON: '武器', ARMOR: '护甲', GLOVES: '护手',
+        HELMET: '头盔', ACCESSORY: '饰品', LEGS: '护腿'
+      }[v] || v || '装备';
+    },
+    compareOpLabel(v) {
+      return {
+        GT: '大于', GTE: '大于等于', LT: '小于', LTE: '小于等于', EQ: '等于', NEQ: '不等于'
+      }[v] || v || '比较';
+    },
+    combatEventLabel(v) {
+      return {
+        AFTER_DEAL_ACTIVE_DMG: '造成主动技能伤害后',
+        AFTER_TAKE_ACTIVE_DMG: '受到主动技能伤害后',
+        AFTER_CAST_SKILL: '释放技能后',
+        AFTER_RECEIVE_SKILL: '受到技能后',
+        AFTER_TAKE_PULSE_BUFF_DMG: '受到脉冲BUFF伤害后',
+        AFTER_KILL: '击杀时',
+        AFTER_KILLED: '被击杀时',
+        AFTER_DODGE: '触发闪避后'
+      }[v] || v || '战斗事件';
+    },
+    formatPassiveConditionLine(c) {
+      if (!c || !c.conditionType) return '';
+      if (c.conditionType === 'EQUIP_ITEM') {
+        return '装备了「' + (c.refItemName || c.refItemId || '指定装备') + '」';
+      }
+      if (c.conditionType === 'EQUIP_ITEM_TYPE') {
+        return '装备了' + this.itemTypeLabel(c.refItemType);
+      }
+      if (c.conditionType === 'EQUIP_SKILL') {
+        return '装备了技能「' + (c.refSkillName || c.refSkillId || '指定技能') + '」';
+      }
+      if (c.conditionType === 'EQUIP_SKILL_TYPE') {
+        return '装备了' + this.skillTypeLabel(c.refSkillType) + '类技能';
+      }
+      if (c.conditionType === 'FORMULA_COMPARE') {
+        var left = this.formatEffectFormula({ formulaJson: c.leftFormulaJson }) || '?';
+        var right = this.formatEffectFormula({ formulaJson: c.rightFormulaJson }) || '?';
+        return '当（' + left + '）' + this.compareOpLabel(c.compareOp) + '（' + right + '）';
+      }
+      return c.conditionType;
+    },
+    buildPassiveConditionLines(p) {
+      if (!p) return [];
+      var lines = [];
+      var mode = p.conditionMode || 'UNLIMITED';
+      // 「始终生效」不展示，避免与触发时机叠在一起产生歧义
+      if (mode !== 'UNLIMITED') {
+        var conds = p.conditions || [];
+        if (!conds.length) {
+          lines.push('需满足条件（未配置）');
+        } else {
+          conds.forEach((c) => {
+            var t = this.formatPassiveConditionLine(c);
+            if (t) lines.push(t);
+          });
+        }
+      }
+      var type = p.passiveType;
+      if (type === 'BATTLE_START') {
+        var rule = p.startApplyRule || 'IMMEDIATE';
+        if (rule === 'IMMEDIATE') {
+          lines.push('开战立即触发');
+        } else if (rule === 'AT_ELAPSED_ONCE') {
+          lines.push('第一次达到 ' + this.formatAvSec(p.startElapsedAv || 0) + ' 时 触发一次');
+        } else if (rule === 'EVERY_ELAPSED') {
+          lines.push('每 ' + this.formatAvSec(p.startElapsedAv || 0) + ' 脉冲一次');
+        }
+      } else if (type === 'BATTLE_JUDGE' || type === 'BATTLE_PULSE') {
+        var left = this.formatEffectFormula({ formulaJson: p.leftFormulaJson }) || '?';
+        var right = this.formatEffectFormula({ formulaJson: p.rightFormulaJson }) || '?';
+        if (type === 'BATTLE_JUDGE') {
+          lines.push('判定：当 ' + left + ' ' + this.compareOpLabel(p.compareOp) + ' ' + right + ' 时生效');
+        } else {
+          lines.push('脉冲：每当 ' + left + ' 达到 ' + right + ' 时触发');
+        }
+        if (p.maxTriggerPerBattle != null && p.maxTriggerPerBattle > 0) {
+          lines.push('本场最多触发 ' + p.maxTriggerPerBattle + ' 次');
+        }
+      } else if (type === 'BATTLE_COMBAT') {
+        lines.push('事件：' + this.combatEventLabel(p.combatEvent));
+        if (p.maxTriggerPerBattle != null && p.maxTriggerPerBattle > 0) {
+          lines.push('本场最多触发 ' + p.maxTriggerPerBattle + ' 次');
+        }
+      }
+      return lines;
+    },
+    effectTargetLabel(v) {
+      return {
+        SELF: '自己', FIRST: '首目标', FRONT_ROW: '前排', BACK_ROW: '后排',
+        RANDOM_ENEMY: '随机一个敌方', ENEMY_MAX_HP: '生命值最高敌方',
+        ENEMY_MIN_HP: '生命值最低敌方', ALLY_MIN_HP: '生命值最低己方',
+        ALL_ENEMY: '敌方全部', ALL_ALLY: '己方全部'
+      }[v] || v || '—';
+    },
+    effectTypeLabel(v) {
+      return { DAMAGE: '伤害', HEAL: '治疗', ATTR_MODIFY: '属性修改' }[v] || v || '—';
+    },
+    damageElementLabel(v) {
+      return {
+        PHYSICAL: '物理', POISON: '中毒', IGNITE: '点燃',
+        FREEZE: '冰冻', SHOCK: '电击', BURN: '灼烧'
+      }[v] || '物理';
+    },
+    attrModifyKeyLabel(v) {
+      return { ATK: '攻击', MAX_HP: '最大生命', DEF: '防御' }[v] || v || '—';
+    },
+    buffAttrIcon(key) {
+      return {
+        ATK: '🗡',
+        DEF: '🛡',
+        MAX_HP: '❤',
+        HP: '❤',
+        ATK_SPEED: '⏱',
+        LIFE_STEAL: '🩸'
+      }[key] || '✦';
+    },
+    buffChipTitle(b) {
+      if (!b) return '';
+      var name = this.attrModifyKeyLabel(b.attrKey);
+      var dir = b.dir === 'DOWN' ? '降低' : '提升';
+      var t = name + dir;
+      if (b.stack > 1) t += ' ×' + b.stack;
+      if (b.value) t += ' ' + b.value;
+      return t;
+    },
+    attrModifyDirLabel(v) {
+      return { INCREASE: '增加', DECREASE: '减少' }[v] || v || '—';
+    },
+    formulaOpLabel(op) {
+      return { '+': '+', '-': '−', '*': '×', '/': '÷', '(': '(', ')': ')' }[op] || op || '';
+    },
+    formulaReadTokenLabel(t) {
+      if (!t || t.paramMode !== 'READ') return '';
+      var roleMap = { SELF: '自己', GLOBAL: '全局', EACH_TARGET: '每个目标' };
+      var role = roleMap[t.readRole || 'SELF'] || '';
+      if ((t.readRole || 'SELF') === 'GLOBAL') return role + '·已经过行动值';
+      var keyMap = {
+        MAX_HP: '最大生命', HP: '当前生命', ATK: '攻击', DEF: '防御',
+        ACTION: '角色行动值', ELAPSED_ACTION: '已经过行动值'
+      };
+      return role + '·' + (keyMap[t.readKey || 'ATK'] || t.readKey || '?');
+    },
+    parseFormulaTokens(raw) {
+      if (!raw) return [];
+      try {
+        var arr = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        return Array.isArray(arr) ? arr : [];
+      } catch (e) {
+        return [];
+      }
+    },
+    formatEffectFormula(effect) {
+      if (!effect) return '';
+      var tokens = this.parseFormulaTokens(effect.formulaJson);
+      if (!tokens.length) return '';
+      var parts = [];
+      for (var i = 0; i < tokens.length; i++) {
+        var t = tokens[i];
+        if (!t) continue;
+        if (t.kind === 'OP') {
+          parts.push(this.formulaOpLabel(t.op));
+          continue;
+        }
+        if (t.paramMode === 'LITERAL') {
+          parts.push(t.value != null ? String(t.value) : '0');
+          continue;
+        }
+        parts.push(this.formulaReadTokenLabel(t));
+      }
+      return parts.join(' ');
+    },
+    escapeHtml(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    },
+    formatDescHtml(text) {
+      if (text == null || text === '') return '';
+      return this.escapeHtml(String(text))
+        .replace(/(物理|中毒|点燃|冰冻|电击|灼烧)伤害/g, '<b class="sd-dmg-type">$1伤害</b>')
+        .replace(/\n/g, '<br>');
+    },
+    /** 例：对 敌方全部 造成 物理伤害 自己·攻击 × 1 */
+    formatEffectSummary(e) {
+      if (!e) return '—';
+      var rate = e.triggerRate != null ? Number(e.triggerRate) : 100;
+      var ratePart = (rate < 100) ? (Math.max(0, rate) + '% ') : '';
+      var target = this.effectTargetLabel(e.targetType);
+      var formula = this.formatEffectFormula(e);
+      var formulaPart = formula ? ' ' + formula : '';
+      var dur = e.durationAv != null && Number(e.durationAv) > 0
+        ? '（持续 ' + this.formatAvSec(e.durationAv) + '）'
+        : '';
+      var kind = e.outputKind || '';
+      if (kind === 'APPEND_BUFF') {
+        var buffName = e.buffDefName ? ('「' + e.buffDefName + '」') : 'BUFF';
+        return ratePart + '对 ' + target + ' 追加' + buffName + dur;
+      }
+      if (kind === 'ATTR' || e.effectType === 'ATTR_MODIFY') {
+        return ratePart + '对 ' + target + ' '
+          + this.attrModifyDirLabel(e.attrDir) + this.attrModifyKeyLabel(e.attrKey)
+          + formulaPart + dur;
+      }
+      if (e.effectType === 'HEAL') {
+        return ratePart + '对 ' + target + ' 治疗' + formulaPart;
+      }
+      var el = this.damageElementLabel(e.damageElement || 'PHYSICAL');
+      return ratePart + '对 ' + target + ' 造成 ' + el + '伤害' + formulaPart;
+    },
+    outputKindLabel(v) {
+      return { ATTR: '属性', EFFECT: '效果', APPEND_BUFF: '追加BUFF' }[v] || v || '—';
+    },
+    passiveTypeLabel(v) {
+      return {
+        OUT_BASIC: '基础属性型·基础属性',
+        OUT_ADVANCED: '基础属性型·高级属性',
+        BATTLE_START: '战斗锚点型·开战锚点',
+        BATTLE_JUDGE: '战斗锚点型·判定锚点',
+        BATTLE_PULSE: '战斗锚点型·脉冲锚点',
+        BATTLE_COMBAT: '战斗锚点型·战斗事件',
+        IN_ANCHOR: '锚点被动(旧)',
+        IN_PERIODIC: '周期被动(旧)',
+        IN_SUSTAINED: '持续效果(旧)'
+      }[v] || v || '—';
+    },
+    passiveAttrLabel(v) {
+      return {
+        ATK: '攻击', MAX_HP: '生命', DEF: '防御',
+        LIFE_STEAL: '吸血', ATK_SPEED: '攻速',
+        DEAL_DMG_RATIO: '造成伤害比例', TAKEN_DMG_RATIO: '受到伤害比例',
+        DEAL_ELEMENT_DMG_RATIO: '造成元素伤害比例', TAKEN_ELEMENT_DMG_RATIO: '受到元素伤害比例',
+        DEAL_PHYS_DMG_RATIO: '造成物理伤害比例', TAKEN_PHYS_DMG_RATIO: '受到物理伤害比例',
+        FINAL_ATK: '最终攻击', FINAL_HP: '最终生命', FINAL_DEF: '最终防御'
+      }[v] || v || '—';
+    },
+    attrDirLabel(v) {
+      return { INCREASE: '+', DECREASE: '-' }[v] || '';
+    },
+    escapeHtml(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    },
+    escapeRegExp(s) {
+      return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    },
+    formatLogHtml(line) {
+      var raw = String(line == null ? '' : line);
+      var prefix = '';
+      var body = raw;
+      var avMulti = raw.match(/^行动值\s*(\d+)\n([\s\S]*)$/);
+      var avLegacy = raw.match(/^\[行动值\s*(\d+)\]\s*(.*)$/);
+      if (avMulti) {
+        prefix = '<div class="log-action-val">' + this.escapeHtml(this.formatAvSec(avMulti[1])) + '</div>';
+        body = avMulti[2] || '';
+      } else if (avLegacy) {
+        prefix = '<div class="log-action-val">' + this.escapeHtml(this.formatAvSec(avLegacy[1])) + '</div>';
+        body = avLegacy[2] || '';
+      }
+      var m = body.match(/^(.*对\s*)(.+?)(\s*造成\s*)(\d+)(\s*伤害.*)$/);
+      if (m) {
+        var target = m[2];
+        var colorCls = 'dmg-num';
+        if (this.allyNameSet[target]) colorCls = 'dmg-num-ally';
+        else if (this.enemyNameSet[target]) colorCls = 'dmg-num-enemy';
+        return prefix + '<div class="log-action-body">'
+          + this.wrapNamesInSegment(m[1]) + this.formatLogNameHtml(target)
+          + this.escapeHtml(m[3]) + '<span class="' + colorCls + '">' + this.escapeHtml(m[4]) + '</span>'
+          + this.wrapNamesInSegment(m[5]) + '</div>';
+      }
+      if (prefix) return prefix + '<div class="log-action-body">' + this.wrapNamesInSegment(body) + '</div>';
+      return this.wrapNamesInSegment(body);
+    },
+    wrapNamesInSegment(segment) {
+      var raw = String(segment == null ? '' : segment);
+      var html = this.escapeHtml(raw);
+      var placeholders = [];
+      var self = this;
+      var byLenDesc = function (a, b) { return b.length - a.length; };
+      var protectBracketed = function (name, cls) {
+        if (!name) return;
+        var esc = self.escapeHtml(name);
+        var re = new RegExp('\\[' + self.escapeRegExp(esc) + '\\]', 'g');
+        html = html.replace(re, function () {
+          var i = placeholders.length;
+          placeholders.push('<span class="' + cls + '">[' + esc + ']</span>');
+          return '\u0000P' + i + '\u0000';
+        });
+      };
+      var wrapBare = function (name, cls) {
+        if (!name) return;
+        var esc = self.escapeHtml(name);
+        if (html.indexOf(esc) < 0) return;
+        var re = new RegExp(self.escapeRegExp(esc), 'g');
+        html = html.replace(re, function () {
+          var i = placeholders.length;
+          placeholders.push('<span class="' + cls + '">[' + esc + ']</span>');
+          return '\u0000P' + i + '\u0000';
+        });
+      };
+      var allies = Object.keys(this.allyNameSet || {}).sort(byLenDesc);
+      var enemies = Object.keys(this.enemyNameSet || {}).sort(byLenDesc);
+      // 先保护日志里已有的 [名字]，避免再包一层变成 [[名字]]
+      allies.forEach(function (n) { protectBracketed(n, 'log-name-ally'); });
+      enemies.forEach(function (n) { protectBracketed(n, 'log-name-enemy'); });
+      allies.forEach(function (n) { wrapBare(n, 'log-name-ally'); });
+      enemies.forEach(function (n) { wrapBare(n, 'log-name-enemy'); });
+      return html.replace(/\u0000P(\d+)\u0000/g, function (_m, i) {
+        return placeholders[Number(i)] || '';
+      });
+    },
+    formatLogNameHtml(name) {
+      if (!name) return '';
+      if (this.allyNameSet[name]) return '<span class="log-name-ally">[' + this.escapeHtml(name) + ']</span>';
+      if (this.enemyNameSet[name]) return '<span class="log-name-enemy">[' + this.escapeHtml(name) + ']</span>';
+      return this.escapeHtml(name);
+    },
+    itemIconIsImage(icon) {
+      if (!icon) return false;
+      var s = String(icon);
+      return s.indexOf('/') >= 0 || s.indexOf('http') === 0 || s.indexOf('data:') === 0 || s.indexOf('art/') === 0;
+    },
+    itemIconSrc(icon) {
+      var cfg = window.APP_CONFIG || {};
+      return cfg.resolveAssetUrl ? cfg.resolveAssetUrl(icon) : icon;
+    },
+    bootTower() {
+      this.loading = true;
+      this.error = '';
+      this.towerNextLevelId = '';
+      Promise.all([
+        GameApi.stageTowerStatus(),
+        GameApi.playerLayoutList()
+      ])
+        .then((results) => {
+          var st = results[0].data || {};
+          if (!st.hasRunning || !st.currentLevelId) {
+            this.error = '请先在出击页进入无尽塔';
+            return;
+          }
+          this.levelId = st.currentLevelId;
+          this.levelTitle = '无尽塔 · ' + (st.currentLevelCode || st.currentLevelName || this.levelId);
+          this.allies = results[1].data || [];
+          return GameApi.stageLevelMonsterList(this.levelId).then((res) => {
+            this.monsters = this.applyMonsterDisplayNames(res.data || []);
+            this.assignAllyUids();
+            this.initStandbyHp();
+            this.$nextTick(() => { if (window.ArtSlots) ArtSlots.apply(this.$el); });
+            if (!this.monsters.length) {
+              this.error = '该层暂无怪物配置';
+              return;
+            }
+            if (!this.allies.length) {
+              this.error = '请先在「布局」上阵角色';
+              return;
+            }
+            this.startFight();
+          });
+        })
+        .catch((err) => {
+          this.error = err.message || '无尽塔加载失败';
+          this.authCatch(err);
+        })
+        .finally(() => { this.loading = false; });
+    },
+    boot() {
+      this.loading = true;
+      this.error = '';
+      Promise.all([
+        GameApi.stageTree(),
+        GameApi.stageLevelMonsterList(this.levelId),
+        GameApi.playerLayoutList()
+      ])
+        .then((results) => {
+          var tree = results[0].data || [];
+          this.stageTree = tree;
+          this.levelTitle = this.resolveLevelTitle(tree, this.levelId) || this.levelId;
+          this.monsters = this.applyMonsterDisplayNames(results[1].data || []);
+          this.allies = results[2].data || [];
+          this.assignAllyUids();
+          this.initStandbyHp();
+          this.$nextTick(() => { if (window.ArtSlots) ArtSlots.apply(this.$el); });
+          if (!this.monsters.length) {
+            this.error = '该关卡暂无怪物配置';
+            return;
+          }
+          if (!this.allies.length) {
+            this.error = '请先在「布局」上阵角色';
+            return;
+          }
+          // 进场直接开战，不再展示「开始战斗」确认条
+          this.startFight();
+        })
+        .catch((err) => {
+          this.error = err.message || '战场加载失败';
+          this.authCatch(err);
+        })
+        .finally(() => { this.loading = false; });
+    },
+    resolveLevelTitle(tree, levelId) {
+      for (var i = 0; i < tree.length; i++) {
+        var chapters = tree[i].chapters || [];
+        for (var j = 0; j < chapters.length; j++) {
+          var levels = chapters[j].levels || [];
+          for (var k = 0; k < levels.length; k++) {
+            var lv = levels[k];
+            if (lv.id === levelId) return (lv.code || lv.name) + ' · ' + chapters[j].name;
+          }
+        }
+      }
+      return '';
+    },
+    flattenLevels(tree) {
+      var list = [];
+      (tree || []).forEach(function (t) {
+        (t.chapters || []).forEach(function (ch) {
+          (ch.levels || []).forEach(function (lv) { list.push(lv); });
+        });
+      });
+      return list;
+    },
+    startFight() {
+      if (this.fighting || this.replaying) return;
+      if (!this.monsters.length || !this.allies.length) return;
+      this.stopReplayClock();
+      this.battleStarted = true;
+      this.fighting = true;
+      this.replaying = false;
+      this.skipRequested = false;
+      this.outcome = '';
+      this.resultModal.show = false;
+      this.resultBanner = '';
+      this.logDrawerOpen = false;
+      this.visibleLogs = [];
+      this.pendingLogs = [];
+      this.replayData = null;
+      this.replayLogs = [];
+      this.replayEvents = [];
+      this.replayIndex = 0;
+      this.eventIndex = 0;
+      this.logCursor = 0;
+      this.replayAvT = 0;
+      this.logAvT = 0;
+      this.axisDisplay = 0;
+      this.axisLerp = null;
+      this.axisWallOrigin = 0;
+      this.axisAvOrigin = 0;
+      this.axisFinalAv = 0;
+      this.actingUid = '';
+      this.hitUid = '';
+      this.deadUids = {};
+      this.chargeMap = {};
+      this.unitSkillSlots = {};
+      this.unitSkillById = {};
+      this.buffMap = {};
+      this.floaters = [];
+      this.initStandbyHp();
+
+      var fightReq = this.battleMode === 'tower'
+        ? GameApi.stageTowerFight()
+        : GameApi.battleFight(this.levelId);
+      fightReq
+        .then((res) => {
+          var data = res.data || {};
+          if (this.battleMode === 'tower') {
+            this.towerNextLevelId = data.towerNextLevelId || '';
+            if (data.towerNextLevelCode) {
+              this.levelTitle = '无尽塔 · ' + data.towerNextLevelCode;
+            }
+          }
+          this.initFromSnaps(data.units);
+          this.seedFocusChargesFromData(data);
+          this.$nextTick(() => {
+            if (window.ArtSlots) ArtSlots.apply(this.$el);
+            this.playBattleReplay(data);
+          });
+        })
+        .catch((err) => {
+          this.fighting = false;
+          this.battleStarted = false;
+          this.skipRequested = false;
+          this.authCatch(err);
+        });
+    }
+  }
+}).mount('#app');
+</script>
+</body>
+</html>

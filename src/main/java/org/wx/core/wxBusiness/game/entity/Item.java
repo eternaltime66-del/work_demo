@@ -9,8 +9,6 @@ import org.wx.core.wxBase.annotation.BizIdPrefix;
 import org.wx.core.wxBase.base.WxBaseEntity;
 import org.wx.core.wxBusiness.game.entity.enums.ItemType;
 
-import java.math.BigDecimal;
-
 /**
  * 物品主表
  */
@@ -37,9 +35,6 @@ public class Item extends WxBaseEntity<Item> {
 
     /** 最大堆叠 */
     private Integer maxStack;
-
-    /** 重量 */
-    private BigDecimal weight;
 
     private Integer sort;
 
@@ -101,4 +96,17 @@ public class Item extends WxBaseEntity<Item> {
 
     /** 可编辑最大持续效果被动数量 */
     private Integer playerMaxEditSustainedPassiveSlotCount;
+
+    private Integer battleStartPassiveSlotCount;
+    private Integer playerDefaultEditBattleStartPassiveSlotCount;
+    private Integer playerMaxEditBattleStartPassiveSlotCount;
+    private Integer battleJudgePassiveSlotCount;
+    private Integer playerDefaultEditBattleJudgePassiveSlotCount;
+    private Integer playerMaxEditBattleJudgePassiveSlotCount;
+    private Integer battlePulsePassiveSlotCount;
+    private Integer playerDefaultEditBattlePulsePassiveSlotCount;
+    private Integer playerMaxEditBattlePulsePassiveSlotCount;
+    private Integer battleCombatPassiveSlotCount;
+    private Integer playerDefaultEditBattleCombatPassiveSlotCount;
+    private Integer playerMaxEditBattleCombatPassiveSlotCount;
 }

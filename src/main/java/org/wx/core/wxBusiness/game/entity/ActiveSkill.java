@@ -8,6 +8,7 @@ import lombok.EqualsAndHashCode;
 import org.wx.core.wxBase.annotation.BizIdPrefix;
 import org.wx.core.wxBase.base.WxBaseEntity;
 import org.wx.core.wxBusiness.game.entity.enums.ActiveSkillType;
+import org.wx.core.wxBusiness.game.entity.enums.DamageElement;
 import org.wx.core.wxBusiness.game.entity.enums.NeedChargeMode;
 
 /**
@@ -28,6 +29,12 @@ public class ActiveSkill extends WxBaseEntity<ActiveSkill> {
     /** 技能分类：普攻 / 大招 / 小技能 */
     private ActiveSkillType skillType;
 
+    /** 流派（自定义文案，默认「无」） */
+    private String skillSchool;
+
+    /** 元素类型（默认物理） */
+    private DamageElement damageElement;
+
     /** 技能编码（便于扩展引用） */
     private String code;
 
@@ -40,6 +47,9 @@ public class ActiveSkill extends WxBaseEntity<ActiveSkill> {
 
     /** 所需充能（needChargeMode=MANUAL 时生效） */
     private Integer needCharge;
+
+    /** 所需充能公式（needChargeMode=FORMULA） */
+    private String needChargeFormulaJson;
 
     /** 本技能最大释放次数（0 表示不限） */
     private Integer maxCastSkill;

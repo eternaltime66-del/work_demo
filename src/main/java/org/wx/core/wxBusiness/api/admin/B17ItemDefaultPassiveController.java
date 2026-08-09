@@ -39,11 +39,19 @@ public class B17ItemDefaultPassiveController {
     @WxRequestLog()
     @NeedHeader(roles = {MemberRole.ADMIN})
     public WxResult<?> save(@RequestBody ItemDefaultPassiveSaveReq req) {
-        itemDefaultPassiveService.saveForItem(
-                req != null ? req.getItemId() : null,
-                req != null ? req.getPassiveType() : null,
-                req != null ? req.getPassives() : null
-        );
+        // passiveType 为空：整表保存混合类型；否则按单类型替换
+        if (req != null && req.getPassiveType() == null) {
+            itemDefaultPassiveService.saveAllForItem(
+                    req.getItemId(),
+                    req.getPassives()
+            );
+        } else {
+            itemDefaultPassiveService.saveForItem(
+                    req != null ? req.getItemId() : null,
+                    req != null ? req.getPassiveType() : null,
+                    req != null ? req.getPassives() : null
+            );
+        }
         return WxResult.success();
     }
 }

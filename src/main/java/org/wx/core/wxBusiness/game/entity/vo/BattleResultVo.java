@@ -4,6 +4,8 @@ import lombok.Data;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+
 
 @Data
 public class BattleResultVo {
@@ -17,4 +19,19 @@ public class BattleResultVo {
     private List<MonsterDropResultVo> drops = new ArrayList<>();
     /** 开战时单位快照（血条 / 站位） */
     private List<BattleUnitSnapVo> units = new ArrayList<>();
+
+    /** 小关首通奖励（本次发放） */
+    private List<StageFirstRewardVo> levelFirstRewards = new ArrayList<>();
+    /** 大关首通奖励（本次发放） */
+    private List<StageFirstRewardVo> chapterFirstRewards = new ArrayList<>();
+    private Boolean firstClear;
+    private Integer staminaLeft;
+    private Integer staminaMax;
+
+    /** 无尽塔：本战后状态 */
+    private String towerStatus;
+    private String towerNextLevelId;
+    private String towerNextLevelCode;
+    /** roleId -> 战后剩余 HP（爬塔续关用） */
+    private Map<String, Integer> allyRemainHp;
 }

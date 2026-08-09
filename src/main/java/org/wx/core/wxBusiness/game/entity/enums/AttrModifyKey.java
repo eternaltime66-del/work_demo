@@ -12,6 +12,10 @@ public enum AttrModifyKey {
     ATK_SPEED("攻速", false, ModKind.ADD_PERCENT),
     DEAL_DMG_RATIO("造成伤害比例", false, ModKind.MULT_PERCENT),
     TAKEN_DMG_RATIO("受到伤害比例", false, ModKind.MULT_PERCENT),
+    DEAL_ELEMENT_DMG_RATIO("造成元素伤害比例", false, ModKind.MULT_PERCENT),
+    TAKEN_ELEMENT_DMG_RATIO("受到元素伤害比例", false, ModKind.MULT_PERCENT),
+    DEAL_PHYS_DMG_RATIO("造成物理伤害比例", false, ModKind.MULT_PERCENT),
+    TAKEN_PHYS_DMG_RATIO("受到物理伤害比例", false, ModKind.MULT_PERCENT),
     FINAL_ATK("最终攻击", false, ModKind.ADD_PERCENT),
     FINAL_HP("最终生命", false, ModKind.ADD_PERCENT),
     FINAL_DEF("最终防御", false, ModKind.ADD_PERCENT);

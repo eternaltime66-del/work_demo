@@ -25,6 +25,18 @@ public class AnchorEvalContext {
     /** 当前受击/被伤害目标（公式目标项） */
     private BattleRuntimeUnit hitTarget;
 
+    /** 本次行为全部受击目标 */
+    private List<BattleRuntimeUnit> hitTargets;
+
+    /** 脉冲 BUFF 施法者 */
+    private BattleRuntimeUnit pulseCaster;
+
+    /** 击杀方（击杀/被击杀事件） */
+    private BattleRuntimeUnit killer;
+
+    /** 被击杀方（击杀/被击杀事件；允许已死亡） */
+    private BattleRuntimeUnit killed;
+
     /** 周期：特定目标 */
     private BattleRuntimeUnit specificTarget;
 

@@ -6,17 +6,22 @@ import org.springframework.transaction.annotation.Transactional;
 import org.wx.core.wxBase.annotation.RedisLock;
 import org.wx.core.wxBase.base.Wx;
 import org.wx.core.wxBase.factory.ErrorFactory;
+import org.wx.core.wxBusiness.game.entity.ActiveSkill;
 import org.wx.core.wxBusiness.game.entity.BattleBag;
 import org.wx.core.wxBusiness.game.entity.PlayerEquip;
 import org.wx.core.wxBusiness.game.entity.PlayerRole;
 import org.wx.core.wxBusiness.game.entity.WarehouseItem;
 import org.wx.core.wxBusiness.game.entity.enums.EquipSlot;
+import org.wx.core.wxBusiness.game.entity.enums.PlayerRoleCategory;
 import org.wx.core.wxBusiness.game.battle.AtkSpeedCalcUnit;
 import org.wx.core.wxBusiness.game.battle.FinalStatCalcUnit;
 import org.wx.core.wxBusiness.game.entity.vo.BattleBagVo;
 import org.wx.core.wxBusiness.game.entity.vo.EquipBonusVo;
+import org.wx.core.wxBusiness.game.entity.vo.PrepSkillSlotVo;
 import org.wx.core.wxBusiness.game.entity.vo.PrepSummaryVo;
+import org.wx.core.wxBusiness.game.entity.vo.RoleSkillViewVo;
 
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -36,6 +41,8 @@ public class PrepService {
     private EquipBonusService equipBonusService;
     @Resource
     private AtkSpeedService atkSpeedService;
+    @Resource
+    private PlayerRoleSkillService playerRoleSkillService;
 
     public PrepSummaryVo getSummary(String uid) {
         playerRoleService.ensureMainRole(uid);
@@ -45,11 +52,70 @@ public class PrepService {
                 .eq(PlayerRole::getMainRole, true)
                 .one();
         fillDisplayStats(uid, main);
+        fillRoleSkills(uid, main);
         PrepSummaryVo vo = new PrepSummaryVo();
         vo.setMainRole(main);
         vo.setBattleBag(buildBattleBagVo(uid));
         vo.setWarehouse(warehouseService.getWarehouseDetail(uid));
+        // 备战 8 槽暂不展示角色/装备技能（技能改在角色详情一览）
+        vo.setSkillSlots(buildEmptySkillSlots());
         return vo;
+    }
+
+    /** 固定 8 槽：左 1~4、右 5~8；暂留空位 */
+    private List<PrepSkillSlotVo> buildEmptySkillSlots() {
+        List<PrepSkillSlotVo> slots = new ArrayList<>(8);
+        for (int i = 1; i <= 8; i++) {
+            PrepSkillSlotVo slot = new PrepSkillSlotVo();
+            slot.setSlotNo(i);
+            slot.setEmpty(true);
+            slots.add(slot);
+        }
+        return slots;
+    }
+
+    /** 角色详情：角色绑定技能 + 武器普攻 + 装备默认充能技能（分组去重互不影响） */
+    public void fillRoleSkills(String uid, PlayerRole role) {
+        if (role == null) {
+            return;
+        }
+        List<RoleSkillViewVo> views = new ArrayList<>();
+        Set<String> roleSeen = new LinkedHashSet<>();
+        Set<String> equipSeen = new LinkedHashSet<>();
+        List<ActiveSkill> roleSkills = playerRoleSkillService.listSkillsByRoleId(role.getId());
+        if (roleSkills != null) {
+            for (ActiveSkill sk : roleSkills) {
+                addSkillView(views, roleSeen, sk, "ROLE", "角色技能");
+            }
+        }
+        // 仅主角叠当前穿戴装备技能
+        if (Boolean.TRUE.equals(role.getMainRole()) || role.getRoleCategory() == PlayerRoleCategory.HERO) {
+            ActiveSkill weaponNormal = playerEquipService.resolveWeaponNormalSkill(uid);
+            if (weaponNormal != null) {
+                addSkillView(views, equipSeen, weaponNormal, "WEAPON", "武器普攻");
+            }
+            List<ActiveSkill> equipSkills = playerEquipService.resolveEquippedDefaultSkills(uid);
+            if (equipSkills != null) {
+                for (ActiveSkill sk : equipSkills) {
+                    addSkillView(views, equipSeen, sk, "EQUIP", "装备技能");
+                }
+            }
+        }
+        role.setSkills(views);
+    }
+
+    private void addSkillView(List<RoleSkillViewVo> views, Set<String> seen, ActiveSkill sk,
+                              String source, String sourceLabel) {
+        if (sk == null || sk.getId() == null || !seen.add(sk.getId())) {
+            return;
+        }
+        RoleSkillViewVo vo = new RoleSkillViewVo();
+        vo.setSkillId(sk.getId());
+        vo.setSkillName(sk.getName());
+        vo.setSkillType(sk.getSkillType() != null ? sk.getSkillType().name() : null);
+        vo.setSource(source);
+        vo.setSourceLabel(sourceLabel);
+        views.add(vo);
     }
 
     /** 填充含装备加成 / 最终攻速的展示字段 */

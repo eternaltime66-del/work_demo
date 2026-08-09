@@ -70,7 +70,6 @@ public class BattleBagService extends WxServiceImpl<BattleBagMapper, BattleBag> 
         bag.setIcon(item.getIcon());
         bag.setItemType(item.getItemType());
         bag.setMaxStack(item.getMaxStack());
-        bag.setWeight(item.getWeight());
         return bag;
     }
 
@@ -129,7 +128,6 @@ public class BattleBagService extends WxServiceImpl<BattleBagMapper, BattleBag> 
                 row.setIcon(item.getIcon());
                 row.setItemType(item.getItemType());
                 row.setMaxStack(item.getMaxStack());
-                row.setWeight(item.getWeight());
                 row.setDetail(itemDetailService.buildRich(item));
             }
         }

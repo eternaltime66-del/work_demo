@@ -4,6 +4,7 @@ import org.springframework.stereotype.Service;
 import org.wx.core.wxBase.base.WxServiceImpl;
 import org.wx.core.wxBusiness.game.battle.AtkSpeedCalcUnit;
 import org.wx.core.wxBusiness.game.entity.RoleBaseStat;
+import org.wx.core.wxBusiness.game.entity.enums.PlayerRoleCategory;
 import org.wx.core.wxBusiness.game.mapper.RoleBaseStatMapper;
 
 import java.math.BigDecimal;
@@ -18,11 +19,54 @@ public class RoleBaseStatService extends WxServiceImpl<RoleBaseStatMapper, RoleB
         if (entity == null) {
             return;
         }
+        if (entity.getRoleCategory() == null) {
+            entity.setRoleCategory(Boolean.TRUE.equals(entity.getMainRole())
+                    ? PlayerRoleCategory.HERO
+                    : PlayerRoleCategory.PARTNER);
+        }
+        if (entity.getRoleCategory() == PlayerRoleCategory.HERO) {
+            entity.setMainRole(true);
+        } else if (entity.getMainRole() == null) {
+            entity.setMainRole(false);
+        }
+        if (entity.getRoleCategory() == PlayerRoleCategory.SUMMON) {
+            if (entity.getInheritAtkRatio() == null) {
+                entity.setInheritAtkRatio(HUNDRED);
+            }
+            if (entity.getInheritDefRatio() == null) {
+                entity.setInheritDefRatio(HUNDRED);
+            }
+            if (entity.getInheritHpRatio() == null) {
+                entity.setInheritHpRatio(HUNDRED);
+            }
+            // 召唤物基础三维由继承比例决定，绝对基础值置 0
+            if (entity.getBaseAtk() == null) {
+                entity.setBaseAtk(0);
+            }
+            if (entity.getBaseHp() == null) {
+                entity.setBaseHp(0);
+            }
+            if (entity.getBaseDef() == null) {
+                entity.setBaseDef(0);
+            }
+        }
         if (entity.getDealDmgRatio() == null) {
             entity.setDealDmgRatio(HUNDRED);
         }
         if (entity.getTakenDmgRatio() == null) {
             entity.setTakenDmgRatio(HUNDRED);
+        }
+        if (entity.getDealElementDmgRatio() == null) {
+            entity.setDealElementDmgRatio(HUNDRED);
+        }
+        if (entity.getTakenElementDmgRatio() == null) {
+            entity.setTakenElementDmgRatio(HUNDRED);
+        }
+        if (entity.getDealPhysDmgRatio() == null) {
+            entity.setDealPhysDmgRatio(HUNDRED);
+        }
+        if (entity.getTakenPhysDmgRatio() == null) {
+            entity.setTakenPhysDmgRatio(HUNDRED);
         }
         if (entity.getLifeStealRatio() == null) {
             entity.setLifeStealRatio(BigDecimal.ZERO);

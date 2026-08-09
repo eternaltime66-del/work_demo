@@ -34,6 +34,8 @@ public class CraftService {
     private ItemDropSourceService itemDropSourceService;
     @Resource
     private ItemDetailService itemDetailService;
+    @Resource
+    private StageProgressService stageProgressService;
 
     public List<CraftRecipeVo> listRecipes(String uid) {
         List<Recipe> recipes = recipeService.listEnabledWithMaterials();
@@ -41,6 +43,9 @@ public class CraftService {
         Map<String, String> outputToRecipe = buildOutputRecipeIndex(recipes);
         List<CraftRecipeVo> list = new ArrayList<>();
         for (Recipe recipe : recipes) {
+            if (!isRecipeUnlocked(uid, recipe)) {
+                continue;
+            }
             list.add(buildVo(recipe, owned, outputToRecipe, false));
         }
         return list;
@@ -48,6 +53,7 @@ public class CraftService {
 
     public CraftRecipeVo getRecipe(String uid, String recipeId) {
         Recipe recipe = getEnabled(recipeId);
+        ErrorFactory.throwError(!isRecipeUnlocked(uid, recipe), "配方未解锁，需进入对应章节");
         recipeService.fillOutputName(recipe);
         recipe.setMaterials(recipeMaterialService.listByRecipeId(recipe.getId()));
         Map<String, String> outputToRecipe = buildOutputRecipeIndex(recipeService.listEnabledWithMaterials());
@@ -59,6 +65,7 @@ public class CraftService {
     public CraftRecipeVo craft(String uid, String recipeId) {
         ErrorFactory.throwError(Wx.isEmpty(uid), "未登录");
         Recipe recipe = getEnabled(recipeId);
+        ErrorFactory.throwError(!isRecipeUnlocked(uid, recipe), "配方未解锁，需进入对应章节");
         List<RecipeMaterial> materials = recipeMaterialService.listByRecipeId(recipeId);
         ErrorFactory.throwError(materials == null || materials.isEmpty(), "配方材料未配置");
 
@@ -80,6 +87,17 @@ public class CraftService {
         // 合成产物进战斗背包（材料仍从仓库扣除）
         battleBagService.addItem(uid, recipe.getOutputItemId(), outQty);
         return getRecipe(uid, recipeId);
+    }
+
+    /** 空章节锁=不限制；否则需对应主线章节已对玩家解锁 */
+    private boolean isRecipeUnlocked(String uid, Recipe recipe) {
+        if (recipe == null) {
+            return false;
+        }
+        if (Wx.isEmpty(recipe.getUnlockChapterId())) {
+            return true;
+        }
+        return stageProgressService.isChapterUnlocked(uid, recipe.getUnlockChapterId());
     }
 
     private Recipe getEnabled(String recipeId) {

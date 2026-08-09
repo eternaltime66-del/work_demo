@@ -6,8 +6,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.wx.core.wxBase.base.Wx;
 import org.wx.core.wxBase.base.WxServiceImpl;
 import org.wx.core.wxBase.factory.ErrorFactory;
+import org.wx.core.wxBusiness.game.entity.ActiveSkill;
 import org.wx.core.wxBusiness.game.entity.Monster;
-import org.wx.core.wxBusiness.game.entity.StageLevel;
 import org.wx.core.wxBusiness.game.entity.StageLevelMonster;
 import org.wx.core.wxBusiness.game.mapper.StageLevelMonsterMapper;
 import org.wx.core.wxBusiness.game.unit.BattleGrid;
@@ -22,7 +22,9 @@ public class StageLevelMonsterService extends WxServiceImpl<StageLevelMonsterMap
     @Resource
     private MonsterService monsterService;
     @Resource
-    private StageLevelService stageLevelService;
+    private StageService stageService;
+    @Resource
+    private ActiveSkillService activeSkillService;
 
     public List<StageLevelMonster> listByLevelId(String levelId) {
         List<StageLevelMonster> list = this.find()
@@ -48,7 +50,25 @@ public class StageLevelMonsterService extends WxServiceImpl<StageLevelMonsterMap
             item.setGridH(m.getGridH());
             item.setGridW(m.getGridW());
             item.setBaseHp(m.getBaseHp());
+            item.setBaseAtk(m.getBaseAtk());
+            item.setBaseDef(m.getBaseDef());
+            item.setBaseAction(m.getBaseAction());
+            item.setRemarkText(m.getRemark());
+            item.setNormalSkillId(m.getNormalSkillId());
+            item.setSmallSkillId(m.getSmallSkillId());
+            item.setUltimateSkillId(m.getUltimateSkillId());
+            item.setNormalSkillName(skillName(m.getNormalSkillId()));
+            item.setSmallSkillName(skillName(m.getSmallSkillId()));
+            item.setUltimateSkillName(skillName(m.getUltimateSkillId()));
         }
+    }
+
+    private String skillName(String skillId) {
+        if (Wx.isEmpty(skillId)) {
+            return null;
+        }
+        ActiveSkill sk = activeSkillService.getById(skillId);
+        return sk == null ? null : sk.getName();
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -56,8 +76,7 @@ public class StageLevelMonsterService extends WxServiceImpl<StageLevelMonsterMap
         ErrorFactory.throwError(entity == null, "配置不能为空");
         ErrorFactory.throwError(Wx.isEmpty(entity.getLevelId()), "小关不能为空");
         ErrorFactory.throwError(Wx.isEmpty(entity.getMonsterId()), "怪物不能为空");
-        StageLevel level = stageLevelService.getById(entity.getLevelId());
-        ErrorFactory.throwError(level == null, "小关不存在");
+        stageService.requireLevel(entity.getLevelId());
         Monster monster = resolveMonster(entity.getMonsterId());
 
         int posCol = BattleGrid.nvl(entity.getPosCol(), 0);
@@ -80,8 +99,7 @@ public class StageLevelMonsterService extends WxServiceImpl<StageLevelMonsterMap
     public StageLevelMonster addRandom(String levelId, String monsterId) {
         ErrorFactory.throwError(Wx.isEmpty(levelId), "小关不能为空");
         ErrorFactory.throwError(Wx.isEmpty(monsterId), "怪物不能为空");
-        StageLevel level = stageLevelService.getById(levelId);
-        ErrorFactory.throwError(level == null, "小关不存在");
+        stageService.requireLevel(levelId);
         Monster monster = resolveMonster(monsterId);
 
         List<int[]> slots = new ArrayList<>();

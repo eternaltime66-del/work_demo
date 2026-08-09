@@ -7,6 +7,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import org.wx.core.wxBase.annotation.BizIdPrefix;
 import org.wx.core.wxBase.base.WxBaseEntity;
+import org.wx.core.wxBusiness.game.entity.enums.PlayerRoleCategory;
 
 import java.math.BigDecimal;
 
@@ -49,11 +50,23 @@ public class RoleBaseStat extends WxBaseEntity<RoleBaseStat> {
     /** 额外防御力 */
     private Integer extraDef;
 
-    /** 造成伤害比例（单位 1%，默认 100） */
+    /** 造成伤害比例（单位 1%，默认 100；乘法叠乘） */
     private BigDecimal dealDmgRatio;
 
-    /** 受到伤害比例（单位 1%，默认 100） */
+    /** 受到伤害比例（单位 1%，默认 100；乘法叠乘） */
     private BigDecimal takenDmgRatio;
+
+    /** 造成元素伤害比例（单位 1%，默认 100；乘法叠乘） */
+    private BigDecimal dealElementDmgRatio;
+
+    /** 受到元素伤害比例（单位 1%，默认 100；乘法叠乘） */
+    private BigDecimal takenElementDmgRatio;
+
+    /** 造成物理伤害比例（单位 1%，默认 100；乘法叠乘） */
+    private BigDecimal dealPhysDmgRatio;
+
+    /** 受到物理伤害比例（单位 1%，默认 100；乘法叠乘） */
+    private BigDecimal takenPhysDmgRatio;
 
     /** 吸血比例（单位 1%，默认 0） */
     private BigDecimal lifeStealRatio;
@@ -84,4 +97,16 @@ public class RoleBaseStat extends WxBaseEntity<RoleBaseStat> {
 
     /** 是否主角 */
     private Boolean mainRole;
+
+    /** 模板分类：主角 / 伙伴 / 召唤物 */
+    private PlayerRoleCategory roleCategory;
+
+    /** 召唤物：基础攻击继承召唤者比例（单位 1%） */
+    private BigDecimal inheritAtkRatio;
+
+    /** 召唤物：基础防御继承召唤者比例（单位 1%） */
+    private BigDecimal inheritDefRatio;
+
+    /** 召唤物：基础生命继承召唤者比例（单位 1%） */
+    private BigDecimal inheritHpRatio;
 }

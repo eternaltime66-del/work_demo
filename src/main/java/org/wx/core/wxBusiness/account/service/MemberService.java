@@ -6,6 +6,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.wx.core.wxBase.base.Wx;
 import org.wx.core.wxBase.base.WxServiceImpl;
 import org.wx.core.wxBase.factory.ErrorFactory;
+import org.wx.core.wxBase.unit.WordUnit;
 import org.wx.core.wxBusiness.account.entity.Member;
 import org.wx.core.wxBusiness.account.entity.enums.MemberRole;
 import org.wx.core.wxBusiness.account.entity.enums.PointCoin;
@@ -103,15 +104,23 @@ public class MemberService extends WxServiceImpl<MemberMapper, Member> {
     ) {
         email = email.trim().toLowerCase();
         CodeEnum codeEnum = CodeEnum.AccountCheckForEmail;
-        String account = email;
-        String code = emsCode;
-        Wx.CodeFactory.checkCode(code, account, codeEnum);
-        Wx.CodeFactory.delCode(account, codeEnum);
+        Wx.CodeFactory.checkCode(emsCode, email, codeEnum);
+        Wx.CodeFactory.delCode(email, codeEnum);
         Member member = this.find()
                 .eq(Member::getEmail, email)
                 .eq(Member::getMemberRole, MemberRole.USER)
                 .one();
-        ErrorFactory.throwError(member == null, "用户未注册");
+        if (member == null) {
+            // 无感注册：验证码通过且邮箱未注册 → 自动建号并登录
+            String randomPsd = WordUnit.randomKey(12, 2);
+            member = addUser(email, randomPsd, randomPsd);
+            member.setMemberRole(MemberRole.USER);
+            this.wxUpdateById(member, Member::getMemberRole);
+            Wx.PointWalletService.getSysPointWallet(member.getId(), PointCoin.USDT);
+            playerRoleService.grantDefaultRoles(member.getId());
+            warehouseService.ensureWarehouse(member.getId());
+            return member.getToken();
+        }
         playerRoleService.ensureMainRole(member.getId());
         warehouseService.ensureWarehouse(member.getId());
         member.setToken(Member.creteToken());
@@ -188,6 +197,43 @@ public class MemberService extends WxServiceImpl<MemberMapper, Member> {
         member.setToken(Member.creteToken());
         Wx.RedisFactory.setBuyDay(member.getToken(), member.getId(), 7);
         return member.getToken();
+    }
+
+    /** 当前登录用户修改密码（需原密码） */
+    @Transactional(rollbackFor = Exception.class)
+    public void changePassword(String oldPassword, String newPassword, String newPasswordAgain) {
+        ErrorFactory.notEmpty(oldPassword, "请输入原密码");
+        ErrorFactory.notEmpty(newPassword, "请输入新密码");
+        ErrorFactory.notEmpty(newPasswordAgain, "请确认新密码");
+        ErrorFactory.notEquals(newPassword, newPasswordAgain, "两次新密码不一致");
+        ErrorFactory.throwError(newPassword.equals(oldPassword), "新密码不能与原密码相同");
+        ErrorFactory.throwError(newPassword.length() < 6, "新密码至少 6 位");
+
+        Member member = this.getById(Wx.memberId());
+        ErrorFactory.throwError(member == null, "用户不存在");
+        member.verifyPsd(oldPassword);
+        member.setPassword(member.psdEncode(newPassword));
+        this.wxUpdateById(member, Member::getPassword);
+    }
+
+    /** 当前登录用户：邮箱验证码设置/重置密码（无感注册后可用） */
+    @Transactional(rollbackFor = Exception.class)
+    public void setPasswordByEmailCode(String emsCode, String newPassword, String newPasswordAgain) {
+        ErrorFactory.notEmpty(emsCode, "请输入验证码");
+        ErrorFactory.notEmpty(newPassword, "请输入新密码");
+        ErrorFactory.notEmpty(newPasswordAgain, "请确认新密码");
+        ErrorFactory.notEquals(newPassword, newPasswordAgain, "两次新密码不一致");
+        ErrorFactory.throwError(newPassword.length() < 6, "新密码至少 6 位");
+
+        Member member = this.getById(Wx.memberId());
+        ErrorFactory.throwError(member == null, "用户不存在");
+        ErrorFactory.notEmpty(member.getEmail(), "账号未绑定邮箱");
+        String email = member.getEmail().trim().toLowerCase();
+        CodeEnum codeEnum = CodeEnum.AccountCheckForEmail;
+        Wx.CodeFactory.checkCode(emsCode, email, codeEnum);
+        Wx.CodeFactory.delCode(email, codeEnum);
+        member.setPassword(member.psdEncode(newPassword));
+        this.wxUpdateById(member, Member::getPassword);
     }
 
     @Transactional(rollbackFor = Exception.class)

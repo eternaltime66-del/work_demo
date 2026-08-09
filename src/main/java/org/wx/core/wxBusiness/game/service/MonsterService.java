@@ -4,6 +4,7 @@ import org.springframework.stereotype.Service;
 import org.wx.core.wxBase.base.Wx;
 import org.wx.core.wxBase.base.WxServiceImpl;
 import org.wx.core.wxBusiness.game.entity.Monster;
+import org.wx.core.wxBusiness.game.entity.enums.MonsterCategory;
 import org.wx.core.wxBusiness.game.entity.enums.MonsterRarity;
 import org.wx.core.wxBusiness.game.mapper.MonsterMapper;
 
@@ -16,6 +17,9 @@ public class MonsterService extends WxServiceImpl<MonsterMapper, Monster> {
         }
         if (entity.getRarity() == null) {
             entity.setRarity(MonsterRarity.NORMAL);
+        }
+        if (entity.getRoleCategory() == null) {
+            entity.setRoleCategory(MonsterCategory.MONSTER);
         }
         entity.applyRaritySize();
         if (entity.getBaseAtk() == null) {

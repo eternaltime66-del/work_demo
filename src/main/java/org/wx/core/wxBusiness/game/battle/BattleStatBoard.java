@@ -3,7 +3,9 @@ package org.wx.core.wxBusiness.game.battle;
 import org.wx.core.wxBusiness.game.battle.enums.BattleStatKey;
 import org.wx.core.wxBusiness.game.battle.enums.SkillCountDirection;
 import org.wx.core.wxBusiness.game.battle.enums.SkillCountScope;
+import org.wx.core.wxBusiness.game.entity.ActiveSkill;
 import org.wx.core.wxBusiness.game.entity.enums.ActiveSkillType;
+import org.wx.core.wxBusiness.game.entity.enums.DamageElement;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -21,6 +23,8 @@ public class BattleStatBoard {
     private final Map<BattleSkillCountKey, Integer> skillCounts = new LinkedHashMap<>();
     private final Map<String, long[]> dealDamage = new LinkedHashMap<>();
     private final Map<String, long[]> receiveDamage = new LinkedHashMap<>();
+    private final Map<String, long[]> dealHeal = new LinkedHashMap<>();
+    private final Map<String, long[]> receiveHeal = new LinkedHashMap<>();
     /** 主动技能伤害次数（被动产生不计）：deal / receive */
     private final Map<String, long[]> activeSkillDamageCount = new LinkedHashMap<>();
 
@@ -75,12 +79,24 @@ public class BattleStatBoard {
 
     public int getSkillCount(String roleId, SkillCountDirection direction, SkillCountScope scope,
                              String skillId, ActiveSkillType skillType) {
+        return getSkillCount(roleId, direction, scope, skillId, skillType, null, null);
+    }
+
+    public int getSkillCount(String roleId, SkillCountDirection direction, SkillCountScope scope,
+                             String skillId, ActiveSkillType skillType,
+                             String skillSchool, DamageElement damageElement) {
         BattleSkillCountKey key = new BattleSkillCountKey();
         key.setRoleId(roleId);
         key.setDirection(direction);
         key.setScope(scope);
         key.setSkillId(skillId);
         key.setSkillType(skillType);
+        if (scope == SkillCountScope.SKILL_SCHOOL) {
+            key.setSkillSchool(SkillSchoolUnit.normalizeSchool(skillSchool));
+        }
+        if (scope == SkillCountScope.SKILL_ELEMENT) {
+            key.setDamageElement(SkillSchoolUnit.normalizeElement(damageElement));
+        }
         return getSkillCount(key);
     }
 
@@ -99,20 +115,50 @@ public class BattleStatBoard {
     }
 
     public void recordCast(String roleId, String skillId, ActiveSkillType skillType) {
+        recordCast(roleId, skillId, skillType, null, null);
+    }
+
+    public void recordCast(String roleId, ActiveSkill skill) {
+        if (skill == null) {
+            return;
+        }
+        recordCast(roleId, skill.getId(), skill.getSkillType(),
+                SkillSchoolUnit.schoolOf(skill), SkillSchoolUnit.elementOf(skill));
+    }
+
+    public void recordCast(String roleId, String skillId, ActiveSkillType skillType,
+                           String skillSchool, DamageElement damageElement) {
         addSkillCount(BattleSkillCountKey.ofAny(roleId, SkillCountDirection.CAST), 1);
         if (skillType != null) {
             addSkillCount(BattleSkillCountKey.ofType(roleId, SkillCountDirection.CAST, skillType), 1);
         }
+        addSkillCount(BattleSkillCountKey.ofSchool(roleId, SkillCountDirection.CAST, skillSchool), 1);
+        addSkillCount(BattleSkillCountKey.ofElement(roleId, SkillCountDirection.CAST, damageElement), 1);
         if (skillId != null && !skillId.isBlank()) {
             addSkillCount(BattleSkillCountKey.ofSkill(roleId, SkillCountDirection.CAST, skillId), 1);
         }
     }
 
     public void recordReceive(String roleId, String skillId, ActiveSkillType skillType) {
+        recordReceive(roleId, skillId, skillType, null, null);
+    }
+
+    public void recordReceive(String roleId, ActiveSkill skill) {
+        if (skill == null) {
+            return;
+        }
+        recordReceive(roleId, skill.getId(), skill.getSkillType(),
+                SkillSchoolUnit.schoolOf(skill), SkillSchoolUnit.elementOf(skill));
+    }
+
+    public void recordReceive(String roleId, String skillId, ActiveSkillType skillType,
+                              String skillSchool, DamageElement damageElement) {
         addSkillCount(BattleSkillCountKey.ofAny(roleId, SkillCountDirection.RECEIVE), 1);
         if (skillType != null) {
             addSkillCount(BattleSkillCountKey.ofType(roleId, SkillCountDirection.RECEIVE, skillType), 1);
         }
+        addSkillCount(BattleSkillCountKey.ofSchool(roleId, SkillCountDirection.RECEIVE, skillSchool), 1);
+        addSkillCount(BattleSkillCountKey.ofElement(roleId, SkillCountDirection.RECEIVE, damageElement), 1);
         if (skillId != null && !skillId.isBlank()) {
             addSkillCount(BattleSkillCountKey.ofSkill(roleId, SkillCountDirection.RECEIVE, skillId), 1);
         }
@@ -159,6 +205,30 @@ public class BattleStatBoard {
     public long getActiveReceiveDamageCount(String roleId) {
         long[] arr = activeSkillDamageCount.get(roleId);
         return arr == null ? 0 : arr[1];
+    }
+
+    public void recordHeal(String healerId, String targetId, int amount) {
+        if (amount <= 0) {
+            return;
+        }
+        bumpDamage(dealHeal, healerId, amount);
+        bumpDamage(receiveHeal, targetId, amount);
+    }
+
+    public long getDealHealAmount(String roleId) {
+        return damageAmount(dealHeal, roleId);
+    }
+
+    public long getDealHealCount(String roleId) {
+        return damageCount(dealHeal, roleId);
+    }
+
+    public long getReceiveHealAmount(String roleId) {
+        return damageAmount(receiveHeal, roleId);
+    }
+
+    public long getReceiveHealCount(String roleId) {
+        return damageCount(receiveHeal, roleId);
     }
 
     private static void bumpDamage(Map<String, long[]> map, String roleId, int amount) {

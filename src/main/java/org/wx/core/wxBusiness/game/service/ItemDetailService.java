@@ -5,8 +5,8 @@ import org.springframework.stereotype.Service;
 import org.wx.core.wxBase.base.Wx;
 import org.wx.core.wxBusiness.game.battle.GameDescUnit;
 import org.wx.core.wxBusiness.game.entity.ActiveSkill;
+import org.wx.core.wxBusiness.game.entity.BuffDef;
 import org.wx.core.wxBusiness.game.entity.Item;
-import org.wx.core.wxBusiness.game.entity.ItemAccessory;
 import org.wx.core.wxBusiness.game.entity.ItemArmor;
 import org.wx.core.wxBusiness.game.entity.ItemDefaultPassive;
 import org.wx.core.wxBusiness.game.entity.ItemDefaultSkill;
@@ -18,6 +18,7 @@ import org.wx.core.wxBusiness.game.entity.ItemWeapon;
 import org.wx.core.wxBusiness.game.entity.PassiveSkill;
 import org.wx.core.wxBusiness.game.entity.SkillCharge;
 import org.wx.core.wxBusiness.game.entity.SkillEffect;
+import org.wx.core.wxBusiness.game.entity.SkillOutput;
 import org.wx.core.wxBusiness.game.entity.enums.ItemType;
 import org.wx.core.wxBusiness.game.entity.enums.PassiveSkillType;
 import org.wx.core.wxBusiness.game.entity.vo.CraftItemDetailVo;
@@ -48,8 +49,6 @@ public class ItemDetailService {
     @Resource
     private ItemLegsService itemLegsService;
     @Resource
-    private ItemAccessoryService itemAccessoryService;
-    @Resource
     private ItemMaterialService itemMaterialService;
     @Resource
     private ItemDefaultSkillService itemDefaultSkillService;
@@ -62,7 +61,11 @@ public class ItemDetailService {
     @Resource
     private SkillEffectService skillEffectService;
     @Resource
+    private SkillOutputService skillOutputService;
+    @Resource
     private PassiveSkillService passiveSkillService;
+    @Resource
+    private BuffDefService buffDefService;
 
     public CraftItemDetailVo buildByItemId(String itemId) {
         if (Wx.isEmpty(itemId)) {
@@ -102,7 +105,6 @@ public class ItemDetailService {
         d.setItemType(item.getItemType() != null ? item.getItemType().name() : null);
         d.setItemTypeLabel(item.getItemType() != null ? item.getItemType().label() : null);
         d.setMaxStack(item.getMaxStack());
-        d.setWeight(item.getWeight());
         d.setRemark(item.getRemark());
         d.setChargeSkillSlotCount(item.getChargeSkillSlotCount());
         d.setPlayerDefaultEditChargeSkillSlotCount(item.getPlayerDefaultEditChargeSkillSlotCount());
@@ -135,12 +137,17 @@ public class ItemDetailService {
                     d.setAtkSpeedUpRatio(ext.getAtkSpeedUpRatio());
                     d.setAtkSpeedDownRatio(ext.getAtkSpeedDownRatio());
                     d.setAtkSpeedText(GameDescUnit.atkSpeedText(ext.getAtkSpeedUpRatio(), ext.getAtkSpeedDownRatio()));
-                    d.setNormalSkillId(ext.getNormalSkillId());
                     if (!Wx.isEmpty(ext.getNormalSkillId())) {
                         ActiveSkill skill = activeSkillService.getById(ext.getNormalSkillId());
                         if (skill != null) {
+                            d.setNormalSkillId(ext.getNormalSkillId());
                             d.setNormalSkillName(skill.getName());
+                            d.setNormalSkillSystemDefault(false);
                         }
+                    }
+                    // 未绑定或绑定已失效 → 回落系统默认普攻（与战斗一致）
+                    if (Wx.isEmpty(d.getNormalSkillId())) {
+                        fillSystemDefaultNormal(d);
                     }
                 }
             }
@@ -149,12 +156,6 @@ public class ItemDetailService {
             case HELMET -> fillHelmet(d, itemHelmetService.getByItemId(item.getId()));
             case LEGS -> fillLegs(d, itemLegsService.getByItemId(item.getId()));
             case ACCESSORY -> {
-                ItemAccessory ext = itemAccessoryService.getByItemId(item.getId());
-                if (ext != null) {
-                    d.setAtkSpeedUpRatio(ext.getAtkSpeedUpRatio());
-                    d.setAtkSpeedDownRatio(ext.getAtkSpeedDownRatio());
-                    d.setAtkSpeedText(GameDescUnit.atkSpeedText(ext.getAtkSpeedUpRatio(), ext.getAtkSpeedDownRatio()));
-                }
             }
             case MATERIAL -> {
                 ItemMaterial ext = itemMaterialService.getByItemId(item.getId());
@@ -193,9 +194,13 @@ public class ItemDetailService {
             Item it = itemService.getById(id);
             return it != null ? it.getName() : null;
         };
+        Function<String, BuffDef> buffFn = id -> Wx.isEmpty(id) ? null : buffDefService.getById(id);
 
+        if (Wx.isEmpty(d.getNormalSkillId()) && "WEAPON".equals(d.getItemType())) {
+            fillSystemDefaultNormal(d);
+        }
         if (!Wx.isEmpty(d.getNormalSkillId())) {
-            d.setNormalSkillDesc(buildSkillDesc(d.getNormalSkillId(), skillNameFn));
+            d.setNormalSkillDesc(buildSkillDesc(d.getNormalSkillId(), skillNameFn, buffFn));
         }
 
         List<SkillDescVo> skillDescs = new ArrayList<>();
@@ -204,7 +209,7 @@ public class ItemDetailService {
                 if (link == null || Wx.isEmpty(link.getId())) {
                     continue;
                 }
-                SkillDescVo desc = buildSkillDesc(link.getId(), skillNameFn);
+                SkillDescVo desc = buildSkillDesc(link.getId(), skillNameFn, buffFn);
                 if (desc != null && desc.getId() != null) {
                     skillDescs.add(desc);
                 }
@@ -212,28 +217,53 @@ public class ItemDetailService {
         }
         d.setDefaultSkillDescs(skillDescs);
 
-        d.setDefaultBasicPassiveDescs(buildPassiveDescs(d.getItemId(), PassiveSkillType.OUT_BASIC, itemNameFn, skillNameFn));
-        d.setDefaultAdvancedPassiveDescs(buildPassiveDescs(d.getItemId(), PassiveSkillType.OUT_ADVANCED, itemNameFn, skillNameFn));
-        d.setDefaultAnchorPassiveDescs(buildPassiveDescs(d.getItemId(), PassiveSkillType.IN_ANCHOR, itemNameFn, skillNameFn));
-        d.setDefaultPeriodicPassiveDescs(buildPassiveDescs(d.getItemId(), PassiveSkillType.IN_PERIODIC, itemNameFn, skillNameFn));
-        d.setDefaultSustainedPassiveDescs(buildPassiveDescs(d.getItemId(), PassiveSkillType.IN_SUSTAINED, itemNameFn, skillNameFn));
+        d.setDefaultBasicPassiveDescs(buildPassiveDescs(d.getItemId(), PassiveSkillType.OUT_BASIC, itemNameFn, skillNameFn, buffFn));
+        d.setDefaultAdvancedPassiveDescs(buildPassiveDescs(d.getItemId(), PassiveSkillType.OUT_ADVANCED, itemNameFn, skillNameFn, buffFn));
+        d.setDefaultBattleStartPassiveDescs(buildPassiveDescs(d.getItemId(), PassiveSkillType.BATTLE_START, itemNameFn, skillNameFn, buffFn));
+        d.setDefaultBattleJudgePassiveDescs(buildPassiveDescs(d.getItemId(), PassiveSkillType.BATTLE_JUDGE, itemNameFn, skillNameFn, buffFn));
+        d.setDefaultBattlePulsePassiveDescs(buildPassiveDescs(d.getItemId(), PassiveSkillType.BATTLE_PULSE, itemNameFn, skillNameFn, buffFn));
+        d.setDefaultBattleCombatPassiveDescs(buildPassiveDescs(d.getItemId(), PassiveSkillType.BATTLE_COMBAT, itemNameFn, skillNameFn, buffFn));
+        d.setDefaultAnchorPassiveDescs(buildPassiveDescs(d.getItemId(), PassiveSkillType.IN_ANCHOR, itemNameFn, skillNameFn, buffFn));
+        d.setDefaultPeriodicPassiveDescs(buildPassiveDescs(d.getItemId(), PassiveSkillType.IN_PERIODIC, itemNameFn, skillNameFn, buffFn));
+        d.setDefaultSustainedPassiveDescs(buildPassiveDescs(d.getItemId(), PassiveSkillType.IN_SUSTAINED, itemNameFn, skillNameFn, buffFn));
     }
 
-    private SkillDescVo buildSkillDesc(String skillId, Function<String, String> skillNameFn) {
+    private void fillSystemDefaultNormal(CraftItemDetailVo d) {
+        if (d == null) {
+            return;
+        }
+        ActiveSkill def = activeSkillService.ensureDefaultNormalSkill();
+        if (def == null) {
+            return;
+        }
+        d.setNormalSkillId(def.getId());
+        d.setNormalSkillName(def.getName());
+        d.setNormalSkillSystemDefault(true);
+    }
+
+    private SkillDescVo buildSkillDesc(
+            String skillId,
+            Function<String, String> skillNameFn,
+            Function<String, BuffDef> buffFn
+    ) {
         ActiveSkill skill = activeSkillService.getById(skillId);
         if (skill == null) {
             return null;
         }
         List<SkillCharge> charges = skillChargeService.listBySkillId(skillId);
-        List<SkillEffect> effects = skillEffectService.listBySkillId(skillId);
-        return GameDescUnit.describeActiveSkill(skill, charges, effects, skillNameFn);
+        List<SkillOutput> outputs = skillOutputService.listBySkillId(skillId);
+        List<SkillEffect> effects = (outputs == null || outputs.isEmpty())
+                ? skillEffectService.listBySkillId(skillId)
+                : List.of();
+        return GameDescUnit.describeActiveSkill(skill, charges, effects, outputs, skillNameFn, buffFn);
     }
 
     private List<PassiveDescVo> buildPassiveDescs(
             String itemId,
             PassiveSkillType type,
             Function<String, String> itemNameFn,
-            Function<String, String> skillNameFn
+            Function<String, String> skillNameFn,
+            Function<String, BuffDef> buffFn
     ) {
         List<PassiveDescVo> list = new ArrayList<>();
         if (Wx.isEmpty(itemId)) {
@@ -252,7 +282,7 @@ public class ItemDetailService {
                 if (detail == null) {
                     continue;
                 }
-                list.add(GameDescUnit.describePassive(detail, itemNameFn, skillNameFn));
+                list.add(GameDescUnit.describePassive(detail, itemNameFn, skillNameFn, buffFn));
             } catch (Exception ignored) {
                 // 单条被动描述失败不影响整件装备详情
             }

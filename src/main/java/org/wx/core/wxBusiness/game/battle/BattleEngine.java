@@ -1,16 +1,23 @@
 package org.wx.core.wxBusiness.game.battle;
 
 import org.wx.core.wxBusiness.game.entity.ActiveSkill;
+import org.wx.core.wxBusiness.game.entity.BuffDef;
 import org.wx.core.wxBusiness.game.entity.PassiveCombatEffect;
 import org.wx.core.wxBusiness.game.entity.PassiveSkill;
 import org.wx.core.wxBusiness.game.entity.SkillCharge;
 import org.wx.core.wxBusiness.game.entity.SkillEffect;
+import org.wx.core.wxBusiness.game.entity.SkillOutput;
 import org.wx.core.wxBusiness.game.entity.enums.ActiveSkillType;
 import org.wx.core.wxBusiness.game.entity.enums.AttrModifyDirection;
 import org.wx.core.wxBusiness.game.entity.enums.AttrModifyKey;
+import org.wx.core.wxBusiness.game.entity.enums.BattleStartApplyRule;
+import org.wx.core.wxBusiness.game.entity.enums.BuffKind;
 import org.wx.core.wxBusiness.game.entity.enums.ChargeConditionType;
 import org.wx.core.wxBusiness.game.entity.enums.ChargeScope;
+import org.wx.core.wxBusiness.game.entity.enums.CombatEventType;
 import org.wx.core.wxBusiness.game.entity.enums.CompareOp;
+import org.wx.core.wxBusiness.game.entity.enums.DamageElement;
+import org.wx.core.wxBusiness.game.entity.enums.DamageSourceKind;
 import org.wx.core.wxBusiness.game.entity.enums.NeedChargeMode;
 import org.wx.core.wxBusiness.game.entity.enums.PassiveAnchorType;
 import org.wx.core.wxBusiness.game.entity.enums.PeriodicTriggerMode;
@@ -42,7 +49,7 @@ import java.util.concurrent.ThreadLocalRandom;
  *   <li>ATTR_MODIFY 可挂时长 buff（按已经过行动值到期）；持续效果条件成立套用、不成立撤销</li>
  * </ul>
  */
-public class BattleEngine {
+public class BattleEngine implements SkillV2OutputUnit.Host {
 
     public static final int MAX_TICKS = 5000;
     private static final double STEP_EPS = 1e-9;
@@ -50,16 +57,21 @@ public class BattleEngine {
     private final List<BattleRuntimeUnit> units = new ArrayList<>();
     private final Map<String, List<SkillCharge>> chargesBySkill = new HashMap<>();
     private final Map<String, List<SkillEffect>> effectsBySkill = new HashMap<>();
+    private final Map<String, List<SkillOutput>> outputsBySkill = new HashMap<>();
+    private final Map<String, BuffDef> buffDefs = new HashMap<>();
     private final BattleStatBoard board = new BattleStatBoard();
     private final List<String> logs = new ArrayList<>();
     private final List<BattleEventVo> events = new ArrayList<>();
 
     /** 当前施法累计伤害统计（castSkill 期间） */
     private CastDamageBag castBag;
+    /** 当前施法技能（供 V2 伤害标签） */
+    private ActiveSkill castingSkill;
 
     /** 周期/持续扫描防重入 */
     private boolean scanningPeriodic;
     private boolean scanningSustained;
+    private boolean scanningV2;
     private int notifyDepth;
 
     public void addUnit(BattleRuntimeUnit unit) {
@@ -88,10 +100,72 @@ public class BattleEngine {
         effectsBySkill.put(skillId, effects == null ? List.of() : effects);
     }
 
+    public void putSkillOutputs(String skillId, List<SkillOutput> outputs) {
+        if (skillId == null) {
+            return;
+        }
+        outputsBySkill.put(skillId, outputs == null ? List.of() : outputs);
+    }
+
+    public void putBuffDef(BuffDef def) {
+        if (def != null && def.getId() != null) {
+            buffDefs.put(def.getId(), def);
+        }
+    }
+
+    public Set<String> skillOutputSkillIds() {
+        return outputsBySkill.keySet();
+    }
+
+    public List<SkillOutput> skillOutputsOf(String skillId) {
+        return outputsBySkill.get(skillId);
+    }
+
     public void addLog(String line) {
         if (line != null && !line.isBlank()) {
             logs.add(line);
         }
+    }
+
+    @Override
+    public List<BattleRuntimeUnit> units() {
+        return units;
+    }
+
+    @Override
+    public BattleStatBoard board() {
+        return board;
+    }
+
+    @Override
+    public List<String> logs() {
+        return logs;
+    }
+
+    @Override
+    public BattleEventVo emit(String type) {
+        return emitInternal(type);
+    }
+
+    @Override
+    public void notifyStatChanged() {
+        notifyStatChangedInternal();
+    }
+
+    @Override
+    public BuffDef buffDefOf(String buffDefId) {
+        return buffDefId == null ? null : buffDefs.get(buffDefId);
+    }
+
+    @Override
+    public void onDamage(
+            BattleRuntimeUnit dealer,
+            BattleRuntimeUnit target,
+            int dealt,
+            DamageSourceKind kind,
+            DamageElement element
+    ) {
+        applyV2Damage(dealer, target, dealt, kind, element, castingSkill, null, 1, 0, true);
     }
 
     /** 开战前血量快照 */
@@ -177,7 +251,8 @@ public class BattleEngine {
 
     public BattleResultVo run() {
         BattleResultVo vo = new BattleResultVo();
-        emit("BATTLE_START");
+        emitInternal("BATTLE_START");
+        runBattleStartPassives(true);
         int ticks = 0;
         while (ticks < MAX_TICKS) {
             if (!anyAlive(BattleSide.ALLY)) {
@@ -191,7 +266,20 @@ public class BattleEngine {
             int elapsedBefore = board.getElapsedActionValue();
             board.addElapsedAction(1);
             accrueCharges(elapsedBefore, 1);
+            // 充能技（小/大）按各自规则涨满后立刻释放，不排队等行动条回合
+            if (flushReadyChargedSkills()) {
+                if (!anyAlive(BattleSide.ALLY)) {
+                    finishResult(vo, "LOSE", ticks + 1);
+                    return vo;
+                }
+                if (!anyAlive(BattleSide.ENEMY)) {
+                    finishResult(vo, "WIN", ticks + 1);
+                    return vo;
+                }
+            }
             expireTimedBuffs();
+            SkillV2OutputUnit.tickBuffs(this);
+            runBattleStartPassives(false);
 
             List<BattleRuntimeUnit> actors = new ArrayList<>();
             for (BattleRuntimeUnit u : units) {
@@ -205,7 +293,7 @@ public class BattleEngine {
                     actors.add(u);
                 }
             }
-            notifyStatChanged();
+            notifyStatChangedInternal();
             actors.sort((a, b) -> {
                 int side = Integer.compare(a.getSide().ordinal(), b.getSide().ordinal());
                 if (side != 0) {
@@ -221,7 +309,7 @@ public class BattleEngine {
                 if (!actor.alive()) {
                     continue;
                 }
-                BattleEventVo turn = emit("TURN_START");
+                BattleEventVo turn = emitInternal("TURN_START");
                 turn.setUid(actor.getUnitId());
                 turn.setActionValue(board.getElapsedActionValue());
                 act(actor);
@@ -247,12 +335,12 @@ public class BattleEngine {
         vo.setOutcome(outcome);
         vo.setTicks(ticks);
         vo.setLogs(logs);
-        BattleEventVo end = emit("BATTLE_END");
+        BattleEventVo end = emitInternal("BATTLE_END");
         end.setOutcome(outcome);
         vo.setEvents(events);
     }
 
-    private BattleEventVo emit(String type) {
+    private BattleEventVo emitInternal(String type) {
         BattleEventVo e = new BattleEventVo();
         e.setT(board.getElapsedActionValue());
         e.setType(type);
@@ -281,16 +369,28 @@ public class BattleEngine {
     /**
      * 统一战斗状态变更总线：凡可能影响公式的路径回调。
      */
-    private void notifyStatChanged() {
-        if (scanningPeriodic || notifyDepth > 2) {
+    private void notifyStatChangedInternal() {
+        if (scanningPeriodic || scanningV2 || notifyDepth > 2) {
             return;
         }
         notifyDepth++;
         try {
             scanPeriodicPassives();
             scanSustainedPassives();
+            scanV2JudgeAndPulse();
         } finally {
             notifyDepth--;
+        }
+    }
+
+    private void scanV2JudgeAndPulse() {
+        scanningV2 = true;
+        try {
+            SkillV2OutputUnit.scanJudgeBuffs(this);
+            scanBattleJudgePassives();
+            scanBattlePulsePassives();
+        } finally {
+            scanningV2 = false;
         }
     }
 
@@ -455,28 +555,87 @@ public class BattleEngine {
     }
 
     private void accrueCharges(int elapsedBefore, int delta) {
-        boolean gained = false;
         for (BattleRuntimeUnit u : units) {
             if (!u.alive()) {
                 continue;
             }
             for (ActiveSkill skill : u.getSkills()) {
+                if (skill == null || skill.getId() == null) {
+                    continue;
+                }
                 List<SkillCharge> charges = chargesBySkill.getOrDefault(skill.getId(), List.of());
+                int gained = 0;
                 for (SkillCharge c : charges) {
                     int gain = ChargeAccrualUnit.chargeGainedOnAdvance(c, elapsedBefore, delta);
                     if (gain > 0) {
                         u.addCharge(skill.getId(), gain);
-                        gained = true;
+                        gained += gain;
                     }
+                }
+                // 非普攻：按该技能自己的 ACTION_VALUE 规则涨时发 CHARGE，供 UI 对齐
+                if (gained > 0 && skill.getSkillType() != null
+                        && skill.getSkillType() != ActiveSkillType.NORMAL) {
+                    int need = resolveNeedCharge(u, skill);
+                    int cur = u.getCharge(skill.getId());
+                    BattleEventVo chargeEv = emitInternal("CHARGE");
+                    chargeEv.setUid(u.getUnitId());
+                    chargeEv.setSkillId(skill.getId());
+                    chargeEv.setSkillName(skill.getName());
+                    chargeEv.setSkillType(skill.getSkillType().name());
+                    chargeEv.setCur(cur);
+                    chargeEv.setMax(Math.max(0, need));
+                    chargeEv.setValue(gained);
                 }
             }
         }
-        if (gained) {
-            // tick 末尾统一 notify；此处不重复
+    }
+
+    /**
+     * 小技能/大招充能满后立即释放（不等待单位行动条回合）。
+     *
+     * @return 是否释放过至少一次
+     */
+    private boolean flushReadyChargedSkills() {
+        boolean any = false;
+        List<BattleRuntimeUnit> ordered = new ArrayList<>();
+        for (BattleRuntimeUnit u : units) {
+            if (u != null && u.alive()) {
+                ordered.add(u);
+            }
         }
+        ordered.sort((a, b) -> {
+            int side = Integer.compare(a.getSide().ordinal(), b.getSide().ordinal());
+            if (side != 0) {
+                return side;
+            }
+            int r = Integer.compare(a.getPosRow(), b.getPosRow());
+            if (r != 0) {
+                return r;
+            }
+            return Integer.compare(a.getPosCol(), b.getPosCol());
+        });
+        for (BattleRuntimeUnit u : ordered) {
+            if (!u.alive()) {
+                continue;
+            }
+            int guard = 0;
+            while (u.alive() && guard++ < 8) {
+                if (!anyAlive(BattleSide.ENEMY) || !anyAlive(BattleSide.ALLY)) {
+                    return any;
+                }
+                ActiveSkill ready = pickReadyChargedSkill(u);
+                if (ready == null) {
+                    break;
+                }
+                castSkill(u, ready);
+                any = true;
+            }
+        }
+        return any;
     }
 
     private void act(BattleRuntimeUnit actor) {
+        // 回合内仍优先打已就绪的充能技，否则普攻；释放后再连锁检查
         ActiveSkill skill = pickSkill(actor);
         if (skill == null) {
             logActHead(actor.getName() + " 行动但无可释放技能");
@@ -500,6 +659,9 @@ public class BattleEngine {
         if (actor == null || !actor.alive() || skill == null) {
             return;
         }
+        // 同轴：施法结算前先清到期 BUFF，避免「不可叠加」后同帧到期断周期
+        expireTimedBuffs();
+        SkillV2OutputUnit.expireDueBuffs(this);
         int need = resolveNeedCharge(actor, skill);
         if (actor.getCharge(skill.getId()) < need) {
             if (need > 0) {
@@ -509,52 +671,99 @@ public class BattleEngine {
         }
         actor.spendCharge(skill.getId(), need);
         actor.incCast(skill.getId());
-        board.recordCast(actor.getUnitId(), skill.getId(), skill.getSkillType());
+        board.recordCast(actor.getUnitId(), skill);
         logActHead(actor.getName() + " 释放「" + skill.getName() + "」");
-        notifyStatChanged();
+        notifyStatChangedInternal();
 
         castBag = new CastDamageBag();
+        castingSkill = skill;
+        List<SkillOutput> outputs = outputsBySkill.getOrDefault(skill.getId(), List.of());
         List<SkillEffect> effects = effectsBySkill.getOrDefault(skill.getId(), List.of());
         LinkedHashSet<String> castTargets = new LinkedHashSet<>();
         SkillEffectTarget primaryTargetType = null;
-        for (SkillEffect effect : effects) {
-            if (effect == null) {
-                continue;
+        DamageElement castElement = DamageElement.PHYSICAL;
+        if (!outputs.isEmpty()) {
+            for (SkillOutput out : outputs) {
+                if (out == null) {
+                    continue;
+                }
+                if (primaryTargetType == null && out.getTargetType() != null) {
+                    primaryTargetType = out.getTargetType();
+                }
+                if (out.getDamageElement() != null) {
+                    castElement = out.getDamageElement();
+                }
+                for (BattleRuntimeUnit t : SkillTargetResolver.resolveWithAnchor(
+                        out.getTargetType(), actor, units, baseEvalCtx())) {
+                    if (t != null && t.getUnitId() != null) {
+                        castTargets.add(t.getUnitId());
+                    }
+                }
             }
-            if (primaryTargetType == null && effect.getTargetType() != null) {
-                primaryTargetType = effect.getTargetType();
-            }
-            for (BattleRuntimeUnit t : SkillTargetResolver.resolve(effect.getTargetType(), actor, units)) {
-                if (t != null && t.getUnitId() != null) {
-                    castTargets.add(t.getUnitId());
+        } else {
+            for (SkillEffect effect : effects) {
+                if (effect == null) {
+                    continue;
+                }
+                if (primaryTargetType == null && effect.getTargetType() != null) {
+                    primaryTargetType = effect.getTargetType();
+                }
+                for (BattleRuntimeUnit t : SkillTargetResolver.resolve(effect.getTargetType(), actor, units)) {
+                    if (t != null && t.getUnitId() != null) {
+                        castTargets.add(t.getUnitId());
+                    }
                 }
             }
         }
-        BattleEventVo castEv = emit("CAST");
+        BattleEventVo castEv = emitInternal("CAST");
         castEv.setUid(actor.getUnitId());
         castEv.setSkillId(skill.getId());
         castEv.setSkillName(skill.getName());
         castEv.setSkillType(skill.getSkillType() != null ? skill.getSkillType().name() : null);
-        castEv.setElement("PHYSICAL");
+        castEv.setElement(castElement.name());
         castEv.setShape(shapeOf(primaryTargetType));
         castEv.setTargets(new ArrayList<>(castTargets));
-        // 同步充能环：释放后剩余充能
+        // 同步充能条：释放后剩余充能（含 0），前端据此清空再涨
+        castEv.setCur(actor.getCharge(skill.getId()));
         if (need > 0) {
-            castEv.setCur(actor.getCharge(skill.getId()));
             castEv.setMax(need);
         }
 
-        for (SkillEffect effect : effects) {
-            applyEffect(actor, skill, effect, false);
+        List<BattleRuntimeUnit> castHitUnits = new ArrayList<>();
+        for (String tid : castTargets) {
+            BattleRuntimeUnit t = findUnitById(tid);
+            if (t != null) {
+                castHitUnits.add(t);
+            }
+        }
+        if (!outputs.isEmpty()) {
+            // 主动技 V2 输出记为主动伤害，才能正确触发「造成/受到主动技能伤害后」
+            SkillV2OutputUnit.applyOutputs(
+                    this, actor, outputs, baseEvalCtx(), "  └ ", false, DamageSourceKind.ACTIVE_SKILL);
+            // 「释放技能后」专属目标 = 本次技能命中的所有生效目标
+            fireCombatPassives(actor, CombatEventType.AFTER_CAST_SKILL, skill, null, 0, castHitUnits);
+            for (BattleRuntimeUnit t : castHitUnits) {
+                fireCombatPassives(t, CombatEventType.AFTER_RECEIVE_SKILL, skill, actor, 0, List.of(actor));
+            }
+        } else {
+            for (SkillEffect effect : effects) {
+                applyEffect(actor, skill, effect, false);
+            }
+            // 旧 SkillEffect 路径同样补齐战斗事件锚点
+            fireCombatPassives(actor, CombatEventType.AFTER_CAST_SKILL, skill, null, 0, castHitUnits);
+            for (BattleRuntimeUnit t : castHitUnits) {
+                fireCombatPassives(t, CombatEventType.AFTER_RECEIVE_SKILL, skill, actor, 0, List.of(actor));
+            }
         }
 
         if (PassiveSkillMatchUnit.isChargeSkill(skill)) {
             triggerAfterCast(actor, skill);
         }
         castBag = null;
+        castingSkill = null;
 
         accrueSkillCharges(actor, SkillChargeEvent.CAST, skill);
-        notifyStatChanged();
+        notifyStatChangedInternal();
     }
 
     private void logActHead(String body) {
@@ -584,9 +793,9 @@ public class BattleEngine {
             if (gained > 0) {
                 int need = resolveNeedCharge(owner, skill);
                 int cur = owner.getCharge(skill.getId());
-                logs.add("  └ 「" + skill.getName() + "」充能 +" + gained
+                logs.add("  └ [" + owner.getName() + "] 「" + skill.getName() + "」充能 +" + gained
                         + "（" + cur + "/" + need + "）");
-                BattleEventVo chargeEv = emit("CHARGE");
+                BattleEventVo chargeEv = emitInternal("CHARGE");
                 chargeEv.setUid(owner.getUnitId());
                 chargeEv.setSkillId(skill.getId());
                 chargeEv.setSkillName(skill.getName());
@@ -654,6 +863,10 @@ public class BattleEngine {
         if (mode == NeedChargeMode.SELF_BASE_ACTION) {
             return Math.max(0, actor.getAction());
         }
+        if (mode == NeedChargeMode.FORMULA) {
+            double v = FormulaEvalUnit.eval(skill.getNeedChargeFormulaJson(), actor, actor, board, baseEvalCtx());
+            return Math.max(0, (int) Math.round(v));
+        }
         return skill.getNeedCharge() == null ? 0 : Math.max(0, skill.getNeedCharge());
     }
 
@@ -699,7 +912,7 @@ public class BattleEngine {
                 if (effect.getEffectType() == SkillEffectType.DAMAGE) {
                     int dealt = resolveDealtDamage(caster, target, amount);
                     applyHpDamage(caster, target, dealt, skill, effect.getTargetType(), segments, i, !fromAnchor, "  └ ");
-                    notifyStatChanged();
+                    notifyStatChangedInternal();
                     if (!fromAnchor && PassiveSkillMatchUnit.isChargeSkill(skill)) {
                         if (castBag != null) {
                             castBag.addHit(target, dealt);
@@ -711,7 +924,7 @@ public class BattleEngine {
                     target.setHp(Math.min(target.getMaxHp(), target.getHp() + heal));
                     logs.add("  └ 治疗 " + target.getName() + " " + heal
                             + (segments > 1 ? "（第" + (i + 1) + "段）" : ""));
-                    BattleEventVo healEv = emit("HEAL");
+                    BattleEventVo healEv = emitInternal("HEAL");
                     healEv.setUid(caster.getUnitId());
                     healEv.setTarget(target.getUnitId());
                     healEv.setValue(heal);
@@ -719,7 +932,7 @@ public class BattleEngine {
                     healEv.setSegTotal(segments);
                     healEv.setHpAfter(target.getHp());
                     healEv.setMaxHp(target.getMaxHp());
-                    notifyStatChanged();
+                    notifyStatChangedInternal();
                 } else if (effect.getEffectType() == SkillEffectType.ATTR_MODIFY) {
                     applyAttrModify(
                             target,
@@ -733,7 +946,7 @@ public class BattleEngine {
                             effect.getDurationAv(),
                             false
                     );
-                    notifyStatChanged();
+                    notifyStatChangedInternal();
                 }
             }
         }
@@ -866,7 +1079,7 @@ public class BattleEngine {
                     target.setHp(Math.min(target.getMaxHp(), target.getHp() + heal));
                     logs.add(logPrefix + "治疗 " + target.getName() + " " + heal
                             + (segments > 1 ? "（第" + (i + 1) + "段）" : ""));
-                    BattleEventVo healEv = emit("HEAL");
+                    BattleEventVo healEv = emitInternal("HEAL");
                     healEv.setUid(owner.getUnitId());
                     healEv.setTarget(target.getUnitId());
                     healEv.setValue(heal);
@@ -900,10 +1113,14 @@ public class BattleEngine {
     }
 
     private int resolveDealtDamage(BattleRuntimeUnit dealer, BattleRuntimeUnit target, int amount) {
-        int raw = Math.max(1, amount - Math.max(0, target.getDef() / 10));
-        double deal = dealer == null ? 1D : Math.max(0D, dealer.getDealDmgMult());
-        double taken = target == null ? 1D : Math.max(0D, target.getTakenDmgMult());
-        return Math.max(1, (int) Math.round(raw * deal * taken));
+        return resolveDealtDamage(dealer, target, amount, DamageElement.PHYSICAL);
+    }
+
+    private int resolveDealtDamage(
+            BattleRuntimeUnit dealer, BattleRuntimeUnit target, int amount, DamageElement element
+    ) {
+        int raw = DamageRatioUnit.afterDefense(amount, dealer, target);
+        return DamageRatioUnit.finalizeDealt(raw, dealer, target, element);
     }
 
     private void applyHpDamage(
@@ -917,38 +1134,98 @@ public class BattleEngine {
             boolean recordReceive,
             String logPrefix
     ) {
+        applyV2Damage(
+                dealer, target, dealt,
+                skill != null ? DamageSourceKind.ACTIVE_SKILL : DamageSourceKind.PASSIVE,
+                DamageElement.PHYSICAL,
+                skill, targetType, segments, segIdx, recordReceive
+        );
+        if (logPrefix != null && !logPrefix.equals("  └ ")) {
+            // applyV2Damage 已写标准日志
+        }
+    }
+
+    private void applyV2Damage(
+            BattleRuntimeUnit dealer,
+            BattleRuntimeUnit target,
+            int dealt,
+            DamageSourceKind kind,
+            DamageElement element,
+            ActiveSkill skill,
+            SkillEffectTarget targetType,
+            int segments,
+            int segIdx,
+            boolean recordReceive
+    ) {
+        if (target == null || dealt <= 0) {
+            return;
+        }
+        DamageElement el = element == null ? DamageElement.PHYSICAL : element;
+        DamageSourceKind src = kind == null ? DamageSourceKind.ACTIVE_SKILL : kind;
+        // 闪避：持有闪避效果时，被匹配技能命中可将伤害置 0
+        if (skill != null && tryDodge(target, skill, dealer, dealt, el, segments, segIdx)) {
+            return;
+        }
         target.setHp(Math.max(0, target.getHp() - dealt));
         if (dealer != null) {
-            board.recordDamage(dealer.getUnitId(), target.getUnitId(), dealt, skill != null);
+            board.recordDamage(dealer.getUnitId(), target.getUnitId(), dealt, skill != null || src == DamageSourceKind.ACTIVE_SKILL);
         }
         if (recordReceive && skill != null) {
-            board.recordReceive(target.getUnitId(), skill.getId(), skill.getSkillType());
+            board.recordReceive(target.getUnitId(), skill);
             accrueSkillCharges(target, SkillChargeEvent.RECEIVE, skill);
         }
+        if (skill != null) {
+            if (dealer != null && dealer.alive()) {
+                accrueSkillCharges(dealer, SkillChargeEvent.DEAL_DAMAGE, skill);
+            }
+            if (target.alive()) {
+                accrueSkillCharges(target, SkillChargeEvent.TAKE_DAMAGE, skill);
+            }
+        }
         boolean killed = !target.alive();
-        String prefix = logPrefix != null ? logPrefix : "  └ ";
-        logs.add(prefix + "对 " + target.getName() + " 造成 " + dealt + " 伤害"
+        logs.add("  └ 对 " + target.getName() + " 造成 " + dealt + " 伤害"
+                + (el != DamageElement.PHYSICAL ? "（" + el.name() + "）" : "")
                 + (segments > 1 ? "（第" + (segIdx + 1) + "段）" : "")
                 + (killed ? "，击杀" : ""));
-        BattleEventVo hitEv = emit("HIT");
+        BattleEventVo hitEv = emitInternal("HIT");
         hitEv.setUid(dealer != null ? dealer.getUnitId() : null);
         hitEv.setTarget(target.getUnitId());
         hitEv.setSkillId(skill != null ? skill.getId() : null);
         hitEv.setSkillName(skill != null ? skill.getName() : null);
         hitEv.setSkillType(skill != null && skill.getSkillType() != null ? skill.getSkillType().name() : null);
-        hitEv.setElement("PHYSICAL");
+        hitEv.setElement(el.name());
         hitEv.setShape(shapeOf(targetType));
         hitEv.setSeg(segIdx + 1);
-        hitEv.setSegTotal(segments);
+        hitEv.setSegTotal(Math.max(1, segments));
         hitEv.setDamage(dealt);
         hitEv.setCrit(false);
         hitEv.setHpAfter(target.getHp());
         hitEv.setMaxHp(target.getMaxHp());
         if (killed) {
-            BattleEventVo deathEv = emit("DEATH");
+            BattleEventVo deathEv = emitInternal("DEATH");
             deathEv.setUid(target.getUnitId());
+            // 技能充能事件「造成击杀」：由造成击杀的技能触发匹配
+            if (dealer != null && dealer.alive() && skill != null) {
+                accrueSkillCharges(dealer, SkillChargeEvent.KILL, skill);
+            }
         }
         applyLifeSteal(dealer, dealt);
+        if (src == DamageSourceKind.ACTIVE_SKILL) {
+            if (dealer != null) {
+                fireCombatPassives(dealer, CombatEventType.AFTER_DEAL_ACTIVE_DMG, skill, target, dealt);
+            }
+            fireCombatPassives(target, CombatEventType.AFTER_TAKE_ACTIVE_DMG, skill, dealer, dealt);
+        } else if (src == DamageSourceKind.PULSE_BUFF) {
+            fireCombatPassives(target, CombatEventType.AFTER_TAKE_PULSE_BUFF_DMG, skill, dealer, dealt);
+        }
+        // 击杀/被击杀：伤害事件之后同步触发（被击杀方已死亡，仍可触发其被动）
+        if (killed) {
+            if (dealer != null && dealer.alive()) {
+                fireCombatPassives(dealer, CombatEventType.AFTER_KILL, skill, target, dealt);
+            }
+            fireCombatPassives(target, CombatEventType.AFTER_KILLED, skill, dealer, dealt);
+        }
+        notifyStatChangedInternal();
     }
 
     private void applyLifeSteal(BattleRuntimeUnit dealer, int dealt) {
@@ -966,12 +1243,83 @@ public class BattleEngine {
             return;
         }
         logs.add("  └ " + dealer.getName() + " 吸血恢复 " + got);
-        BattleEventVo healEv = emit("HEAL");
+        BattleEventVo healEv = emitInternal("HEAL");
         healEv.setUid(dealer.getUnitId());
         healEv.setTarget(dealer.getUnitId());
         healEv.setValue(got);
         healEv.setHpAfter(dealer.getHp());
         healEv.setMaxHp(dealer.getMaxHp());
+    }
+
+    /**
+     * 尝试闪避：持有 BuffKind.DODGE 时，匹配技能且掷骰成功则伤害为 0，并触发 AFTER_DODGE。
+     * @return true 表示已闪避（调用方应中止本次伤害）
+     */
+    private boolean tryDodge(
+            BattleRuntimeUnit target,
+            ActiveSkill skill,
+            BattleRuntimeUnit dealer,
+            int dealt,
+            DamageElement el,
+            int segments,
+            int segIdx
+    ) {
+        if (target == null || !target.alive() || skill == null) {
+            return false;
+        }
+        List<BuffInstance> buffs = target.getBuffs();
+        if (buffs == null || buffs.isEmpty()) {
+            return false;
+        }
+        for (BuffInstance inst : buffs) {
+            if (inst == null || inst.getBuffKind() != BuffKind.DODGE) {
+                continue;
+            }
+            BuffDef def = buffDefOf(inst.getBuffDefId());
+            if (def == null || def.getDodgeChance() == null || def.getDodgeChance() <= 0) {
+                continue;
+            }
+            if (!PassiveSkillMatchUnit.matchesSkillRef(
+                    def.getSkillMatchMode(),
+                    def.getMatchSkillType(),
+                    def.getMatchSkillSchool(),
+                    def.getMatchDamageElement(),
+                    def.getMatchSkillId(),
+                    skill
+            )) {
+                continue;
+            }
+            int chance = Math.min(100, Math.max(0, def.getDodgeChance()));
+            if (ThreadLocalRandom.current().nextInt(100) >= chance) {
+                continue;
+            }
+            String scope = PassiveSkillMatchUnit.matchScopeLabel(
+                    def.getSkillMatchMode(),
+                    def.getMatchSkillType(),
+                    def.getMatchSkillSchool(),
+                    def.getMatchDamageElement(),
+                    def.getMatchSkillId()
+            );
+            logs.add("  └ " + target.getName() + " 闪避成功（" + chance + "%）· " + scope
+                    + (inst.getName() != null ? "「" + inst.getName() + "」" : "")
+                    + "，伤害 0"
+                    + (segments > 1 ? "（第" + (segIdx + 1) + "段）" : ""));
+            BattleEventVo dodgeEv = emitInternal("DODGE");
+            dodgeEv.setUid(target.getUnitId());
+            dodgeEv.setTarget(dealer != null ? dealer.getUnitId() : null);
+            dodgeEv.setSkillId(skill.getId());
+            dodgeEv.setSkillName(skill.getName());
+            dodgeEv.setSkillType(skill.getSkillType() != null ? skill.getSkillType().name() : null);
+            dodgeEv.setElement(el != null ? el.name() : null);
+            dodgeEv.setDamage(0);
+            dodgeEv.setHpAfter(target.getHp());
+            dodgeEv.setMaxHp(target.getMaxHp());
+            dodgeEv.setValue(dealt);
+            fireCombatPassives(target, CombatEventType.AFTER_DODGE, skill, dealer, 0);
+            notifyStatChangedInternal();
+            return true;
+        }
+        return false;
     }
 
     private void expireTimedBuffs() {
@@ -981,20 +1329,19 @@ public class BattleEngine {
                 continue;
             }
             List<TimedAttrBuff> list = u.getTimedBuffs();
-            if (list.isEmpty()) {
-                continue;
-            }
-            List<TimedAttrBuff> expired = new ArrayList<>();
-            for (TimedAttrBuff b : list) {
-                if (b == null || b.isSustained() || b.getExpireAtElapsed() == null) {
-                    continue;
+            if (!list.isEmpty()) {
+                List<TimedAttrBuff> expired = new ArrayList<>();
+                for (TimedAttrBuff b : list) {
+                    if (b == null || b.isSustained() || b.getExpireAtElapsed() == null) {
+                        continue;
+                    }
+                    if (now >= b.getExpireAtElapsed()) {
+                        expired.add(b);
+                    }
                 }
-                if (now >= b.getExpireAtElapsed()) {
-                    expired.add(b);
+                for (TimedAttrBuff b : expired) {
+                    revokeBuff(u, b, "到期");
                 }
-            }
-            for (TimedAttrBuff b : expired) {
-                revokeBuff(u, b, "到期");
             }
         }
     }
@@ -1024,7 +1371,7 @@ public class BattleEngine {
                     existing.setExpireAtElapsed(board.getElapsedActionValue() + dur);
                     logs.add("  └ " + target.getName() + " 「" + (effectName != null ? effectName : attrKey.getLabel())
                             + "」刷新持续 " + dur + " 行动值");
-                    BattleEventVo buffEv = emit("BUFF");
+                    BattleEventVo buffEv = emitInternal("BUFF");
                     buffEv.setUid(target.getUnitId());
                     buffEv.setTarget(target.getUnitId());
                     buffEv.setAttrKey(attrKey.name());
@@ -1052,7 +1399,7 @@ public class BattleEngine {
             applied.setLabel(effectName);
             target.getTimedBuffs().add(applied);
         }
-        BattleEventVo buffEv = emit("BUFF");
+        BattleEventVo buffEv = emitInternal("BUFF");
         buffEv.setUid(target.getUnitId());
         buffEv.setTarget(target.getUnitId());
         buffEv.setAttrKey(attrKey.name());
@@ -1160,19 +1507,13 @@ public class BattleEngine {
                         + buff.getAppliedFlat() + "）" : ""));
             }
             case MULT_PERCENT -> {
-                double factor = 1D + (signedAmount / 100D);
-                if (factor <= 0D) {
-                    factor = 0.0001D;
-                }
-                buff.setRatioFactor(factor);
-                buff.setRatioAdd(signedAmount);
-                if (attrKey == AttrModifyKey.DEAL_DMG_RATIO) {
-                    target.setDealDmgMult(target.getDealDmgMult() * factor);
-                } else if (attrKey == AttrModifyKey.TAKEN_DMG_RATIO) {
-                    target.setTakenDmgMult(target.getTakenDmgMult() * factor);
-                } else {
+                if (!DamageRatioUnit.isDamageRatioKey(attrKey)) {
                     return null;
                 }
+                double factor = DamageRatioUnit.factorFromSignedPercent(signedAmount);
+                buff.setRatioFactor(factor);
+                buff.setRatioAdd(signedAmount);
+                DamageRatioUnit.applyMultFactor(target, attrKey, factor);
                 logs.add("  └ " + target.getName() + " " + attrLabel + " " + dirLabel + " " + Math.abs(signedAmount) + "%"
                         + segPart);
             }
@@ -1240,12 +1581,8 @@ public class BattleEngine {
             }
             case MULT_PERCENT -> {
                 double factor = buff.getRatioFactor();
-                if (factor != 0D) {
-                    if (attrKey == AttrModifyKey.DEAL_DMG_RATIO) {
-                        target.setDealDmgMult(target.getDealDmgMult() / factor);
-                    } else if (attrKey == AttrModifyKey.TAKEN_DMG_RATIO) {
-                        target.setTakenDmgMult(target.getTakenDmgMult() / factor);
-                    }
+                if (factor != 0D && DamageRatioUnit.isDamageRatioKey(attrKey)) {
+                    DamageRatioUnit.revokeMultFactor(target, attrKey, factor);
                 }
             }
             default -> {
@@ -1254,7 +1591,7 @@ public class BattleEngine {
         target.getTimedBuffs().remove(buff);
         String label = buff.getLabel() != null ? buff.getLabel() : attrKey.getLabel();
         logs.add("  └ " + target.getName() + " 「" + label + "」效果结束（" + reason + "）");
-        BattleEventVo endEv = emit("BUFF_END");
+        BattleEventVo endEv = emitInternal("BUFF_END");
         endEv.setUid(target.getUnitId());
         endEv.setTarget(target.getUnitId());
         endEv.setAttrKey(attrKey.name());
@@ -1396,6 +1733,312 @@ public class BattleEngine {
 
     private static String sustainedBuffKey(String passiveId, String effectId) {
         return "SUS#" + passiveId + "#" + (effectId != null ? effectId : "0");
+    }
+
+    private BattleRuntimeUnit findUnitById(String unitId) {
+        if (unitId == null) {
+            return null;
+        }
+        for (BattleRuntimeUnit u : units) {
+            if (u != null && unitId.equals(u.getUnitId())) {
+                return u;
+            }
+        }
+        return null;
+    }
+
+    private void runBattleStartPassives(boolean immediateOnly) {
+        int now = board.getElapsedActionValue();
+        for (BattleRuntimeUnit owner : units) {
+            if (owner == null || !owner.alive()) {
+                continue;
+            }
+            List<PassiveSkill> list = owner.getBattleStartPassives();
+            if (list == null || list.isEmpty()) {
+                continue;
+            }
+            for (PassiveSkill p : list) {
+                if (p == null || p.getId() == null) {
+                    continue;
+                }
+                BattleStartApplyRule rule = p.getStartApplyRule() == null
+                        ? BattleStartApplyRule.IMMEDIATE : p.getStartApplyRule();
+                int every = p.getStartElapsedAv() == null ? 0 : Math.max(0, p.getStartElapsedAv());
+                if (rule == BattleStartApplyRule.IMMEDIATE) {
+                    if (!immediateOnly) {
+                        continue;
+                    }
+                    if (owner.getStartRuleState().containsKey(p.getId())) {
+                        continue;
+                    }
+                    owner.getStartRuleState().put(p.getId(), 0);
+                    fireV2Passive(owner, p, baseEvalCtx(), "开战");
+                } else if (rule == BattleStartApplyRule.AT_ELAPSED_ONCE) {
+                    if (immediateOnly || every <= 0 || now < every) {
+                        continue;
+                    }
+                    if (owner.getStartRuleState().containsKey(p.getId())) {
+                        continue;
+                    }
+                    owner.getStartRuleState().put(p.getId(), now);
+                    fireV2Passive(owner, p, baseEvalCtx(), "开战延时");
+                } else if (rule == BattleStartApplyRule.EVERY_ELAPSED) {
+                    if (immediateOnly || every <= 0) {
+                        continue;
+                    }
+                    int step = now / every;
+                    int last = owner.getStartRuleState().getOrDefault(p.getId(), 0);
+                    if (step > last) {
+                        owner.getStartRuleState().put(p.getId(), step);
+                        for (int i = last; i < step; i++) {
+                            fireV2Passive(owner, p, baseEvalCtx(), "开战脉冲");
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private void scanBattleJudgePassives() {
+        for (BattleRuntimeUnit owner : units) {
+            if (owner == null || !owner.alive()) {
+                continue;
+            }
+            List<PassiveSkill> list = owner.getBattleJudgePassives();
+            if (list == null || list.isEmpty()) {
+                continue;
+            }
+            for (PassiveSkill p : list) {
+                if (p == null || p.getId() == null) {
+                    continue;
+                }
+                AnchorEvalContext ctx = baseEvalCtx();
+                if (!PassiveConditionEvalUnit.matchFormulaConditions(p, owner, board, ctx)) {
+                    if (owner.getJudgeActiveIds().remove(p.getId())) {
+                        revokeJudgeOutputs(owner, p);
+                    }
+                    continue;
+                }
+                double left = FormulaEvalUnit.eval(p.getLeftFormulaJson(), owner, owner, board, ctx);
+                double right = FormulaEvalUnit.eval(p.getRightFormulaJson(), owner, owner, board, ctx);
+                CompareOp op = p.getCompareOp() == null ? CompareOp.GTE : p.getCompareOp();
+                boolean ok = compareJudge(left, op, right);
+                if (ok) {
+                    if (owner.getJudgeActiveIds().add(p.getId())) {
+                        fireV2Passive(owner, p, ctx, "判定", true);
+                    }
+                } else if (owner.getJudgeActiveIds().remove(p.getId())) {
+                    revokeJudgeOutputs(owner, p);
+                }
+            }
+        }
+    }
+
+    private void scanBattlePulsePassives() {
+        for (BattleRuntimeUnit owner : units) {
+            if (owner == null || !owner.alive()) {
+                continue;
+            }
+            List<PassiveSkill> list = owner.getBattlePulsePassives();
+            if (list == null || list.isEmpty()) {
+                continue;
+            }
+            for (PassiveSkill p : list) {
+                if (p == null || p.getId() == null || !canTriggerMore(owner, p)) {
+                    continue;
+                }
+                AnchorEvalContext ctx = baseEvalCtx();
+                if (!PassiveConditionEvalUnit.matchFormulaConditions(p, owner, board, ctx)) {
+                    continue;
+                }
+                double left = FormulaEvalUnit.eval(p.getLeftFormulaJson(), owner, owner, board, ctx);
+                double right = FormulaEvalUnit.eval(p.getRightFormulaJson(), owner, owner, board, ctx);
+                // 脉冲固定「每当达到」阈值阶梯
+                int fires = resolvePeriodicFires(owner, p.getId(), owner.getUnitId(), left, right, CompareOp.GTE);
+                for (int i = 0; i < fires; i++) {
+                    if (!canTriggerMore(owner, p)) {
+                        break;
+                    }
+                    bumpTriggerCount(owner, p.getId());
+                    fireV2Passive(owner, p, ctx, "脉冲", false);
+                }
+            }
+        }
+    }
+
+    private void fireCombatPassives(
+            BattleRuntimeUnit owner,
+            CombatEventType event,
+            ActiveSkill skill,
+            BattleRuntimeUnit other,
+            int dealt
+    ) {
+        List<BattleRuntimeUnit> hits = null;
+        if (other != null) {
+            hits = List.of(other);
+        }
+        fireCombatPassives(owner, event, skill, other, dealt, hits);
+    }
+
+    private void fireCombatPassives(
+            BattleRuntimeUnit owner,
+            CombatEventType event,
+            ActiveSkill skill,
+            BattleRuntimeUnit other,
+            int dealt,
+            List<BattleRuntimeUnit> hitTargets
+    ) {
+        if (owner == null || event == null) {
+            return;
+        }
+        boolean allowDeadOwner = event == CombatEventType.AFTER_KILLED;
+        if (!allowDeadOwner && !owner.alive()) {
+            return;
+        }
+        List<PassiveSkill> list = owner.getBattleCombatPassives();
+        if (list == null || list.isEmpty()) {
+            return;
+        }
+        for (PassiveSkill p : list) {
+            if (p == null || p.getCombatEvent() != event) {
+                continue;
+            }
+            if (!canTriggerMore(owner, p)) {
+                continue;
+            }
+            if (skill != null && !PassiveSkillMatchUnit.matchesSkillRef(p, skill)) {
+                continue;
+            }
+            AnchorEvalContext ctx = baseEvalCtx();
+            boolean receiveSide = event == CombatEventType.AFTER_RECEIVE_SKILL
+                    || event == CombatEventType.AFTER_TAKE_ACTIVE_DMG
+                    || event == CombatEventType.AFTER_TAKE_PULSE_BUFF_DMG
+                    || event == CombatEventType.AFTER_KILLED
+                    || event == CombatEventType.AFTER_DODGE;
+            boolean killSide = event == CombatEventType.AFTER_KILL || event == CombatEventType.AFTER_KILLED;
+            ctx.setCaster(receiveSide ? other : owner);
+            ctx.setHitDamage(dealt);
+            ctx.setSkillDamage(dealt);
+            List<BattleRuntimeUnit> hits = hitTargets;
+            if ((hits == null || hits.isEmpty()) && other != null) {
+                hits = List.of(other);
+            }
+            if (hits != null && !hits.isEmpty()) {
+                ctx.setHitTargets(hits);
+                ctx.setHitTarget(hits.get(0));
+            }
+            if (receiveSide) {
+                ctx.setDamageSource(other != null ? other : owner);
+            } else {
+                ctx.setDamageSource(owner);
+            }
+            if (killSide) {
+                BattleRuntimeUnit killer = event == CombatEventType.AFTER_KILL ? owner : other;
+                BattleRuntimeUnit killedUnit = event == CombatEventType.AFTER_KILL ? other : owner;
+                ctx.setKiller(killer);
+                ctx.setKilled(killedUnit);
+                if (killedUnit != null) {
+                    ctx.setHitTarget(killedUnit);
+                    ctx.setHitTargets(List.of(killedUnit));
+                }
+                if (killer != null) {
+                    ctx.setDamageSource(killer);
+                    ctx.setCaster(killer);
+                }
+            }
+            if (!PassiveConditionEvalUnit.matchFormulaConditions(p, owner, board, ctx)) {
+                continue;
+            }
+            bumpTriggerCount(owner, p.getId());
+            fireV2Passive(owner, p, ctx, "战斗事件", false);
+        }
+    }
+
+    private void fireV2Passive(BattleRuntimeUnit owner, PassiveSkill p, AnchorEvalContext ctx, String tag) {
+        fireV2Passive(owner, p, ctx, tag, false);
+    }
+
+    private void fireV2Passive(
+            BattleRuntimeUnit owner, PassiveSkill p, AnchorEvalContext ctx, String tag, boolean revokeableAttr
+    ) {
+        if (owner == null || p == null) {
+            return;
+        }
+        List<SkillOutput> outs = p.getOutputs();
+        String skillName = p.getName() != null ? p.getName() : p.getId();
+        boolean startAxis = "开战".equals(tag) || "开战延时".equals(tag) || "开战脉冲".equals(tag);
+        if (outs == null || outs.isEmpty()) {
+            if (startAxis) {
+                logActHead(owner.getName() + " 释放「" + skillName + "」（无输出）");
+            } else {
+                logs.add("  └ [" + owner.getName() + "] " + tag + "「" + skillName + "」跳过：无输出配置");
+            }
+            return;
+        }
+        if (startAxis) {
+            // 主轴时间：与主动技同一套「释放」日志 + CAST 事件
+            logActHead(owner.getName() + " 释放「" + skillName + "」");
+            BattleEventVo castEv = emitInternal("CAST");
+            castEv.setUid(owner.getUnitId());
+            castEv.setSkillId(p.getId());
+            castEv.setSkillName(skillName);
+            castEv.setSkillType("PASSIVE");
+            LinkedHashSet<String> castTargets = new LinkedHashSet<>();
+            for (SkillOutput out : outs) {
+                if (out == null || out.getTargetType() == null) {
+                    continue;
+                }
+                for (BattleRuntimeUnit t : SkillTargetResolver.resolveWithAnchor(
+                        out.getTargetType(), owner, units, ctx != null ? ctx : baseEvalCtx())) {
+                    if (t != null && t.getUnitId() != null) {
+                        castTargets.add(t.getUnitId());
+                    }
+                }
+            }
+            castEv.setTargets(new ArrayList<>(castTargets));
+        } else {
+            logs.add("行动值 " + board.getElapsedActionValue() + "\n  └ [" + owner.getName() + "] " + tag + "「"
+                    + skillName + "」触发");
+        }
+        SkillV2OutputUnit.applyOutputs(this, owner, outs, ctx, "  └ ", revokeableAttr);
+    }
+
+    private void revokeJudgeOutputs(BattleRuntimeUnit owner, PassiveSkill p) {
+        if (p == null || p.getOutputs() == null) {
+            return;
+        }
+        for (SkillOutput out : p.getOutputs()) {
+            if (out == null || out.getId() == null) {
+                continue;
+            }
+            String prefix = "SOUT#" + out.getId() + "#";
+            for (BattleRuntimeUnit u : units) {
+                if (u == null) {
+                    continue;
+                }
+                List<TimedAttrBuff> copy = new ArrayList<>(u.getTimedBuffs());
+                for (TimedAttrBuff b : copy) {
+                    if (b != null && b.getSourceKey() != null && b.getSourceKey().startsWith(prefix)) {
+                        revokeBuff(u, b, "判定解除");
+                    }
+                }
+            }
+        }
+        logs.add("  └ [" + owner.getName() + "] 判定「"
+                + (p.getName() != null ? p.getName() : p.getId()) + "」取消");
+    }
+
+    private static boolean compareJudge(double left, CompareOp op, double right) {
+        if (op == null) {
+            return false;
+        }
+        return switch (op) {
+            case GT -> left > right;
+            case GTE -> left >= right;
+            case LT -> left < right;
+            case LTE -> left <= right;
+            case EQ -> Math.abs(left - right) < 1e-6;
+        };
     }
 
     private boolean anyAlive(BattleSide side) {

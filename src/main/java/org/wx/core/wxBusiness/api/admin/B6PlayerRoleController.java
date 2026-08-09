@@ -11,6 +11,7 @@ import org.wx.core.wxBase.annotation.ParamCheck;
 import org.wx.core.wxBase.base.WxResult;
 import org.wx.core.wxBusiness.account.entity.enums.MemberRole;
 import org.wx.core.wxBusiness.game.entity.PlayerRole;
+import org.wx.core.wxBusiness.game.entity.enums.PlayerRoleCategory;
 import org.wx.core.wxBusiness.game.service.PlayerLayoutService;
 import org.wx.core.wxBusiness.game.service.PlayerRoleService;
 import org.wx.core.wxBusiness.log.annotation.WxRequestLog;
@@ -49,9 +50,10 @@ public class B6PlayerRoleController {
     @NeedHeader(roles = {MemberRole.ADMIN})
     public WxResult<PlayerRole> grant(
             @ParamCheck String uid,
-            @ParamCheck String baseStatId
+            @ParamCheck String baseStatId,
+            PlayerRoleCategory roleCategory
     ) {
-        return WxResult.success(playerRoleService.createFromBaseStat(uid, baseStatId));
+        return WxResult.success(playerRoleService.createFromBaseStat(uid, baseStatId, roleCategory));
     }
 
     /**
@@ -62,20 +64,19 @@ public class B6PlayerRoleController {
     @NeedHeader(roles = {MemberRole.ADMIN})
     public WxResult<?> update(@RequestBody PlayerRole entity) {
         entity.clearEmptyString();
-        playerRoleService.prepareRatios(entity);
-        playerRoleService.saveOrUpdate(entity);
+        playerRoleService.updateAdmin(entity);
         return WxResult.success();
     }
 
     /**
-     * 删除玩家角色
+     * 删除玩家角色（主角不可删）
      */
     @PostMapping("/remove")
     @WxRequestLog()
     @NeedHeader(roles = {MemberRole.ADMIN})
     public WxResult<?> remove(@RequestBody PlayerRole entity) {
+        playerRoleService.removeAdmin(entity.getId());
         playerLayoutService.removeByRoleId(entity.getId());
-        playerRoleService.removeById(entity.getId());
         return WxResult.success();
     }
 }

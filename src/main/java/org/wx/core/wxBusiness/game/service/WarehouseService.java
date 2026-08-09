@@ -240,7 +240,6 @@ public class WarehouseService extends WxServiceImpl<WarehouseMapper, Warehouse> 
                 row.setIcon(item.getIcon());
                 row.setItemType(item.getItemType());
                 row.setMaxStack(item.getMaxStack());
-                row.setWeight(item.getWeight());
                 row.setDetail(itemDetailService.buildRich(item));
             }
         }

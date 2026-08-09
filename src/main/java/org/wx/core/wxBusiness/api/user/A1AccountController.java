@@ -3,9 +3,11 @@ package org.wx.core.wxBusiness.api.user;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.wx.core.wxBase.annotation.NeedHeader;
 import org.wx.core.wxBase.annotation.ParamCheck;
 import org.wx.core.wxBase.base.Wx;
 import org.wx.core.wxBase.base.WxResult;
+import org.wx.core.wxBusiness.account.entity.enums.MemberRole;
 import org.wx.core.wxBusiness.log.annotation.WxRequestLog;
 
 /**
@@ -54,5 +56,35 @@ public class A1AccountController {
     ) {
         String token = Wx.MemberService.signInEmailAccountForeMms(email, emsCode);
         return WxResult.token(token);
+    }
+
+    /**
+     * 登录后修改密码（原密码）
+     */
+    @PostMapping("/password/change")
+    @WxRequestLog()
+    @NeedHeader(roles = MemberRole.USER)
+    public WxResult<?> changePassword(
+            @ParamCheck(msg = "原密码") String oldPassword,
+            @ParamCheck(msg = "新密码") String newPassword,
+            @ParamCheck(msg = "确认密码") String newPasswordAgain
+    ) {
+        Wx.MemberService.changePassword(oldPassword, newPassword, newPasswordAgain);
+        return WxResult.success();
+    }
+
+    /**
+     * 登录后用邮箱验证码设置密码（无感注册后）
+     */
+    @PostMapping("/password/set-by-code")
+    @WxRequestLog()
+    @NeedHeader(roles = MemberRole.USER)
+    public WxResult<?> setPasswordByCode(
+            @ParamCheck(msg = "验证码") String emsCode,
+            @ParamCheck(msg = "新密码") String newPassword,
+            @ParamCheck(msg = "确认密码") String newPasswordAgain
+    ) {
+        Wx.MemberService.setPasswordByEmailCode(emsCode, newPassword, newPasswordAgain);
+        return WxResult.success();
     }
 }

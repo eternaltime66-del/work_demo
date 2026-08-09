@@ -8,6 +8,7 @@ import org.wx.core.wxBase.base.WxServiceImpl;
 import org.wx.core.wxBusiness.game.entity.Item;
 import org.wx.core.wxBusiness.game.entity.MonsterDrop;
 import org.wx.core.wxBusiness.game.entity.vo.MonsterDropResultVo;
+import org.wx.core.wxBusiness.game.entity.vo.StageDropPreviewVo;
 import org.wx.core.wxBusiness.game.mapper.MonsterDropMapper;
 import org.wx.core.wxBusiness.game.unit.DropRandomUnit;
 
@@ -158,5 +159,50 @@ public class MonsterDropService extends WxServiceImpl<MonsterDropMapper, Monster
                 row.setItemName(item.getName());
             }
         }
+    }
+
+    /**
+     * 关卡预览用：多怪物掉落配置去重合并（同物品取更高概率、更宽数量区间）
+     */
+    public List<StageDropPreviewVo> catalogPreviewByMonsterIds(Collection<String> monsterIds) {
+        if (monsterIds == null || monsterIds.isEmpty()) {
+            return List.of();
+        }
+        Map<String, StageDropPreviewVo> merged = new LinkedHashMap<>();
+        for (String monsterId : monsterIds) {
+            if (Wx.isEmpty(monsterId)) {
+                continue;
+            }
+            for (MonsterDrop row : listEnabledByMonsterId(monsterId)) {
+                if (row == null || Wx.isEmpty(row.getItemId())) {
+                    continue;
+                }
+                StageDropPreviewVo exist = merged.get(row.getItemId());
+                if (exist == null) {
+                    StageDropPreviewVo vo = new StageDropPreviewVo();
+                    vo.setItemId(row.getItemId());
+                    vo.setItemName(row.getItemName() != null ? row.getItemName() : row.getItemId());
+                    vo.setDropRate(row.getDropRate());
+                    vo.setMinQty(row.getMinQty() == null ? 1 : row.getMinQty());
+                    vo.setMaxQty(row.getMaxQty() == null ? vo.getMinQty() : row.getMaxQty());
+                    merged.put(row.getItemId(), vo);
+                    continue;
+                }
+                BigDecimal rate = row.getDropRate() == null ? BigDecimal.ZERO : row.getDropRate();
+                BigDecimal old = exist.getDropRate() == null ? BigDecimal.ZERO : exist.getDropRate();
+                if (rate.compareTo(old) > 0) {
+                    exist.setDropRate(rate);
+                }
+                int min = row.getMinQty() == null ? 1 : row.getMinQty();
+                int max = row.getMaxQty() == null ? min : row.getMaxQty();
+                if (exist.getMinQty() == null || min < exist.getMinQty()) {
+                    exist.setMinQty(min);
+                }
+                if (exist.getMaxQty() == null || max > exist.getMaxQty()) {
+                    exist.setMaxQty(max);
+                }
+            }
+        }
+        return new ArrayList<>(merged.values());
     }
 }

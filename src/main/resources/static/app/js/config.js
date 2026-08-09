@@ -1,0 +1,86 @@
+const HOST = ""; // 后端地址，如 http://localhost:8081；空=同域/自动探测
+
+/**
+ * 玩法端配置：前后端分离。
+ * - HOST 有值时优先用 HOST
+ * - 否则：?api= / localStorage.apiBase / 自动探测
+ */
+(function (global) {
+  function trimSlash(s) {
+    return String(s || '').replace(/\/+$/, '');
+  }
+
+  function detectApiBase() {
+    var host = trimSlash(typeof HOST !== 'undefined' ? HOST : '');
+    if (host) return host;
+    try {
+      var qs = new URLSearchParams(location.search || '').get('api');
+      if (qs) {
+        var fromQs = trimSlash(qs);
+        try { localStorage.setItem('apiBase', fromQs); } catch (e) { /* ignore */ }
+        return fromQs;
+      }
+      var stored = localStorage.getItem('apiBase');
+      if (stored) return trimSlash(stored);
+      if (location.protocol === 'file:') return 'http://localhost:8081';
+      if (location.port && location.port !== '8081' && location.hostname) {
+        return location.protocol + '//' + location.hostname + ':8081';
+      }
+      return '';
+    } catch (e) {
+      return 'http://localhost:8081';
+    }
+  }
+
+  /** 当前页面所在目录，如 /app/ 或 ./ */
+  function pageDir() {
+    var path = location.pathname || '/';
+    var i = path.lastIndexOf('/');
+    return i >= 0 ? path.slice(0, i + 1) : './';
+  }
+
+  var dir = pageDir();
+  var apiBase = detectApiBase();
+  var artBase = dir + 'art/';
+
+  function resolveAssetUrl(url) {
+    if (url == null || url === '') return url;
+    var s = String(url);
+    if (s.indexOf('http://') === 0 || s.indexOf('https://') === 0 || s.indexOf('data:') === 0) {
+      return s;
+    }
+    if (s.indexOf('/art/') === 0) {
+      return artBase + s.slice('/art/'.length);
+    }
+    if (s.indexOf('art/') === 0) {
+      return artBase + s.slice('art/'.length);
+    }
+    if (s.charAt(0) === '/') {
+      return apiBase + s;
+    }
+    return s;
+  }
+
+  global.APP_CONFIG = {
+    apiBase: apiBase,
+    artBase: artBase,
+    resolveAssetUrl: resolveAssetUrl,
+    tokenKey: 'token',
+    adminTokenKey: 'adminToken',
+    homePage: dir + 'index.html',
+    loginPage: dir + 'login.html',
+    registerPage: dir + 'register.html',
+    changePasswordPage: dir + 'change-password.html',
+    battlePage: dir + 'battle.html',
+    adminPage: '../admin/index.html',
+    selectedLevelKey: 'selectedLevelId',
+    codeType: 'AccountCheckForEmail',
+    setApiBase: function (url) {
+      var v = trimSlash(url);
+      try { localStorage.setItem('apiBase', v); } catch (e) { /* ignore */ }
+      global.APP_CONFIG.apiBase = v;
+      apiBase = v;
+      return v;
+    }
+  };
+})(typeof window !== 'undefined' ? window : this);

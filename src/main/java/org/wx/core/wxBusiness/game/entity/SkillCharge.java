@@ -11,6 +11,7 @@ import org.wx.core.wxBase.base.WxBaseEntity;
 import org.wx.core.wxBusiness.game.entity.enums.ActiveSkillType;
 import org.wx.core.wxBusiness.game.entity.enums.ChargeConditionType;
 import org.wx.core.wxBusiness.game.entity.enums.ChargeScope;
+import org.wx.core.wxBusiness.game.entity.enums.DamageElement;
 import org.wx.core.wxBusiness.game.entity.enums.SkillChargeEvent;
 import org.wx.core.wxBusiness.game.entity.enums.SkillChargeMatchMode;
 
@@ -44,14 +45,20 @@ public class SkillCharge extends WxBaseEntity<SkillCharge> {
     /** 增加 y 点充能（各条件类型通用） */
     private Integer chargeGain;
 
-    /** SKILL_CHARGE：释放 / 受到 */
+    /** SKILL_CHARGE：释放 / 受到 / 造成伤害 / 受到伤害 / 造成击杀 */
     private SkillChargeEvent skillChargeEvent;
 
-    /** SKILL_CHARGE：任意 / 任意类型 / 指定 */
+    /** SKILL_CHARGE：任意 / 指定类型 / 指定流派 / 指定元素 / 指定技能 */
     private SkillChargeMatchMode skillChargeMatch;
 
     /** SKILL_CHARGE + ANY_TYPE：匹配的技能类型 */
     private ActiveSkillType matchSkillType;
+
+    /** SKILL_CHARGE + ANY_SCHOOL：匹配的流派 */
+    private String matchSkillSchool;
+
+    /** SKILL_CHARGE + ANY_ELEMENT：匹配的元素类型 */
+    private DamageElement matchDamageElement;
 
     /** SKILL_CHARGE + SPECIFIC：匹配的技能 id */
     private String matchSkillId;

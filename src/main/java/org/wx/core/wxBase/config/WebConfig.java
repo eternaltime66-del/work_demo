@@ -3,7 +3,6 @@ package org.wx.core.wxBase.config;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
-import org.springframework.web.servlet.config.annotation.ViewControllerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 /**
@@ -14,18 +13,12 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 public class WebConfig implements WebMvcConfigurer {
 
     @Override
-    public void addViewControllers(ViewControllerRegistry registry) {
-        registry.addRedirectViewController("/", "/index.html");
-    }
-
-    @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/**")
-                // 生产环境建议替换为具体域名，如 "https://your-frontend.com"
+                // 允许独立静态站跨域调后端 API（token 在 Header，不依赖 Cookie）
                 .allowedOriginPatterns("*")
                 .allowedHeaders("*")
-                // 允许携带Cookie/认证信息
-                .allowCredentials(true)
+                .allowCredentials(false)
                 .allowedMethods("GET", "POST", "OPTIONS", "DELETE", "PUT", "PATCH")
                 .maxAge(3600);
     }
@@ -39,6 +32,11 @@ public class WebConfig implements WebMvcConfigurer {
         boolean isWin = isWinOs();
         String filepath = isWin ? filepathWin.replace("\\", "/") : filepathLinux;
         registry.addResourceHandler("/uploads/**").addResourceLocations("file:" + filepath);
+        // 兼容旧绝对路径 /art/** → app/art
+        registry.addResourceHandler("/art/**").addResourceLocations(
+                "file:src/main/resources/static/app/art/",
+                "classpath:/static/app/art/"
+        );
     }
 
     public static Boolean isWinOs() {

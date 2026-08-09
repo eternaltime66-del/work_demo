@@ -18,7 +18,6 @@ public class CraftItemDetailVo {
     private String icon;
     private String itemType;
     private Integer maxStack;
-    private BigDecimal weight;
     private String remark;
 
     /** 默认充能技能槽数量 */
@@ -47,6 +46,8 @@ public class CraftItemDetailVo {
     private BigDecimal atkSpeedDownRatio;
     private String normalSkillId;
     private String normalSkillName;
+    /** true=武器未绑普攻，展示的是系统 DEFAULT_NORMAL */
+    private Boolean normalSkillSystemDefault;
 
     /** 防具类 */
     private Integer hp;
@@ -85,6 +86,12 @@ public class CraftItemDetailVo {
     /** 默认周期被动描述 */
     private List<PassiveDescVo> defaultPeriodicPassiveDescs = new ArrayList<>();
 
-    /** 默认持续效果被动描述 */
+    /** 默认持续效果被动描述（旧） */
     private List<PassiveDescVo> defaultSustainedPassiveDescs = new ArrayList<>();
+
+    /** 战斗锚点：开战 / 判定 / 脉冲 / 战斗事件 */
+    private List<PassiveDescVo> defaultBattleStartPassiveDescs = new ArrayList<>();
+    private List<PassiveDescVo> defaultBattleJudgePassiveDescs = new ArrayList<>();
+    private List<PassiveDescVo> defaultBattlePulsePassiveDescs = new ArrayList<>();
+    private List<PassiveDescVo> defaultBattleCombatPassiveDescs = new ArrayList<>();
 }

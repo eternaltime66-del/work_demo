@@ -51,6 +51,21 @@ public class B1BackController {
     }
 
     /**
+     * 当前管理员修改密码
+     */
+    @PostMapping("/password/change")
+    @WxRequestLog()
+    @NeedHeader(roles = {MemberRole.ADMIN})
+    public WxResult<?> changePassword(
+            @NotNull @ParamCheck(msg = "原密码") String oldPassword,
+            @NotNull @ParamCheck(msg = "新密码") String newPassword,
+            @NotNull @ParamCheck(msg = "确认密码") String newPasswordAgain
+    ) {
+        Wx.MemberService.changePassword(oldPassword, newPassword, newPasswordAgain);
+        return WxResult.success();
+    }
+
+    /**
      * 模拟登录info
      */
     @PostMapping("/text/login/info")

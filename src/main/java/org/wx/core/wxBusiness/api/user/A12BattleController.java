@@ -24,7 +24,7 @@ public class A12BattleController {
     private BattleService battleService;
 
     /**
-     * 按当前布局 + 关卡怪物进行行动值战斗演算；胜利后掉落入仓库
+     * 主线 / 普通选关战斗（含解锁、体力、每日次数、首通）；无尽塔请走 /api/stage/tower/fight
      */
     @PostMapping("/fight")
     @WxRequestLog()

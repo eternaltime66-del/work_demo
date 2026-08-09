@@ -52,10 +52,10 @@ public final class ChargeAccrualUnit {
     }
 
     /**
-     * 技能充能条件：在「释放 / 受到」触发技能时，若匹配则返回本次增加的充能。
+     * 技能充能条件：释放 / 受到 / 造成伤害 / 受到伤害 / 造成击杀。
      *
-     * @param event     CAST=自己释放；RECEIVE=自己受到
-     * @param trigger   触发的技能（释放的或打到自己的技能）
+     * @param event   事件类型
+     * @param trigger 触发匹配的技能
      */
     public static int chargeGainedOnSkillEvent(SkillCharge charge, SkillChargeEvent event, ActiveSkill trigger) {
         if (charge == null || charge.getConditionType() != ChargeConditionType.SKILL_CHARGE) {
@@ -84,6 +84,8 @@ public final class ChargeAccrualUnit {
                 ActiveSkillType need = charge.getMatchSkillType();
                 yield need != null && need == trigger.getSkillType();
             }
+            case ANY_SCHOOL -> SkillSchoolUnit.schoolEquals(charge.getMatchSkillSchool(), SkillSchoolUnit.schoolOf(trigger));
+            case ANY_ELEMENT -> SkillSchoolUnit.elementEquals(charge.getMatchDamageElement(), SkillSchoolUnit.elementOf(trigger));
             case SPECIFIC -> !Wx.isEmpty(charge.getMatchSkillId())
                     && charge.getMatchSkillId().equals(trigger.getId());
         };

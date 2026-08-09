@@ -36,6 +36,7 @@ ALTER TABLE app_item_legs
   ADD COLUMN atk_speed_up_ratio decimal(12, 4) DEFAULT 0 COMMENT '增加攻速(%)' AFTER defense,
   ADD COLUMN atk_speed_down_ratio decimal(12, 4) DEFAULT 0 COMMENT '减少攻速(%)' AFTER atk_speed_up_ratio;
 
-ALTER TABLE app_item_accessory
-  ADD COLUMN atk_speed_up_ratio decimal(12, 4) DEFAULT 0 COMMENT '增加攻速(%)' AFTER item_id,
-  ADD COLUMN atk_speed_down_ratio decimal(12, 4) DEFAULT 0 COMMENT '减少攻速(%)' AFTER atk_speed_up_ratio;
+-- 饰品攻速字段已废弃（见 migrate_drop_accessory_atk_speed.sql），此处不再添加
+-- ALTER TABLE app_item_accessory
+--   ADD COLUMN atk_speed_up_ratio ...
+
