@@ -13,7 +13,7 @@
   <link rel="stylesheet" href="css/auth.css">
   <link rel="stylesheet" href="css/home.css?v=20260809d">
   <link rel="stylesheet" href="css/layout.css">
-  <link rel="stylesheet" href="css/deploy.css?v=20260809a">
+  <link rel="stylesheet" href="css/deploy.css?v=20260809b">
   <link rel="stylesheet" href="css/prep.css?v=20260809f">
   <link rel="stylesheet" href="css/warehouse.css">
   <link rel="stylesheet" href="css/craft.css">
@@ -566,14 +566,14 @@
                 <div v-if="expandedChapterId === ch.id" class="chapter-levels">
                   <div v-if="!(ch.levels || []).length" class="empty-hint">暂无小关</div>
                   <button
-                    v-for="lv in (ch.levels || [])"
+                    v-for="(lv, levelIndex) in (ch.levels || [])"
                     :key="lv.id"
                     type="button"
                     class="level-row"
                     :class="{ locked: lv.locked, cleared: lv.cleared }"
                     @click="onLevelRowClick(lv, ch)"
                   >
-                    <div class="level-row-code">{{ lv.code || '—' }}</div>
+                    <div class="level-row-code">第{{ levelIndex + 1 }}关</div>
                     <div class="level-row-meta">
                       <span class="ellipsis">{{ lv.name }}</span>
                       <div class="level-faces">

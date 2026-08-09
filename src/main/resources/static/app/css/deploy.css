@@ -555,6 +555,7 @@
 .level-row-code {
   width: clamp(38px, 12vw, 48px);
   flex-shrink: 0;
+  white-space: nowrap;
   font-size: 16px;
   font-weight: 800;
 }
