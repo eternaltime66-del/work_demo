@@ -299,12 +299,12 @@
 }
 
 .equip-slot-img {
-  width: 72%;
-  height: 72%;
-  max-height: 34px;
+  width: 78%;
+  height: 78%;
+  max-height: 38px;
   object-fit: contain;
   pointer-events: none;
-  margin-top: -6px;
+  margin-top: -7px;
   filter: drop-shadow(0 0 3px rgba(0, 220, 255, 0.25));
 }
 
@@ -320,26 +320,6 @@
   opacity: 0.35;
   margin-top: -4px;
 }
-
-.equip-slot-dot {
-  position: absolute;
-  right: 3px;
-  top: 3px;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--rar);
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
-  z-index: 2;
-  display: grid;
-  place-items: center;
-  color: #08101d;
-  font-size: 9px;
-  font-style: normal;
-  font-weight: 900;
-}
-
-.equip-slot-dot::after { content: "✓"; }
 
 .equip-doll-body.art-slot,
 .equip-doll-body.art-ready {
