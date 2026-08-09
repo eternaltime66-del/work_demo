@@ -261,6 +261,7 @@
 }
 
 .equip-slot.filled {
+  padding-bottom: 0;
   border-style: solid;
   border-color: color-mix(in srgb, var(--rar) 72%, #fff 8%);
   background:
@@ -272,8 +273,7 @@
 }
 
 .equip-slot.filled .equip-slot-label {
-  color: color-mix(in srgb, var(--rar) 62%, #fff 38%);
-  font-weight: 800;
+  display: none;
 }
 
 .equip-slot.filled .equip-slot-emoji {
@@ -299,19 +299,20 @@
 }
 
 .equip-slot-img {
-  width: 78%;
-  height: 78%;
-  max-height: 38px;
+  width: 44px;
+  height: 44px;
+  max-width: none;
+  max-height: none;
   object-fit: contain;
   pointer-events: none;
-  margin-top: -7px;
+  margin: 0;
   filter: drop-shadow(0 0 3px rgba(0, 220, 255, 0.25));
 }
 
 .equip-slot-emoji {
-  font-size: 20px;
+  font-size: 28px;
   line-height: 1;
-  margin-top: -4px;
+  margin: 0;
 }
 
 .equip-slot-sil {
