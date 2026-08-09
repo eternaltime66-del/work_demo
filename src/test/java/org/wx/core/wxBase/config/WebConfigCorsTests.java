@@ -23,4 +23,14 @@ class WebConfigCorsTests {
         assertThat(cors.checkOrigin("http://[::1]:5173")).isEqualTo("http://[::1]:5173");
         assertThat(cors.checkOrigin("https://example.com")).isNull();
     }
+
+    @Test
+    void fileProtocolCanBeAllowedExplicitlyForLocalDevelopment() {
+        CorsConfiguration cors = new CorsConfiguration();
+        cors.setAllowedOrigins(List.of("null"));
+        cors.setAllowCredentials(true);
+
+        assertThat(cors.checkOrigin("null")).isEqualTo("null");
+        assertThat(cors.getAllowCredentials()).isTrue();
+    }
 }

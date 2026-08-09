@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Game logo">
+  <defs>
+    <linearGradient id="g" x1="18" y1="14" x2="108" y2="116" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffd56a"/>
+      <stop offset="1" stop-color="#e77d2f"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#g)" d="M64 6 113 34v60l-49 28-49-28V34L64 6Z"/>
+  <path fill="#402813" d="m64 20 36 21v45l-36 21-36-21V41l36-21Z"/>
+  <path fill="#ffe6a0" d="M65 35c16 0 28 10 28 23 0 8-5 15-13 19l8 16H72l-7-12h-8v12H42V38c7-2 15-3 23-3Zm-8 13v20h8c8 0 13-4 13-10 0-7-5-10-13-10h-8Z"/>
+</svg>
