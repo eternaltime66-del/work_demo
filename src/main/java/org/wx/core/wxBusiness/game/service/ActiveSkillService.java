@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.wx.core.wxBase.base.Wx;
 import org.wx.core.wxBase.base.WxServiceImpl;
+import org.wx.core.wxBase.factory.ErrorFactory;
 import org.wx.core.wxBusiness.game.entity.ActiveSkill;
 import org.wx.core.wxBusiness.game.entity.SkillCharge;
 import org.wx.core.wxBusiness.game.entity.SkillEffect;
@@ -49,6 +50,20 @@ public class ActiveSkillService extends WxServiceImpl<ActiveSkillMapper, ActiveS
         }
         entity.setSkillSchool(SkillSchoolUnit.normalizeSchool(entity.getSkillSchool()));
         entity.setDamageElement(SkillSchoolUnit.normalizeElement(entity.getDamageElement()));
+        ActiveSkill stored = Wx.isEmpty(entity.getId()) ? null : super.getById(entity.getId());
+        if (isGlobalDefaultNormal(stored)) {
+            // 通用普攻内容可编辑，但系统身份必须稳定，保证所有无普攻单位始终可回退。
+            entity.setCode(DEFAULT_NORMAL_CODE);
+            entity.setSkillType(ActiveSkillType.NORMAL);
+            entity.setEnable(true);
+        }
+        if (DEFAULT_NORMAL_CODE.equals(entity.getCode())) {
+            ActiveSkill sameCode = this.find().eq(ActiveSkill::getCode, DEFAULT_NORMAL_CODE).one();
+            ErrorFactory.throwError(sameCode != null && !sameCode.getId().equals(entity.getId()),
+                    "全局通用普攻已存在");
+            entity.setSkillType(ActiveSkillType.NORMAL);
+            entity.setEnable(true);
+        }
     }
 
     public static final String DEFAULT_NORMAL_CODE = "DEFAULT_NORMAL";
@@ -68,10 +83,15 @@ public class ActiveSkillService extends WxServiceImpl<ActiveSkillMapper, ActiveS
         if (Wx.isEmpty(skillId)) {
             return;
         }
+        ErrorFactory.throwError(isGlobalDefaultNormal(this.getById(skillId)), "全局通用普攻不可删除");
         skillChargeService.remove(skillChargeService.find().eq(SkillCharge::getSkillId, skillId).wrapper());
         skillEffectService.remove(skillEffectService.find().eq(SkillEffect::getSkillId, skillId).wrapper());
         skillOutputService.removeBySkillId(skillId);
         this.removeById(skillId);
+    }
+
+    public boolean isGlobalDefaultNormal(ActiveSkill skill) {
+        return skill != null && DEFAULT_NORMAL_CODE.equals(skill.getCode());
     }
 
     /**

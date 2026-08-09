@@ -166,7 +166,6 @@ public class BattleService {
     }
 
     private BattleResultVo runFight(String uid, String levelId, Map<String, Integer> allyHpOverride) {
-        playerRoleService.ensureAllRolesNormalSkill(uid);
         ActiveSkill defaultNormal = activeSkillService.ensureDefaultNormalSkill();
         ActiveSkill weaponNormal = playerEquipService.resolveWeaponNormalSkill(uid);
         List<ActiveSkill> equipChargeSkills = playerEquipService.resolveEquippedDefaultSkills(uid);
@@ -717,7 +716,6 @@ public class BattleService {
         return v == null ? def : v;
     }
 }
-
 
 
 

@@ -56,7 +56,7 @@ Game3 是一个 Java 17 + Spring Boot 3 的 Web RPG 单体应用。后台负责�
 - 前端形态：HTML + CSS + 原生 JavaScript + Vue 3 production runtime，无 npm 构建步骤。
 - 持久化：MySQL + MyBatis-Plus。
 - 运行态基础设施：Redis、Spring AOP、异步任务与调度。
-- 自动化测试：当前 16 项，覆盖战斗核心、Redis 锁和掉落配置；数据库集成与并发压力测试仍待补齐。
+- 自动化测试：当前 19 项，覆盖战斗核心、通用普攻回退、Redis 锁和掉落配置；数据库集成与并发压力测试仍待补齐。
 
 ## 5. 文档状态标记
 

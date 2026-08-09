@@ -47,7 +47,6 @@ public class PlayerRoleService extends WxServiceImpl<PlayerRoleMapper, PlayerRol
             }
         }
         ensureMainRole(uid);
-        ensureAllRolesNormalSkill(uid);
     }
 
     /**
@@ -155,7 +154,6 @@ public class PlayerRoleService extends WxServiceImpl<PlayerRoleMapper, PlayerRol
             }
         }
         this.save(role);
-        playerRoleSkillService.ensureNormalSkill(role.getId());
         return role;
     }
 
@@ -289,14 +287,4 @@ public class PlayerRoleService extends WxServiceImpl<PlayerRoleMapper, PlayerRol
         role.setBaseAction(AtkSpeedCalcUnit.actionFromAtkSpeed(BigDecimal.ONE));
     }
 
-    /** 给该玩家全部角色补发默认普攻 */
-    @Transactional(rollbackFor = Exception.class)
-    public void ensureAllRolesNormalSkill(String uid) {
-        if (Wx.isEmpty(uid)) {
-            return;
-        }
-        for (PlayerRole role : listByUid(uid)) {
-            playerRoleSkillService.ensureNormalSkill(role.getId());
-        }
-    }
 }

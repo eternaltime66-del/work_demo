@@ -11,6 +11,7 @@ import org.wx.core.wxBusiness.game.entity.enums.ActiveSkillType;
 import org.wx.core.wxBusiness.game.mapper.PlayerRoleSkillMapper;
 
 import java.util.List;
+import java.util.ArrayList;
 
 @Service
 public class PlayerRoleSkillService extends WxServiceImpl<PlayerRoleSkillMapper, PlayerRoleSkill> {
@@ -24,10 +25,23 @@ public class PlayerRoleSkillService extends WxServiceImpl<PlayerRoleSkillMapper,
 
     public List<ActiveSkill> listSkillsByRoleId(String roleId) {
         List<PlayerRoleSkill> binds = listByRoleId(roleId);
-        return binds.stream()
+        List<ActiveSkill> skills = new ArrayList<>(binds.stream()
                 .map(b -> activeSkillService.getById(b.getSkillId()))
                 .filter(s -> s != null && !Boolean.FALSE.equals(s.getEnable()))
-                .toList();
+                .toList());
+        return appendGlobalNormalFallback(skills);
+    }
+
+    List<ActiveSkill> appendGlobalNormalFallback(List<ActiveSkill> source) {
+        List<ActiveSkill> skills = source == null ? new ArrayList<>() : new ArrayList<>(source);
+        boolean hasNormal = skills.stream().anyMatch(s -> s != null && s.getSkillType() == ActiveSkillType.NORMAL);
+        if (!hasNormal) {
+            ActiveSkill fallback = activeSkillService.ensureDefaultNormalSkill();
+            if (fallback != null) {
+                skills.add(0, fallback);
+            }
+        }
+        return skills;
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -49,20 +63,4 @@ public class PlayerRoleSkillService extends WxServiceImpl<PlayerRoleSkillMapper,
         this.save(row);
     }
 
-    /** 给角色补发默认普攻（若尚未持有任何普攻） */
-    @Transactional(rollbackFor = Exception.class)
-    public void ensureNormalSkill(String roleId) {
-        if (Wx.isEmpty(roleId)) {
-            return;
-        }
-        ActiveSkill normal = activeSkillService.ensureDefaultNormalSkill();
-        if (normal == null) {
-            return;
-        }
-        List<ActiveSkill> owned = listSkillsByRoleId(roleId);
-        boolean hasNormal = owned.stream().anyMatch(s -> s.getSkillType() == ActiveSkillType.NORMAL);
-        if (!hasNormal) {
-            grantSkillIfAbsent(roleId, normal.getId(), 0);
-        }
-    }
 }
