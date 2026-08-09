@@ -13,7 +13,7 @@
   <link rel="stylesheet" href="css/auth.css">
   <link rel="stylesheet" href="css/home.css?v=20260809d">
   <link rel="stylesheet" href="css/layout.css">
-  <link rel="stylesheet" href="css/deploy.css?v=20260809c">
+  <link rel="stylesheet" href="css/deploy.css?v=20260809d">
   <link rel="stylesheet" href="css/prep.css?v=20260809f">
   <link rel="stylesheet" href="css/warehouse.css">
   <link rel="stylesheet" href="css/craft.css">
@@ -581,23 +581,25 @@
                           <b aria-hidden="true">⚡</b>{{ lv.fightStaminaCost != null ? lv.fightStaminaCost : (lv.cleared ? 1 : 0) }}
                         </span>
                       </div>
-                      <div class="level-faces">
+                      <div class="level-info-row">
+                        <div class="level-faces">
+                          <span
+                            v-for="(face, fi) in levelFaces(lv.id)"
+                            :key="lv.id + '-f' + fi"
+                            class="level-face art-slot"
+                            :class="rarityClass(face.rarity)"
+                            :data-art="face.monsterId ? ('monster/' + face.monsterId + '-face.png') : null"
+                          >{{ face.ch }}</span>
+                          <em v-if="!levelFaces(lv.id).length">{{ levelMonsterCount(lv.id) }}</em>
+                        </div>
                         <span
-                          v-for="(face, fi) in levelFaces(lv.id)"
-                          :key="lv.id + '-f' + fi"
-                          class="level-face art-slot"
-                          :class="rarityClass(face.rarity)"
-                          :data-art="face.monsterId ? ('monster/' + face.monsterId + '-face.png') : null"
-                        >{{ face.ch }}</span>
-                        <em v-if="!levelFaces(lv.id).length">{{ levelMonsterCount(lv.id) }}</em>
+                          class="level-clear-mark"
+                          :class="lv.cleared ? 'is-cleared' : 'is-pending'"
+                          :title="lv.cleared ? '已通关' : '尚未通关'"
+                          :aria-label="lv.cleared ? '已通关' : '尚未通关'"
+                        ><i aria-hidden="true">{{ lv.cleared ? '◆' : '◇' }}</i>{{ lv.cleared ? '已通关' : '待通关' }}</span>
                       </div>
                     </div>
-                    <span
-                      class="level-clear-mark"
-                      :class="lv.cleared ? 'is-cleared' : 'is-pending'"
-                      :title="lv.cleared ? '已通关' : '尚未通关'"
-                      :aria-label="lv.cleared ? '已通关' : '尚未通关'"
-                    ><i aria-hidden="true">{{ lv.cleared ? '◆' : '◇' }}</i>{{ lv.cleared ? '已通关' : '待通关' }}</span>
                     <span class="chapter-row-arrow">›</span>
                   </button>
                 </div>
