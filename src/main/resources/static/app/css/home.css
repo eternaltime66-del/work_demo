@@ -213,6 +213,21 @@
   animation: heroFloat 2.8s ease-in-out infinite;
 }
 
+.hero-actor::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 190px;
+  height: 250px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background:
+    radial-gradient(ellipse at center, rgba(133, 205, 255, 0.24) 0%, rgba(82, 116, 190, 0.13) 42%, transparent 72%);
+  filter: blur(3px);
+  pointer-events: none;
+}
+
 .hero-actor:active {
   transform: scale(0.96);
   filter: drop-shadow(0 0 16px rgba(124, 92, 255, 0.45));
@@ -254,14 +269,19 @@
 }
 
 .hero-body.art-ready {
-  width: 120px;
-  height: 160px;
+  width: 168px;
+  height: 224px;
   border-radius: 16px;
   background-color: transparent;
   background-size: contain;
   background-position: center bottom;
   background-repeat: no-repeat !important;
   box-shadow: none;
+  filter:
+    brightness(1.13)
+    contrast(1.06)
+    drop-shadow(0 0 5px rgba(70, 225, 255, 0.72))
+    drop-shadow(0 0 14px rgba(211, 66, 255, 0.32));
 }
 
 .home-scene .hero-body.art-slot,
