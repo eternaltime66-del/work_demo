@@ -625,7 +625,7 @@
           </div>
           <div class="sd-chip">
             <span class="sd-chip-label">流派</span>
-            <span class="sd-chip-val sd-chip-val-sm">{{ skillDetail.skill.skillSchool || '无' }}</span>
+            <span class="sd-chip-val sd-chip-val-sm">{{ skillSchoolLabel(skillDetail.skill.skillSchool) }}</span>
           </div>
           <div class="sd-chip">
             <span class="sd-chip-label">元素</span>
@@ -2894,7 +2894,7 @@ createApp({
         PULSE: '脉冲 BUFF',
         JUDGE_ATTR: '判定属性 BUFF',
         JUDGE_BURST: '判定爆发 BUFF'
-      }[v] || v || 'BUFF';
+      }[v] || '其他BUFF';
     },
     formatBuffDuration(b) {
       if (!b) return '—';
@@ -2961,7 +2961,14 @@ createApp({
       return lines.filter(Boolean);
     },
     skillTypeLabel(type) {
-      return { NORMAL: '普攻', ULTIMATE: '大招', SMALL: '小技能' }[type] || type || '—';
+      return { NORMAL: '普攻', ULTIMATE: '大招', SMALL: '小技能' }[type] || '其他技能';
+    },
+    skillSchoolLabel(v) {
+      if (v == null || String(v).trim() === '') return '无';
+      var s = String(v).trim();
+      var map = { NONE: '无', NORMAL: '通用', PHYSICAL: '物理', MAGIC: '法术' };
+      if (map[s]) return map[s];
+      return /^[A-Z][A-Z0-9_]*$/.test(s) ? '其他流派' : s;
     },
     skillNeedChargeText(sk) {
       if (!sk) return '—';
@@ -2972,7 +2979,7 @@ createApp({
       return {
         ACTION_VALUE: '行动值充能',
         SKILL_CHARGE: '技能充能'
-      }[type] || type || '—';
+      }[type] || '其他充能条件';
     },
     skillChargeEventLabel(v) {
       return {
@@ -2981,18 +2988,18 @@ createApp({
         DEAL_DAMAGE: '造成伤害',
         TAKE_DAMAGE: '受到伤害',
         KILL: '造成击杀'
-      }[v] || v || '—';
+      }[v] || '其他触发事件';
     },
     skillChargeMatchLabel(v) {
       return {
         ANY: '任意', ANY_TYPE: '指定类型', ANY_SCHOOL: '指定流派',
         ANY_ELEMENT: '指定元素类型', SPECIFIC: '指定技能'
-      }[v] || v || '—';
+      }[v] || '其他匹配方式';
     },
     skillChargeTargetLabel(c) {
       if (!c) return '—';
       if (c.skillChargeMatch === 'ANY_TYPE') return this.skillTypeLabel(c.matchSkillType) || '—';
-      if (c.skillChargeMatch === 'ANY_SCHOOL') return c.matchSkillSchool || '无';
+      if (c.skillChargeMatch === 'ANY_SCHOOL') return this.skillSchoolLabel(c.matchSkillSchool);
       if (c.skillChargeMatch === 'ANY_ELEMENT') return this.damageElementLabel(c.matchDamageElement);
       if (c.skillChargeMatch === 'SPECIFIC') return c.matchSkillName || c.matchSkillId || '—';
       return '—';
@@ -3015,7 +3022,7 @@ createApp({
           return event + ' ' + this.skillTypeLabel(c.matchSkillType) + ' 类型 技能 充能+' + gain;
         }
         if (match === 'ANY_SCHOOL') {
-          return event + ' 流派「' + (c.matchSkillSchool || '无') + '」技能 充能+' + gain;
+          return event + ' 流派「' + this.skillSchoolLabel(c.matchSkillSchool) + '」技能 充能+' + gain;
         }
         if (match === 'ANY_ELEMENT') {
           return event + ' ' + this.damageElementLabel(c.matchDamageElement) + ' 元素技能 充能+' + gain;
@@ -3031,12 +3038,12 @@ createApp({
       return {
         MATERIAL: '材料', WEAPON: '武器', ARMOR: '护甲', GLOVES: '护手',
         HELMET: '头盔', ACCESSORY: '饰品', LEGS: '护腿'
-      }[v] || v || '装备';
+      }[v] || '其他装备';
     },
     compareOpLabel(v) {
       return {
         GT: '大于', GTE: '大于等于', LT: '小于', LTE: '小于等于', EQ: '等于', NEQ: '不等于'
-      }[v] || v || '比较';
+      }[v] || '其他比较方式';
     },
     combatEventLabel(v) {
       return {
@@ -3048,7 +3055,7 @@ createApp({
         AFTER_KILL: '击杀时',
         AFTER_KILLED: '被击杀时',
         AFTER_DODGE: '触发闪避后'
-      }[v] || v || '战斗事件';
+      }[v] || '其他战斗事件';
     },
     formatPassiveConditionLine(c) {
       if (!c || !c.conditionType) return '';
@@ -3069,7 +3076,7 @@ createApp({
         var right = this.formatEffectFormula({ formulaJson: c.rightFormulaJson }) || '?';
         return '当（' + left + '）' + this.compareOpLabel(c.compareOp) + '（' + right + '）';
       }
-      return c.conditionType;
+      return '其他生效条件';
     },
     buildPassiveConditionLines(p) {
       if (!p) return [];
@@ -3118,14 +3125,31 @@ createApp({
     },
     effectTargetLabel(v) {
       return {
-        SELF: '自己', FIRST: '首目标', FRONT_ROW: '前排', BACK_ROW: '后排',
-        RANDOM_ENEMY: '随机一个敌方', ENEMY_MAX_HP: '生命值最高敌方',
-        ENEMY_MIN_HP: '生命值最低敌方', ALLY_MIN_HP: '生命值最低己方',
-        ALL_ENEMY: '敌方全部', ALL_ALLY: '己方全部'
-      }[v] || v || '—';
+        SELF: '自己', FIRST: '首个目标', RANDOM_ALLY: '随机一个己方', RANDOM_ENEMY: '随机一个敌方',
+        ALL_ENEMY: '敌方全部', ALL_ALLY: '己方全部', ALL_FIELD: '全场所有单位',
+        ALLY_MAX_HP: '当前生命最高的己方', ALLY_MIN_HP: '当前生命最低的己方',
+        ALLY_MAX_MAX_HP: '最大生命最高的己方', ALLY_MIN_MAX_HP: '最大生命最低的己方',
+        ALLY_MAX_HP_PCT: '生命比例最高的己方', ALLY_MIN_HP_PCT: '生命比例最低的己方',
+        ALLY_MAX_ATK: '攻击最高的己方', ALLY_MIN_ATK: '攻击最低的己方',
+        ALLY_FRONT_ROW: '己方前排', ALLY_BACK_ROW: '己方后排',
+        ENEMY_MAX_HP: '当前生命最高的敌方', ENEMY_MIN_HP: '当前生命最低的敌方',
+        ENEMY_MAX_MAX_HP: '最大生命最高的敌方', ENEMY_MIN_MAX_HP: '最大生命最低的敌方',
+        ENEMY_MAX_HP_PCT: '生命比例最高的敌方', ENEMY_MIN_HP_PCT: '生命比例最低的敌方',
+        ENEMY_MAX_ATK: '攻击最高的敌方', ENEMY_MIN_ATK: '攻击最低的敌方',
+        FRONT_ROW: '敌方前排', BACK_ROW: '敌方后排',
+        FIELD_MIN_HP: '全场当前生命最低者', FIELD_MAX_MAX_HP: '全场最大生命最高者',
+        FIELD_MIN_MAX_HP: '全场最大生命最低者', FIELD_MAX_HP_PCT: '全场生命比例最高者',
+        FIELD_MIN_HP_PCT: '全场生命比例最低者', FIELD_MAX_ATK: '全场攻击最高者',
+        FIELD_MIN_ATK: '全场攻击最低者', FIELD_FRONT_ROW: '全场前排', FIELD_BACK_ROW: '全场后排',
+        EVENT_CASTER: '本次施法者', EVENT_DAMAGE_SOURCE: '本次伤害来源',
+        EVENT_PULSE_CASTER: '脉冲BUFF施法者', EVENT_KILLER: '击杀者', EVENT_KILLED: '被击杀者',
+        SPECIFIC_TARGET: '指定目标', ANCHOR_HIT_TARGET: '每个受击目标',
+        ANCHOR_CASTER: '施法目标', DAMAGE_SOURCE: '伤害来源目标', EACH_DAMAGED_TARGET: '每个受伤目标',
+        SPECIAL: '特定目标'
+      }[v] || '其他目标';
     },
     effectTypeLabel(v) {
-      return { DAMAGE: '伤害', HEAL: '治疗', ATTR_MODIFY: '属性修改' }[v] || v || '—';
+      return { DAMAGE: '伤害', HEAL: '治疗', ATTR_MODIFY: '属性修改' }[v] || '其他效果';
     },
     damageElementLabel(v) {
       return {
@@ -3134,7 +3158,13 @@ createApp({
       }[v] || '物理';
     },
     attrModifyKeyLabel(v) {
-      return { ATK: '攻击', MAX_HP: '最大生命', DEF: '防御' }[v] || v || '—';
+      return {
+        ATK: '攻击', MAX_HP: '最大生命', DEF: '防御', LIFE_STEAL: '吸血', ATK_SPEED: '攻速',
+        DEAL_DMG_RATIO: '造成伤害比例', TAKEN_DMG_RATIO: '受到伤害比例',
+        DEAL_ELEMENT_DMG_RATIO: '造成元素伤害比例', TAKEN_ELEMENT_DMG_RATIO: '受到元素伤害比例',
+        DEAL_PHYS_DMG_RATIO: '造成物理伤害比例', TAKEN_PHYS_DMG_RATIO: '受到物理伤害比例',
+        FINAL_ATK: '最终攻击', FINAL_HP: '最终生命', FINAL_DEF: '最终防御'
+      }[v] || '其他属性';
     },
     buffAttrIcon(key) {
       return {
@@ -3156,7 +3186,7 @@ createApp({
       return t;
     },
     attrModifyDirLabel(v) {
-      return { INCREASE: '增加', DECREASE: '减少' }[v] || v || '—';
+      return { INCREASE: '增加', DECREASE: '减少' }[v] || '调整';
     },
     formulaOpLabel(op) {
       return { '+': '+', '-': '−', '*': '×', '/': '÷', '(': '(', ')': ')' }[op] || op || '';
@@ -3170,7 +3200,7 @@ createApp({
         MAX_HP: '最大生命', HP: '当前生命', ATK: '攻击', DEF: '防御',
         ACTION: '角色行动值', ELAPSED_ACTION: '已经过行动值'
       };
-      return role + '·' + (keyMap[t.readKey || 'ATK'] || t.readKey || '?');
+      return role + '·' + (keyMap[t.readKey || 'ATK'] || '其他数值');
     },
     parseFormulaTokens(raw) {
       if (!raw) return [];
@@ -3242,7 +3272,7 @@ createApp({
       return ratePart + '对 ' + target + ' 造成 ' + el + '伤害' + formulaPart;
     },
     outputKindLabel(v) {
-      return { ATTR: '属性', EFFECT: '效果', APPEND_BUFF: '追加BUFF' }[v] || v || '—';
+      return { ATTR: '属性', EFFECT: '效果', APPEND_BUFF: '追加BUFF' }[v] || '其他输出';
     },
     passiveTypeLabel(v) {
       return {
@@ -3255,7 +3285,7 @@ createApp({
         IN_ANCHOR: '锚点被动(旧)',
         IN_PERIODIC: '周期被动(旧)',
         IN_SUSTAINED: '持续效果(旧)'
-      }[v] || v || '—';
+      }[v] || '其他被动类型';
     },
     passiveAttrLabel(v) {
       return {
@@ -3265,7 +3295,7 @@ createApp({
         DEAL_ELEMENT_DMG_RATIO: '造成元素伤害比例', TAKEN_ELEMENT_DMG_RATIO: '受到元素伤害比例',
         DEAL_PHYS_DMG_RATIO: '造成物理伤害比例', TAKEN_PHYS_DMG_RATIO: '受到物理伤害比例',
         FINAL_ATK: '最终攻击', FINAL_HP: '最终生命', FINAL_DEF: '最终防御'
-      }[v] || v || '—';
+      }[v] || '其他属性';
     },
     attrDirLabel(v) {
       return { INCREASE: '+', DECREASE: '-' }[v] || '';
