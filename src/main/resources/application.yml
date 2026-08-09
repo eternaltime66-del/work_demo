@@ -54,7 +54,7 @@ mybatis-plus:
 app:
   cors:
     # 生产环境通过 APP_CORS_ALLOWED_ORIGIN_PATTERNS 配置明确域名，逗号分隔。
-    allowed-origin-patterns: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:*,http://127.0.0.1:*}
+    allowed-origin-patterns: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:*,http://127.0.0.1:*,http://[::1]:*}
   upload:
     root-windows: ${APP_UPLOAD_ROOT_WINDOWS:D:/File/Work/Java/002_DP/}
     root-linux: ${APP_UPLOAD_ROOT_LINUX:/www/wx/file/}
