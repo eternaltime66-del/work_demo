@@ -126,7 +126,7 @@ public class PlayerRoleService extends WxServiceImpl<PlayerRoleMapper, PlayerRol
             assertNoOtherHero(uid, null);
             role.setMainRole(true);
             role.setRoleCategory(PlayerRoleCategory.HERO);
-            role.setGridH(2);
+            role.setGridH(3);
             role.setGridW(2);
             role.setInheritAtkRatio(null);
             role.setInheritDefRatio(null);
@@ -177,8 +177,8 @@ public class PlayerRoleService extends WxServiceImpl<PlayerRoleMapper, PlayerRol
         }
         if (entity.getRoleCategory() == PlayerRoleCategory.HERO) {
             assertNoOtherHero(db.getUid(), db.getId());
-            entity.setGridH(entity.getGridH() == null ? 2 : entity.getGridH());
-            entity.setGridW(entity.getGridW() == null ? 2 : entity.getGridW());
+            entity.setGridH(3);
+            entity.setGridW(2);
         }
         prepareRatios(entity);
         this.updateById(entity);

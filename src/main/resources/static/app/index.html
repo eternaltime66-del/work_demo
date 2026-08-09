@@ -352,7 +352,7 @@
     <div v-show="tab === 'layout'" class="tab-panel layout-panel" data-scroll-key="layout">
       <div class="layout-status">
         <span>{{ layoutStatusText }}</span>
-        <button type="button" class="layout-help hit-44" title="规则" @click="showToast('横6竖5；拖角色到格子；主角通常 2×2；近战偏前两列')">?</button>
+        <button type="button" class="layout-help hit-44" title="规则" @click="showToast('横6竖5；拖角色到格子；主角横2竖3；近战偏前两列')">?</button>
       </div>
       <div class="layout-board-wrap">
         <div
@@ -1120,7 +1120,7 @@
           </div>
           <span class="sd-type-pill is-PASSIVE">{{ detailRole.mainRole ? '主角' : '角色' }}</span>
           <div class="sd-name">{{ detailRole.name || '主角' }}</div>
-          <div class="sd-code">占地 {{ detailRole.gridH || 2 }}×{{ detailRole.gridW || 2 }}</div>
+          <div class="sd-code">占地 横{{ detailRole.gridW || 2 }} × 竖{{ detailRole.gridH || 3 }}</div>
         </div>
 
         <div class="sd-meta">
@@ -1972,7 +1972,7 @@ createApp({
         .then((res) => {
           this.roles = (res.data || []).map((r) => {
             if (r.mainRole) {
-              r.gridH = r.gridH || 2;
+              r.gridH = r.gridH || 3;
               r.gridW = r.gridW || 2;
             } else {
               r.gridH = r.gridH || 1;

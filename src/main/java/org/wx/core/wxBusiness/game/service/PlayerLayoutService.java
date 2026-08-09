@@ -68,7 +68,7 @@ public class PlayerLayoutService extends WxServiceImpl<PlayerLayoutMapper, Playe
             ErrorFactory.throwError(role == null, "角色不存在");
             ErrorFactory.throwError(!uid.equals(role.getUid()), "无权使用该角色");
 
-            int gridH = BattleGrid.nvl(role.getGridH(), Boolean.TRUE.equals(role.getMainRole()) ? 2 : 1);
+            int gridH = BattleGrid.nvl(role.getGridH(), Boolean.TRUE.equals(role.getMainRole()) ? 3 : 1);
             int gridW = BattleGrid.nvl(role.getGridW(), Boolean.TRUE.equals(role.getMainRole()) ? 2 : 1);
             int posCol = BattleGrid.nvl(item.getPosCol(), 0);
             int posRow = BattleGrid.nvl(item.getPosRow(), 0);
@@ -99,7 +99,7 @@ public class PlayerLayoutService extends WxServiceImpl<PlayerLayoutMapper, Playe
     }
 
     /**
-     * 若无布局则默认把主角放在 (1,1) —— 2×2
+     * 若无布局则默认把主角放在 (1,1) —— 横 2 格、竖 3 格
      */
     @Transactional(rollbackFor = Exception.class)
     public List<PlayerLayout> listOrDefault(String uid) {
