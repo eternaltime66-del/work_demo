@@ -749,7 +749,8 @@
   height: 100%;
   width: 0;
   border-radius: inherit;
-  transition: width 40ms linear;
+  /* VA 轴已逐帧插值；释放回零必须瞬时完成，不能播放倒缩动画。 */
+  transition: none;
   background: transparent;
 }
 .usk-bar.usk-normal > i {
@@ -1192,7 +1193,8 @@
   border-radius: inherit;
   background: linear-gradient(90deg, #f59e0b, #facc15);
   box-shadow: 0 0 6px rgba(250, 204, 21, 0.45);
-  transition: width 120ms linear;
+  /* VA 轴已逐帧插值；释放回零必须瞬时完成，不能播放倒缩动画。 */
+  transition: none;
 }
 .cg-num { margin-left: 2px; color: var(--gold); }
 
