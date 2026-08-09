@@ -7,6 +7,7 @@ const OUT = path.join(__dirname, '..', 'src', 'main', 'resources', 'sql', 'seed_
 const STORY = path.join(__dirname, '..', 'src', 'main', 'resources', '主线', '霓虹远征·第一篇章（1-20章）.md');
 const TYPE = 'STY_10000001';
 const NORMAL = 'ASK_71867187';
+const VALID_DAMAGE_ELEMENTS = new Set(['PHYSICAL','POISON','IGNITE','FREEZE','SHOCK','BURN']);
 
 const chapters = [
   ['灰港苏醒','灰港收容层','失忆的黑衣义体行者在停摆的收容舱醒来，只收到一段指向城外的陌生脉冲。',['舱门微光','清扫轨道','废弃登记处','失控安保线','灰港出口'],['巡线浮虫','锈壳清洁机','失序警戒体','封港执勤官'],['冷凝纤维','旧式芯片','灰港密钥'],'断频斩','灰港切割刃','收容层外骨骼'],
@@ -67,6 +68,7 @@ function item(id, code, name, type, sort, remark, chargeSlots=0, basicSlots=0, a
   p(`INSERT INTO app_item (id,code,name,item_type,max_stack,sort,enable,remark,charge_skill_slot_count,basic_passive_slot_count,advanced_passive_slot_count,battle_start_passive_slot_count,battle_combat_passive_slot_count,CREATE_TIME,UPDATE_TIME) VALUES (${q(id)},${q(code)},${q(name)},${q(type)},${type==='MATERIAL'?99:1},${sort},1,${q(remark)},${chargeSlots},${basicSlots},${advancedSlots},${startSlots},${combatSlots},${now},${now});`);
 }
 function skill(id,name,type,charge,mul,target,element,sort,style) {
+  if (!VALID_DAMAGE_ELEMENTS.has(element)) throw new Error(`invalid DamageElement ${element} for ${id}`);
   const effect=style?.[1]||'DAMAGE', hits=style?.[2]||1, event=style?.[3]||'CAST';
   const match=style?.[4]||'ANY_TYPE', matchType=style?.[5]||(style?.[4]?'':'NORMAL'), flavor=style?.[6]||'章节战斗技能';
   p(`INSERT INTO app_active_skill (id,name,skill_type,skill_school,damage_element,code,need_charge_mode,need_charge,max_cast_skill,max_cast_global,max_cast_all_means,max_cast_role,sort,enable,remark,CREATE_TIME,UPDATE_TIME) VALUES (${q(id)},${q(name)},${q(type)},'脉冲',${q(element)},${q(id)},'MANUAL',${charge},0,0,0,0,${sort},1,${q(flavor)},${now},${now});`);
@@ -89,6 +91,8 @@ function advancedPassive(id,name,key,dir,value,itemId,sort,remark) {
   p(`INSERT INTO app_item_default_passive (id,item_id,passive_skill_id,passive_type,slot_no,sort,CREATE_TIME,UPDATE_TIME) VALUES (${q('IDP_'+id)},${q(itemId)},${q(id)},'OUT_ADVANCED',1,0,${now},${now});`);
 }
 function battlePassive(id,name,type,itemId,sort,remark,config,outputs) {
+  if (config.refElement && !VALID_DAMAGE_ELEMENTS.has(config.refElement)) throw new Error(`invalid ref DamageElement ${config.refElement} for ${id}`);
+  outputs.forEach(o=>{ if (o.element && !VALID_DAMAGE_ELEMENTS.has(o.element)) throw new Error(`invalid output DamageElement ${o.element} for ${id}`); });
   const event=config.event||null, rule=config.rule||null, elapsed=config.elapsed||0, max=config.max||0;
   const match=config.match||null, refType=config.refType||null, refElement=config.refElement||null;
   p(`INSERT INTO app_passive_skill (id,name,code,passive_type,condition_mode,skill_match_mode,ref_skill_type,ref_damage_element,max_trigger_per_battle,combat_event,start_apply_rule,start_elapsed_av,sort,enable,remark,CREATE_TIME,UPDATE_TIME) VALUES (${q(id)},${q(name)},${q(id)},${q(type)},'UNLIMITED',${match?q(match):'NULL'},${refType?q(refType):'NULL'},${refElement?q(refElement):'NULL'},${max},${event?q(event):'NULL'},${rule?q(rule):'NULL'},${elapsed},${sort},1,${q(remark)},${now},${now});`);
@@ -106,16 +110,16 @@ function conditionedBattlePassive(id,name,type,itemId,sort,remark,config,outputs
 }
 
 const coreBuilds = [
-  ['雨幕过载枪','回响电弧','ELECTRIC','AFTER_DEAL_ACTIVE_DMG','ANY_ELEMENT','雨幕旧街信标','将电击伤害折返为连锁电弧，并回收少量生命'],
-  ['零线磁轨刃','磁轨超导','ELECTRIC','AFTER_CAST_SKILL','ANY_TYPE','地下换流井信标','普通技能驱动磁轨追击，连续释放越快收益越高'],
+  ['雨幕过载枪','回响电弧','SHOCK','AFTER_DEAL_ACTIVE_DMG','ANY_ELEMENT','雨幕旧街信标','将电击伤害折返为连锁电弧，并回收少量生命'],
+  ['零线磁轨刃','磁轨超导','SHOCK','AFTER_CAST_SKILL','ANY_TYPE','地下换流井信标','普通技能驱动磁轨追击，连续释放越快收益越高'],
   ['锈潮航标炮','锈潮猎杀','PHYSICAL','AFTER_KILL','ANY','锈潮工坊信标','击杀后回收装甲并向下一目标补射'],
-  ['黑箱熔核刃','熔核灼印','FIRE','AFTER_DEAL_ACTIVE_DMG','ANY_ELEMENT','黑箱仓库信标','火焰伤害引爆灼印，同时把余热转化为治疗'],
-  ['炉心蜂群枪','蜂群热链','FIRE','AFTER_CAST_SKILL','ANY_TYPE','炉心守门信标','小技能放出蜂群热链，对全体目标造成持续压迫'],
-  ['白噪声纹杖','白噪回生','ICE','AFTER_TAKE_ACTIVE_DMG','ANY','记忆诊所信标','受击后生成白噪护持，兼顾恢复与减伤'],
-  ['静默折镜刃','静默折返','ICE','AFTER_CAST_SKILL','ANY_TYPE','镜城中继信标','技能在镜面间折返，形成多段随机追击'],
+  ['黑箱熔核刃','熔核灼印','BURN','AFTER_DEAL_ACTIVE_DMG','ANY_ELEMENT','黑箱仓库信标','火焰伤害引爆灼印，同时把余热转化为治疗'],
+  ['炉心蜂群枪','蜂群热链','BURN','AFTER_CAST_SKILL','ANY_TYPE','炉心守门信标','小技能放出蜂群热链，对全体目标造成持续压迫'],
+  ['白噪声纹杖','白噪回生','FREEZE','AFTER_TAKE_ACTIVE_DMG','ANY','记忆诊所信标','受击后生成白噪护持，兼顾恢复与减伤'],
+  ['静默折镜刃','静默折返','FREEZE','AFTER_CAST_SKILL','ANY_TYPE','镜城中继信标','技能在镜面间折返，形成多段随机追击'],
   ['天穹云墓枪','云墓备份','PHYSICAL','AFTER_KILL','ANY','云上墓园信标','击杀写入备份，恢复生命并提升行动效率'],
-  ['月潮观测炮','观测锁杀','ELECTRIC','AFTER_DEAL_ACTIVE_DMG','ANY_ELEMENT','零号观测站信标','电击命中后锁定高威胁目标并追加炮击'],
-  ['月背共振刃','月背共振','FIRE','AFTER_CAST_SKILL','ANY_TYPE','月背门槛信标','小技能唤起全场共振，兼具群伤与自我修复']
+  ['月潮观测炮','观测锁杀','SHOCK','AFTER_DEAL_ACTIVE_DMG','ANY_ELEMENT','零号观测站信标','电击命中后锁定高威胁目标并追加炮击'],
+  ['月背共振刃','月背共振','BURN','AFTER_CAST_SKILL','ANY_TYPE','月背门槛信标','小技能唤起全场共振，兼具群伤与自我修复']
 ];
 
 p('-- 霓虹远征第一篇章：20 大关 × 5 小关。由 tools/gen_neon_mainline_20x5.js 生成。');
@@ -230,11 +234,11 @@ coreBuilds.forEach((cfg,ix)=>{
 
 // 未来付费/活动核心：仅进入图鉴，不配置配方、掉落或首通奖励。
 [
-  ['日冕裁决器','FIRE','将燃烧层数转化为爆发窗口'],
-  ['深海零压枪','ICE','冻结受击节奏并延长防护链'],
-  ['雷池神经刃','ELECTRIC','以高频充能驱动无限趋近的电弧'],
+  ['日冕裁决器','BURN','将燃烧层数转化为爆发窗口'],
+  ['深海零压枪','FREEZE','冻结受击节奏并延长防护链'],
+  ['雷池神经刃','SHOCK','以高频充能驱动无限趋近的电弧'],
   ['虚空回收杖','PHYSICAL','把溢出治疗转写为追击伤害'],
-  ['终端万象炮','FIRE','混合元素队伍的终局共鸣核心']
+  ['终端万象炮','BURN','混合元素队伍的终局共鸣核心']
 ].forEach((cfg,ix)=>{
   const n=ix+1, itemId=`ITM_N20_FUTURE_${String(n).padStart(2,'0')}`;
   item(itemId,`n20_future_${n}`,cfg[0],'WEAPON',7000+n,`未来限定核心｜暂无获取途径｜${cfg[2]}`,0,0,1,0,0);
