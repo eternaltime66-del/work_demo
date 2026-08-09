@@ -13,8 +13,11 @@ import org.wx.core.wxBusiness.game.entity.RecipeMaterial;
 import org.wx.core.wxBusiness.game.mapper.RecipeMapper;
 
 import java.util.HashSet;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class RecipeService extends WxServiceImpl<RecipeMapper, Recipe> {
@@ -32,10 +35,30 @@ public class RecipeService extends WxServiceImpl<RecipeMapper, Recipe> {
                 .eq(Recipe::getEnable, true)
                 .orderByAsc(Recipe::getSort)
                 .list();
+        if (list.isEmpty()) {
+            return list;
+        }
+        Map<String, List<RecipeMaterial>> materialsByRecipe = recipeMaterialService
+                .listByRecipeIds(list.stream().map(Recipe::getId).toList())
+                .stream()
+                .collect(Collectors.groupingBy(RecipeMaterial::getRecipeId));
+        Map<String, Item> outputItems = new HashMap<>();
+        List<String> outputIds = list.stream()
+                .map(Recipe::getOutputItemId)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .toList();
+        if (!outputIds.isEmpty()) {
+            for (Item item : itemService.listByIds(outputIds)) {
+                outputItems.put(item.getId(), item);
+            }
+        }
         for (Recipe recipe : list) {
-            fillOutputName(recipe);
-            List<RecipeMaterial> materials = recipeMaterialService.listByRecipeId(recipe.getId());
-            recipe.setMaterials(materials);
+            Item output = outputItems.get(recipe.getOutputItemId());
+            if (output != null) {
+                recipe.setOutputItemName(output.getName());
+            }
+            recipe.setMaterials(materialsByRecipe.getOrDefault(recipe.getId(), List.of()));
         }
         return list;
     }

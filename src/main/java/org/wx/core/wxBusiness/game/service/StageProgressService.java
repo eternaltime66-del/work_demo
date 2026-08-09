@@ -21,6 +21,7 @@ import org.wx.core.wxBusiness.game.mapper.PlayerStageLevelMapper;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -165,6 +166,89 @@ public class StageProgressService extends WxServiceImpl<PlayerStageLevelMapper, 
         }
         // 空章节视为解锁（无小关可挡）
         return !hasLevel;
+    }
+
+    /** 批量计算章节解锁，避免合成列表按配方重复扫描整棵关卡树。 */
+    public Set<String> listUnlockedChapterIds(String uid, Collection<String> chapterIds) {
+        if (chapterIds == null || chapterIds.isEmpty()) {
+            return Set.of();
+        }
+        List<Stage> requested = stageService.listByIds(chapterIds).stream()
+                .filter(ch -> ch != null && ch.getKind() == StageKind.CHAPTER)
+                .toList();
+        if (requested.isEmpty()) {
+            return Set.of();
+        }
+        Set<String> typeIds = new LinkedHashSet<>();
+        for (Stage chapter : requested) {
+            if (!Wx.isEmpty(chapter.getParentId())) {
+                typeIds.add(chapter.getParentId());
+            }
+        }
+        List<Stage> chapters = stageService.find()
+                .in(Stage::getParentId, typeIds)
+                .eq(Stage::getKind, StageKind.CHAPTER)
+                .eq(Stage::getEnable, true)
+                .orderByAsc(Stage::getSort)
+                .orderByAsc(Stage::getCode)
+                .list();
+        Set<String> allChapterIds = new LinkedHashSet<>();
+        for (Stage chapter : chapters) {
+            allChapterIds.add(chapter.getId());
+        }
+        List<Stage> levels = allChapterIds.isEmpty() ? List.of() : stageService.find()
+                .in(Stage::getParentId, allChapterIds)
+                .eq(Stage::getKind, StageKind.LEVEL)
+                .eq(Stage::getEnable, true)
+                .orderByAsc(Stage::getSort)
+                .orderByAsc(Stage::getCode)
+                .list();
+        Map<String, List<Stage>> levelsByChapter = new HashMap<>();
+        for (Stage level : levels) {
+            levelsByChapter.computeIfAbsent(level.getParentId(), key -> new ArrayList<>()).add(level);
+        }
+        Set<String> levelIds = new LinkedHashSet<>();
+        for (Stage level : levels) {
+            levelIds.add(level.getId());
+        }
+        Set<String> clearedIds = new LinkedHashSet<>();
+        if (!Wx.isEmpty(uid) && !levelIds.isEmpty()) {
+            List<PlayerStageLevel> progress = this.find()
+                    .eq(PlayerStageLevel::getUid, uid)
+                    .in(PlayerStageLevel::getLevelId, levelIds)
+                    .eq(PlayerStageLevel::getCleared, true)
+                    .list();
+            for (PlayerStageLevel row : progress) {
+                clearedIds.add(row.getLevelId());
+            }
+        }
+        Set<String> wanted = new LinkedHashSet<>(chapterIds);
+        Set<String> unlocked = new LinkedHashSet<>();
+        for (String typeId : typeIds) {
+            List<Stage> ordered = new ArrayList<>();
+            Map<String, Integer> firstIndexByChapter = new HashMap<>();
+            for (Stage chapter : chapters) {
+                if (!typeId.equals(chapter.getParentId())) {
+                    continue;
+                }
+                List<Stage> chapterLevels = levelsByChapter.getOrDefault(chapter.getId(), List.of());
+                firstIndexByChapter.put(chapter.getId(), ordered.size());
+                ordered.addAll(chapterLevels);
+                if (wanted.contains(chapter.getId()) && chapterLevels.isEmpty()) {
+                    unlocked.add(chapter.getId());
+                }
+            }
+            for (Map.Entry<String, Integer> entry : firstIndexByChapter.entrySet()) {
+                if (!wanted.contains(entry.getKey())) {
+                    continue;
+                }
+                int index = entry.getValue();
+                if (index == 0 || (index > 0 && clearedIds.contains(ordered.get(index - 1).getId()))) {
+                    unlocked.add(entry.getKey());
+                }
+            }
+        }
+        return unlocked;
     }
 
     public int fightStaminaCost(Stage level, boolean cleared) {

@@ -11,6 +11,7 @@ import org.wx.core.wxBusiness.game.entity.enums.StageKind;
 import org.wx.core.wxBusiness.game.entity.vo.ItemDropSourceVo;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -41,6 +42,23 @@ public class ItemDropSourceService {
                 .eq(MonsterDrop::getEnable, true)
                 .count();
         return cnt != null && cnt > 0;
+    }
+
+    public Set<String> listItemIdsWithDropSource(Collection<String> itemIds) {
+        if (itemIds == null || itemIds.isEmpty()) {
+            return Set.of();
+        }
+        Set<String> result = new LinkedHashSet<>();
+        List<MonsterDrop> drops = monsterDropService.find()
+                .in(MonsterDrop::getItemId, itemIds)
+                .eq(MonsterDrop::getEnable, true)
+                .list();
+        for (MonsterDrop drop : drops) {
+            if (drop != null && !Wx.isEmpty(drop.getItemId())) {
+                result.add(drop.getItemId());
+            }
+        }
+        return result;
     }
 
     public List<ItemDropSourceVo> listByItemId(String itemId) {

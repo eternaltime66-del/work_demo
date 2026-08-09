@@ -13,9 +13,12 @@ import org.wx.core.wxBusiness.game.entity.vo.CraftMaterialVo;
 import org.wx.core.wxBusiness.game.entity.vo.CraftRecipeVo;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class CraftService {
@@ -41,12 +44,33 @@ public class CraftService {
         List<Recipe> recipes = recipeService.listEnabledWithMaterials();
         Map<String, Integer> owned = warehouseService.countItems(uid);
         Map<String, String> outputToRecipe = buildOutputRecipeIndex(recipes);
-        List<CraftRecipeVo> list = new ArrayList<>();
+        Map<String, Item> itemIndex = buildItemIndex(recipes);
+        Set<String> materialItemIds = new HashSet<>();
         for (Recipe recipe : recipes) {
-            if (!isRecipeUnlocked(uid, recipe)) {
+            if (recipe.getMaterials() == null) {
                 continue;
             }
-            list.add(buildVo(recipe, owned, outputToRecipe, false));
+            for (RecipeMaterial material : recipe.getMaterials()) {
+                if (material != null && !Wx.isEmpty(material.getItemId())) {
+                    materialItemIds.add(material.getItemId());
+                }
+            }
+        }
+        Set<String> dropSourceItemIds = itemDropSourceService.listItemIdsWithDropSource(materialItemIds);
+        Set<String> lockedChapterIds = new HashSet<>();
+        for (Recipe recipe : recipes) {
+            if (recipe != null && !Wx.isEmpty(recipe.getUnlockChapterId())) {
+                lockedChapterIds.add(recipe.getUnlockChapterId());
+            }
+        }
+        Set<String> unlockedChapterIds = stageProgressService.listUnlockedChapterIds(uid, lockedChapterIds);
+        List<CraftRecipeVo> list = new ArrayList<>();
+        for (Recipe recipe : recipes) {
+            if (!Wx.isEmpty(recipe.getUnlockChapterId())
+                    && !unlockedChapterIds.contains(recipe.getUnlockChapterId())) {
+                continue;
+            }
+            list.add(buildVo(recipe, owned, outputToRecipe, false, itemIndex, dropSourceItemIds));
         }
         return list;
     }
@@ -118,13 +142,26 @@ public class CraftService {
     }
 
     private CraftRecipeVo buildVo(Recipe recipe, Map<String, Integer> owned, Map<String, String> outputToRecipe, boolean withItemDetail) {
+        return buildVo(recipe, owned, outputToRecipe, withItemDetail, null, null);
+    }
+
+    private CraftRecipeVo buildVo(
+            Recipe recipe,
+            Map<String, Integer> owned,
+            Map<String, String> outputToRecipe,
+            boolean withItemDetail,
+            Map<String, Item> itemIndex,
+            Set<String> dropSourceItemIds
+    ) {
         CraftRecipeVo vo = new CraftRecipeVo();
         vo.setId(recipe.getId());
         vo.setRemark(recipe.getRemark());
         vo.setResultItemId(recipe.getOutputItemId());
         vo.setResultQty(recipe.getOutputQty() == null || recipe.getOutputQty() < 1 ? 1 : recipe.getOutputQty());
 
-        Item result = itemService.getById(recipe.getOutputItemId());
+        Item result = itemIndex != null
+                ? itemIndex.get(recipe.getOutputItemId())
+                : itemService.getById(recipe.getOutputItemId());
         if (result != null) {
             vo.setName(result.getName());
             vo.setResultItemName(result.getName());
@@ -160,14 +197,16 @@ public class CraftService {
             int miss = Math.max(0, need - have);
             mv.setMissingQty(miss);
             mv.setEnough(miss <= 0);
-            Item item = itemService.getById(material.getItemId());
+            Item item = itemIndex != null
+                    ? itemIndex.get(material.getItemId())
+                    : itemService.getById(material.getItemId());
             if (item != null) {
                 mv.setItemName(item.getName());
                 mv.setIcon(item.getIcon());
             } else {
                 mv.setItemName(material.getItemName() != null ? material.getItemName() : material.getItemId());
             }
-            fillSource(mv, outputToRecipe);
+            fillSource(mv, outputToRecipe, dropSourceItemIds);
             materials.add(mv);
             if (miss > 0) {
                 missing.add(mv);
@@ -180,8 +219,15 @@ public class CraftService {
         return vo;
     }
 
-    private void fillSource(CraftMaterialVo mv, Map<String, String> outputToRecipe) {
-        if (itemDropSourceService.hasDropSource(mv.getItemId())) {
+    private void fillSource(
+            CraftMaterialVo mv,
+            Map<String, String> outputToRecipe,
+            Set<String> dropSourceItemIds
+    ) {
+        boolean hasDropSource = dropSourceItemIds != null
+                ? dropSourceItemIds.contains(mv.getItemId())
+                : itemDropSourceService.hasDropSource(mv.getItemId());
+        if (hasDropSource) {
             mv.setSourceType("BATTLE");
             mv.setSourceLabel("去获取");
             return;
@@ -195,5 +241,31 @@ public class CraftService {
         }
         mv.setSourceType("NONE");
         mv.setSourceLabel("敬请期待");
+    }
+
+    private Map<String, Item> buildItemIndex(List<Recipe> recipes) {
+        Set<String> itemIds = new HashSet<>();
+        for (Recipe recipe : recipes) {
+            if (recipe == null) {
+                continue;
+            }
+            if (!Wx.isEmpty(recipe.getOutputItemId())) {
+                itemIds.add(recipe.getOutputItemId());
+            }
+            if (recipe.getMaterials() != null) {
+                for (RecipeMaterial material : recipe.getMaterials()) {
+                    if (material != null && !Wx.isEmpty(material.getItemId())) {
+                        itemIds.add(material.getItemId());
+                    }
+                }
+            }
+        }
+        Map<String, Item> itemIndex = new LinkedHashMap<>();
+        if (!itemIds.isEmpty()) {
+            for (Item item : itemService.listByIds(itemIds)) {
+                itemIndex.put(item.getId(), item);
+            }
+        }
+        return itemIndex;
     }
 }
