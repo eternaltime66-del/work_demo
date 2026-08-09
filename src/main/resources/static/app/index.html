@@ -984,7 +984,7 @@
           <header class="sd-card-head craft-section-head">材料掉落 · {{ craftDropFocusName || '关卡' }}</header>
           <div v-for="(d, i) in craftDropSources" :key="'drop-' + i" class="craft-drop-row">
             <div class="craft-drop-main">
-              <div class="craft-drop-code">{{ d.displayCode || '—' }} {{ d.levelName || '' }}</div>
+              <div class="craft-drop-code">{{ formatPlayerStageCode(d.displayCode) }} {{ d.levelName || '' }}</div>
               <div class="craft-drop-sub">{{ d.chapterName || '' }} · {{ d.monsterName }} · {{ formatDropRate(d.dropRate) }} · {{ d.minQty }}-{{ d.maxQty }}</div>
             </div>
             <button type="button" class="craft-btn warn mini" @click="goDeployForLevel(d.levelId)">去出击</button>
@@ -2405,6 +2405,12 @@ createApp({
     formatDropRate(rate) {
       if (rate == null) return '—';
       return Number(rate) + '%';
+    },
+    formatPlayerStageCode(code) {
+      var raw = String(code || '').trim();
+      var match = raw.match(/^(?:N20-)?0*(\d+)-0*(\d+)$/i);
+      if (!match) return raw || '—';
+      return Number(match[1]) + '-' + Number(match[2]);
     },
     goDeployForLevel(levelId) {
       if (!levelId) return;
