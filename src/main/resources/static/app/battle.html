@@ -189,7 +189,7 @@
         <div class="fb-name">
           <div class="fb-name-left">
             <span class="fb-name-text">{{ focusUnitView.name }}</span>
-            <span class="fb-hpnum num">{{ focusUnitView.hp }}/{{ focusUnitView.maxHp }}</span>
+            <span class="fb-hpnum num">{{ battleInt(focusUnitView.hp) }}/{{ battleInt(focusUnitView.maxHp) }}</span>
           </div>
           <div class="fb-buffs" v-if="focusUnitView.buffs.length">
             <span
@@ -240,7 +240,7 @@
             :class="['mode-' + c.mode, { full: c.full }]"
           >
             <span class="cg-name">{{ c.name || '充能' }}</span>
-            <span v-if="c.mode === 'gem'" class="cg-gems" :title="c.cur + '/' + c.max">
+            <span v-if="c.mode === 'gem'" class="cg-gems" :title="battleInt(c.cur) + '/' + battleInt(c.max)">
               <i
                 v-for="k in c.max"
                 :key="'gem-' + c.skillId + '-' + k"
@@ -248,17 +248,17 @@
                 :class="{ on: k <= c.cur }"
               ></i>
             </span>
-            <span v-else-if="c.mode === 'battery'" class="batt" :title="c.cur + '/' + c.max">
+            <span v-else-if="c.mode === 'battery'" class="batt" :title="battleInt(c.cur) + '/' + battleInt(c.max)">
               <i
                 v-for="k in c.max"
                 :key="'bat-' + c.skillId + '-' + k"
                 :class="{ on: k <= c.cur }"
               ></i>
             </span>
-            <span v-else class="cg-bar" :title="c.cur + '/' + c.max">
+            <span v-else class="cg-bar" :title="battleInt(c.cur) + '/' + battleInt(c.max)">
               <i :style="{ width: c.pct + '%' }"></i>
             </span>
-            <span class="cg-num num">{{ c.cur }}/{{ c.max }}</span>
+            <span class="cg-num num">{{ battleInt(c.cur) }}/{{ battleInt(c.max) }}</span>
           </div>
         </div>
       </div>
@@ -285,7 +285,7 @@
                 <div class="fb-name">
                   <div class="fb-name-left">
                     <span class="fb-name-text">{{ row.name }}</span>
-                    <span class="fb-hpnum num">{{ row.hp }}/{{ row.maxHp }}</span>
+                    <span class="fb-hpnum num">{{ battleInt(row.hp) }}/{{ battleInt(row.maxHp) }}</span>
                   </div>
                   <div class="fb-buffs" v-if="row.buffs.length">
                     <span
@@ -335,16 +335,16 @@
                     :class="['mode-' + c.mode, { full: c.full }]"
                   >
                     <span class="cg-name">{{ c.name || '充能' }}</span>
-                    <span v-if="c.mode === 'gem'" class="cg-gems" :title="c.cur + '/' + c.max">
+                    <span v-if="c.mode === 'gem'" class="cg-gems" :title="battleInt(c.cur) + '/' + battleInt(c.max)">
                       <i v-for="k in c.max" :key="'rag-' + row.uid + '-' + c.skillId + '-' + k" class="cg-gem" :class="{ on: k <= c.cur }"></i>
                     </span>
-                    <span v-else-if="c.mode === 'battery'" class="batt" :title="c.cur + '/' + c.max">
+                    <span v-else-if="c.mode === 'battery'" class="batt" :title="battleInt(c.cur) + '/' + battleInt(c.max)">
                       <i v-for="k in c.max" :key="'rabt-' + row.uid + '-' + c.skillId + '-' + k" :class="{ on: k <= c.cur }"></i>
                     </span>
-                    <span v-else class="cg-bar" :title="c.cur + '/' + c.max">
+                    <span v-else class="cg-bar" :title="battleInt(c.cur) + '/' + battleInt(c.max)">
                       <i :style="{ width: c.pct + '%' }"></i>
                     </span>
-                    <span class="cg-num num">{{ c.cur }}/{{ c.max }}</span>
+                    <span class="cg-num num">{{ battleInt(c.cur) }}/{{ battleInt(c.max) }}</span>
                   </div>
                 </div>
               </div>
@@ -363,7 +363,7 @@
                 <div class="fb-name">
                   <div class="fb-name-left">
                     <span class="fb-name-text">{{ row.name }}</span>
-                    <span class="fb-hpnum num">{{ row.hp }}/{{ row.maxHp }}</span>
+                    <span class="fb-hpnum num">{{ battleInt(row.hp) }}/{{ battleInt(row.maxHp) }}</span>
                   </div>
                   <div class="fb-buffs" v-if="row.buffs.length">
                     <span
@@ -413,16 +413,16 @@
                     :class="['mode-' + c.mode, { full: c.full }]"
                   >
                     <span class="cg-name">{{ c.name || '充能' }}</span>
-                    <span v-if="c.mode === 'gem'" class="cg-gems" :title="c.cur + '/' + c.max">
+                    <span v-if="c.mode === 'gem'" class="cg-gems" :title="battleInt(c.cur) + '/' + battleInt(c.max)">
                       <i v-for="k in c.max" :key="'reg-' + row.uid + '-' + c.skillId + '-' + k" class="cg-gem" :class="{ on: k <= c.cur }"></i>
                     </span>
-                    <span v-else-if="c.mode === 'battery'" class="batt" :title="c.cur + '/' + c.max">
+                    <span v-else-if="c.mode === 'battery'" class="batt" :title="battleInt(c.cur) + '/' + battleInt(c.max)">
                       <i v-for="k in c.max" :key="'rebt-' + row.uid + '-' + c.skillId + '-' + k" :class="{ on: k <= c.cur }"></i>
                     </span>
-                    <span v-else class="cg-bar" :title="c.cur + '/' + c.max">
+                    <span v-else class="cg-bar" :title="battleInt(c.cur) + '/' + battleInt(c.max)">
                       <i :style="{ width: c.pct + '%' }"></i>
                     </span>
-                    <span class="cg-num num">{{ c.cur }}/{{ c.max }}</span>
+                    <span class="cg-num num">{{ battleInt(c.cur) }}/{{ battleInt(c.max) }}</span>
                   </div>
                 </div>
               </div>
@@ -1158,6 +1158,11 @@ createApp({
     },
     isDeadUid(uid) {
       return !!(uid && this.deadUids[uid]);
+    },
+    /** 战斗详情只展示整数；内部计算仍保留浮点精度。 */
+    battleInt(value) {
+      var n = Number(value);
+      return Number.isFinite(n) ? Math.round(n) : 0;
     },
     unitHpPct(uid) {
       var s = this.hpMap[uid];
