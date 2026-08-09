@@ -35,19 +35,32 @@
 .craft-anvil-actions button.primary { border-color: rgba(83,225,255,.5); color: #69efff; background: rgba(31,109,138,.28); }
 
 .compendium-panel { max-height: min(82vh, 720px); }
-.compendium-tabs { display: flex; gap: 6px; overflow-x: auto; padding: 0 14px 10px; }
-.compendium-tabs button { white-space: nowrap; border: 1px solid rgba(255,255,255,.12); border-radius: 999px; padding: 6px 11px; background: rgba(255,255,255,.05); color: rgba(255,255,255,.68); }
+.compendium-panel > .craft-detail-head { position: relative; z-index: 2; }
+.compendium-tabs {
+  display: flex;
+  flex: 0 0 auto;
+  min-height: 46px;
+  box-sizing: border-box;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 8px 14px 9px;
+  border-bottom: 1px solid rgba(255,255,255,.07);
+  background: rgba(10,16,31,.52);
+}
+.compendium-tabs button { min-height: 28px; line-height: 1; flex: 0 0 auto; white-space: nowrap; border: 1px solid rgba(255,255,255,.12); border-radius: 999px; padding: 6px 11px; background: rgba(255,255,255,.05); color: rgba(255,255,255,.68); }
 .compendium-tabs button.active { color: #70f4ff; border-color: rgba(83,225,255,.5); background: rgba(53,215,255,.12); }
-.craft-detail-body.compendium-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; align-content: start; }
-.compendium-card { min-width: 0; display: flex; align-items: center; gap: 8px; text-align: left; border: 1px solid rgba(255,255,255,.09); border-radius: 12px; padding: 9px; color: #eef1ff; background: rgba(255,255,255,.035); }
+.craft-detail-body.compendium-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; align-content: start; padding-top: 10px; overscroll-behavior: contain; }
+.compendium-card { min-width: 0; display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; align-items: center; gap: 8px; text-align: left; border: 1px solid rgba(255,255,255,.09); border-radius: 12px; padding: 9px; color: #eef1ff; background: rgba(255,255,255,.035); }
 .compendium-card.core { border-color: rgba(255,190,76,.34); background: linear-gradient(135deg,rgba(255,174,45,.11),rgba(127,79,255,.08)); }
 .compendium-card.future { border-color: rgba(220,100,255,.35); opacity: .82; }
-.compendium-icon { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 9px; background: rgba(255,255,255,.08); flex: 0 0 auto; }
+.compendium-icon { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 9px; background: rgba(255,255,255,.08); font-size: 15px; }
 .compendium-icon img { width: 100%; height: 100%; display: block; object-fit: contain; border-radius: inherit; }
 .compendium-copy { min-width: 0; display: flex; flex-direction: column; flex: 1; }
 .compendium-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .compendium-copy small { color: rgba(255,255,255,.46); margin-top: 2px; }
-.compendium-card em { font-size: 10px; font-style: normal; color: #ffd278; flex: 0 0 auto; }
+.compendium-card em { min-width: 28px; text-align: right; font-size: 10px; font-style: normal; color: #ffd278; white-space: nowrap; }
 .build-guide-card { grid-column: 1 / -1; display: grid; grid-template-columns: auto 1fr; gap: 5px 9px; border: 1px solid rgba(125,112,255,.22); border-radius: 13px; padding: 12px; background: linear-gradient(135deg,rgba(113,82,255,.10),rgba(35,214,255,.05)); }
 .build-guide-card em { grid-row: 1 / 3; align-self: center; font-style: normal; font-size: 10px; color: #70efff; }
 .build-guide-card strong { font-size: 14px; }
