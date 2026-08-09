@@ -1,0 +1,1 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><filter id="g"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><path d="M50 14A36 36 0 1 1 49.9 14ZM50 34A16 16 0 1 0 50 66A16 16 0 1 0 50 34Z" fill="#101d38" stroke="#50e6ff" stroke-width="4" filter="url(#g)"/></svg>

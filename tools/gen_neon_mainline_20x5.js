@@ -331,6 +331,7 @@ coreBuilds.forEach((cfg,ix)=>{
   advancedPassive(`PSK_N20_FUTURE_${String(n).padStart(2,'0')}`,`${cfg[0]}·限定特性`,cfg[1]==='PHYSICAL'?'DEAL_PHYS_DMG_RATIO':'DEAL_ELEMENT_DMG_RATIO','INCREASE',24+n*5,itemId,7000+n,`未来限定设计预留：${cfg[2]}`);
 });
 
+p("UPDATE app_item SET icon=CONCAT('art/item/',code,'.png') WHERE id LIKE 'ITM_N20_%';");
 p('COMMIT; SET FOREIGN_KEY_CHECKS=1;');
 p("-- 校验：CHAPTER=20，LEVEL=100，怪物=80，技能石=20。SELECT kind,COUNT(*) FROM app_stage WHERE id LIKE '%N20_%' GROUP BY kind;");
 fs.writeFileSync(OUT,lines.join('\n'),'utf8');
