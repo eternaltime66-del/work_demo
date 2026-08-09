@@ -66,16 +66,10 @@ INSERT INTO app_active_skill (
   need_charge_mode, need_charge, max_cast_skill, max_cast_global, max_cast_all_means, max_cast_role,
   sort, enable, remark, CREATE_TIME, UPDATE_TIME
 ) VALUES
-('ASK_NEON_MST_N', '畸变触击', 'NORMAL', '无', 'PHYSICAL', 'NEON_MST_N',
- 'SELF_BASE_ACTION', 0, 0, 0, 0, 0, 20, 1, '霓虹小怪通用普攻', NOW(), NOW()),
-('ASK_NEON_CRY_N', '晶光触碰', 'NORMAL', '无', 'SHOCK', 'NEON_CRY_N',
- 'SELF_BASE_ACTION', 0, 0, 0, 0, 0, 21, 1, '漏电浮晶普攻', NOW(), NOW()),
 ('ASK_NEON_CRY_S', '漏电溅射', 'SMALL', '无', 'SHOCK', 'NEON_CRY_S',
  'MANUAL', 24, 0, 0, 0, 0, 22, 1, '漏电浮晶小技能·周身', NOW(), NOW()),
 ('ASK_NEON_CRY_U', '凝光一瞬', 'ULTIMATE', '无', 'PHYSICAL', 'NEON_CRY_U',
  'MANUAL', 40, 0, 0, 0, 0, 23, 1, '漏电浮晶大招·加攻', NOW(), NOW()),
-('ASK_NEON_BOSS_N', '晶核撞击', 'NORMAL', '无', 'PHYSICAL', 'NEON_BOSS_N',
- 'SELF_BASE_ACTION', 0, 0, 0, 0, 0, 24, 1, '晶核兽普攻', NOW(), NOW()),
 ('ASK_NEON_BOSS_S', '散晶落影', 'SMALL', '无', 'PHYSICAL', 'NEON_BOSS_S',
  'MANUAL', 36, 0, 0, 0, 0, 25, 1, '晶核兽小技能·范围', NOW(), NOW()),
 ('ASK_NEON_BOSS_U', '核光震荡', 'ULTIMATE', '无', 'PHYSICAL', 'NEON_BOSS_U',
@@ -113,11 +107,8 @@ INSERT INTO app_skill_output (
   id, skill_id, name, output_kind, target_type, effect_type, damage_element,
   formula_json, hit_segments, trigger_rate, duration_av, buff_def_id, sort, create_time, update_time
 ) VALUES
-('SOUT_NEON_MST_N', 'ASK_NEON_MST_N', '触击', 'EFFECT', 'FIRST', 'DAMAGE', 'PHYSICAL', @F_ATK_1, 1, 100, 0, NULL, 0, NOW(), NOW()),
-('SOUT_NEON_CRY_N', 'ASK_NEON_CRY_N', '晶光触碰', 'EFFECT', 'FIRST', 'DAMAGE', 'SHOCK', @F_ATK_08, 1, 100, 0, NULL, 0, NOW(), NOW()),
 ('SOUT_NEON_CRY_S', 'ASK_NEON_CRY_S', '漏电溅射', 'EFFECT', 'ALL_ENEMY', 'DAMAGE', 'SHOCK', @F_ATK_1, 1, 100, 0, NULL, 0, NOW(), NOW()),
 ('SOUT_NEON_CRY_U', 'ASK_NEON_CRY_U', '凝光一瞬', 'APPEND_BUFF', 'SELF', NULL, 'PHYSICAL', NULL, 1, 100, 0, 'BFD_NEON_ATKUP', 0, NOW(), NOW()),
-('SOUT_NEON_BOSS_N', 'ASK_NEON_BOSS_N', '晶核撞击', 'EFFECT', 'FIRST', 'DAMAGE', 'PHYSICAL', @F_ATK_1, 1, 100, 0, NULL, 0, NOW(), NOW()),
 ('SOUT_NEON_BOSS_S', 'ASK_NEON_BOSS_S', '散晶落影', 'EFFECT', 'ALL_ENEMY', 'DAMAGE', 'PHYSICAL', @F_ATK_12, 1, 100, 0, NULL, 0, NOW(), NOW()),
 ('SOUT_NEON_BOSS_U', 'ASK_NEON_BOSS_U', '核光震荡', 'EFFECT', 'ALL_ENEMY', 'DAMAGE', 'PHYSICAL', @F_ATK_2, 1, 100, 0, NULL, 0, NOW(), NOW()),
 ('SOUT_NEON_SWEEP', 'ASK_NEON_SWEEP', '光刃横扫', 'EFFECT', 'ALL_ENEMY', 'DAMAGE', 'PHYSICAL', @F_ATK_12, 1, 100, 0, NULL, 0, NOW(), NOW()),
@@ -204,18 +195,18 @@ INSERT INTO app_monster (
   id, name, rarity, role_category, grid_h, grid_w, base_atk, base_hp, base_def, base_action, sort,
   normal_skill_id, small_skill_id, ultimate_skill_id, remark, CREATE_TIME, UPDATE_TIME
 ) VALUES
-('MST_NEON_FLUFF', '微光絮虫', 'NORMAL', 'MONSTER', 1, 1, 3, 22, 0, 450, 1001,
- 'ASK_NEON_MST_N', NULL, NULL, '一章·近战慢', NOW(), NOW()),
-('MST_NEON_BUBBLE', '电路软泡', 'NORMAL', 'MONSTER', 1, 1, 2, 16, 0, 600, 1002,
- 'ASK_NEON_MST_N', NULL, NULL, '一章·慢速', NOW(), NOW()),
-('MST_NEON_ANT', '光尘飞蚁', 'NORMAL', 'MONSTER', 1, 1, 2, 12, 0, 300, 1003,
- 'ASK_NEON_MST_N', NULL, NULL, '一章·攻速最快', NOW(), NOW()),
-('MST_NEON_CRYSTAL', '漏电浮晶', 'RARE', 'MONSTER', 1, 2, 10, 80, 2, 380, 1004,
- 'ASK_NEON_CRY_N', 'ASK_NEON_CRY_S', 'ASK_NEON_CRY_U', '二章·中等威胁 占地1×2', NOW(), NOW()),
-('MST_NEON_BOSS', '幽光晶核兽', 'BOSS', 'MONSTER', 2, 4, 16, 320, 5, 520, 1005,
- 'ASK_NEON_BOSS_N', 'ASK_NEON_BOSS_S', 'ASK_NEON_BOSS_U', '二章BOSS·占地2×4', NOW(), NOW())
+('MST_NEON_FLUFF', '微光絮虫', 'NORMAL', 'MONSTER', 1, 1, 3, 22, 0, 90, 1001,
+ NULL, NULL, NULL, '一章·近战慢', NOW(), NOW()),
+('MST_NEON_BUBBLE', '电路软泡', 'NORMAL', 'MONSTER', 1, 1, 2, 16, 0, 120, 1002,
+ NULL, NULL, NULL, '一章·慢速', NOW(), NOW()),
+('MST_NEON_ANT', '光尘飞蚁', 'NORMAL', 'MONSTER', 1, 1, 2, 12, 0, 60, 1003,
+ NULL, NULL, NULL, '一章·攻速最快', NOW(), NOW()),
+('MST_NEON_CRYSTAL', '漏电浮晶', 'RARE', 'MONSTER', 1, 2, 10, 80, 2, 76, 1004,
+ NULL, 'ASK_NEON_CRY_S', 'ASK_NEON_CRY_U', '二章·中等威胁 占地1×2', NOW(), NOW()),
+('MST_NEON_BOSS', '幽光晶核兽', 'BOSS', 'MONSTER', 2, 4, 16, 320, 5, 104, 1005,
+ NULL, 'ASK_NEON_BOSS_S', 'ASK_NEON_BOSS_U', '二章BOSS·占地2×4', NOW(), NOW())
 ON DUPLICATE KEY UPDATE base_atk=VALUES(base_atk), base_hp=VALUES(base_hp), base_def=VALUES(base_def), base_action=VALUES(base_action),
-  rarity=VALUES(rarity), grid_h=VALUES(grid_h), grid_w=VALUES(grid_w), remark=VALUES(remark);
+  rarity=VALUES(rarity), grid_h=VALUES(grid_h), grid_w=VALUES(grid_w), normal_skill_id=VALUES(normal_skill_id), remark=VALUES(remark);
 
 DELETE FROM app_monster_drop WHERE id LIKE 'MDP_NEON_%';
 INSERT INTO app_monster_drop (id, monster_id, item_id, drop_rate, min_qty, max_qty, sort, enable, CREATE_TIME, UPDATE_TIME) VALUES
