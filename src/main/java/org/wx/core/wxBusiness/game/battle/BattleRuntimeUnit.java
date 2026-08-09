@@ -34,14 +34,11 @@ public class BattleRuntimeUnit {
     private int hp;
     private int atk;
     private int def;
-    /** 行动阈值：进度攒满此值则行动 */
+    /** 普攻最大充能值；数值越低，普攻充满越快。 */
     private int action;
 
     /** 开战时行动阈值（攻速 buff 重算基准） */
     private int baseAction;
-
-    /** 当前行动进度 */
-    private int actionProgress;
 
     /** skillId -> 当前充能 */
     private final Map<String, Integer> chargeMap = new HashMap<>();

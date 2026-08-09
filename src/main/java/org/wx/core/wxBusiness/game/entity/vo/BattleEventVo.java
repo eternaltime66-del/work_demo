@@ -14,7 +14,7 @@ public class BattleEventVo {
     /** 全局行动值时间戳 */
     private int t;
 
-    /** BATTLE_START / TURN_START / CAST / HIT / HEAL / CHARGE / BUFF / DEATH / BATTLE_END */
+    /** BATTLE_START / CHARGE / CAST / PASSIVE_TRIGGER / HIT / HEAL / BUFF / DEATH / BATTLE_END */
     private String type;
 
     private String uid;
@@ -24,6 +24,8 @@ public class BattleEventVo {
     private String skillId;
     private String skillName;
     private String skillType;
+    /** PASSIVE_TRIGGER 对应的 CombatEventType。 */
+    private String triggerEvent;
     private String element;
     private String shape;
 

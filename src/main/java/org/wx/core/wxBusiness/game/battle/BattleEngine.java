@@ -70,6 +70,12 @@ public class BattleEngine implements SkillV2OutputUnit.Host {
     /** 当前施法真正执行过的目标，避免随机目标在展示和结算阶段各掷一次。 */
     private LinkedHashSet<BattleRuntimeUnit> currentCastAffectedUnits;
 
+    /** 当前同步触发链中正在执行的被动；阻止 A→A 或 A→B→A 的无限递归。 */
+    private final Set<String> activeCombatTriggerKeys = new HashSet<>();
+    /** 单条战斗事件链的硬上限，避免错误配置制造无限级联。 */
+    private static final int MAX_COMBAT_TRIGGER_DEPTH = 64;
+    private int combatTriggerDepth;
+
     /** 周期/持续扫描防重入 */
     private boolean scanningPeriodic;
     private boolean scanningSustained;
@@ -233,7 +239,9 @@ public class BattleEngine implements SkillV2OutputUnit.Host {
             slot.setSkillType(type.name());
             slot.setName(skill.getName());
             slot.setNeed(resolveNeedCharge(u, skill));
-            int[] av = firstActionValueCharge(skill.getId());
+            int[] av = skill.getSkillType() == ActiveSkillType.NORMAL
+                    ? new int[]{1, 1}
+                    : firstActionValueCharge(skill.getId());
             if (av != null) {
                 slot.setAvEvery(av[0]);
                 slot.setAvGain(av[1]);
@@ -269,72 +277,41 @@ public class BattleEngine implements SkillV2OutputUnit.Host {
         runBattleStartPassives(true);
         int ticks = 0;
         while (ticks < MAX_TICKS) {
-            if (!anyAlive(BattleSide.ALLY)) {
-                vo.setOutcome("LOSE");
-                break;
-            }
-            if (!anyAlive(BattleSide.ENEMY)) {
-                vo.setOutcome("WIN");
+            String terminal = terminalOutcome();
+            if (terminal != null) {
+                vo.setOutcome(terminal);
                 break;
             }
             int elapsedBefore = board.getElapsedActionValue();
             board.addElapsedAction(1);
             accrueCharges(elapsedBefore, 1);
-            // 充能技（小/大）按各自规则涨满后立刻释放，不排队等行动条回合
-            if (flushReadyChargedSkills()) {
-                if (!anyAlive(BattleSide.ALLY)) {
-                    finishResult(vo, "LOSE", ticks + 1);
-                    return vo;
-                }
-                if (!anyAlive(BattleSide.ENEMY)) {
-                    finishResult(vo, "WIN", ticks + 1);
-                    return vo;
-                }
+            // 全主动技能统一走充能：同一 VA 先累计，再立即结算所有满充技能。
+            flushReadySkills();
+            terminal = terminalOutcome();
+            if (terminal != null) {
+                finishResult(vo, terminal, ticks + 1);
+                return vo;
             }
             expireTimedBuffs();
             SkillV2OutputUnit.tickBuffs(this);
-            runBattleStartPassives(false);
-
-            List<BattleRuntimeUnit> actors = new ArrayList<>();
-            for (BattleRuntimeUnit u : units) {
-                if (!u.alive()) {
-                    continue;
-                }
-                u.setActionProgress(u.getActionProgress() + 1);
-                int need = Math.max(1, u.getAction());
-                if (u.getActionProgress() >= need) {
-                    u.setActionProgress(0);
-                    actors.add(u);
-                }
+            terminal = terminalOutcome();
+            if (terminal != null) {
+                finishResult(vo, terminal, ticks + 1);
+                return vo;
             }
+            runBattleStartPassives(false);
+            terminal = terminalOutcome();
+            if (terminal != null) {
+                finishResult(vo, terminal, ticks + 1);
+                return vo;
+            }
+
             notifyStatChangedInternal();
-            actors.sort((a, b) -> {
-                int side = Integer.compare(a.getSide().ordinal(), b.getSide().ordinal());
-                if (side != 0) {
-                    return side;
-                }
-                int r = Integer.compare(a.getPosRow(), b.getPosRow());
-                if (r != 0) {
-                    return r;
-                }
-                return Integer.compare(a.getPosCol(), b.getPosCol());
-            });
-            for (BattleRuntimeUnit actor : actors) {
-                if (!actor.alive()) {
-                    continue;
-                }
-                BattleEventVo turn = emitInternal("TURN_START");
-                turn.setUid(actor.getUnitId());
-                turn.setActionValue(board.getElapsedActionValue());
-                act(actor);
-                if (!anyAlive(BattleSide.ALLY)) {
-                    finishResult(vo, "LOSE", ticks + 1);
-                    return vo;
-                }
-                if (!anyAlive(BattleSide.ENEMY)) {
-                    finishResult(vo, "WIN", ticks + 1);
-                    return vo;
-                }
+            flushReadySkills();
+            terminal = terminalOutcome();
+            if (terminal != null) {
+                finishResult(vo, terminal, ticks + 1);
+                return vo;
             }
             ticks++;
         }
@@ -343,6 +320,22 @@ public class BattleEngine implements SkillV2OutputUnit.Host {
         }
         finishResult(vo, vo.getOutcome(), ticks);
         return vo;
+    }
+
+    /** 每个原子结算阶段结束后统一判断；同一阶段双方全灭按平局处理。 */
+    private String terminalOutcome() {
+        boolean allyAlive = anyAlive(BattleSide.ALLY);
+        boolean enemyAlive = anyAlive(BattleSide.ENEMY);
+        if (!allyAlive && !enemyAlive) {
+            return "DRAW";
+        }
+        if (!allyAlive) {
+            return "LOSE";
+        }
+        if (!enemyAlive) {
+            return "WIN";
+        }
+        return null;
     }
 
     private void finishResult(BattleResultVo vo, String outcome, int ticks) {
@@ -578,17 +571,19 @@ public class BattleEngine implements SkillV2OutputUnit.Host {
                     continue;
                 }
                 List<SkillCharge> charges = chargesBySkill.getOrDefault(skill.getId(), List.of());
-                int gained = 0;
+                // 普攻基础充能固定随全局 VA 1:1 增长；不再依赖单位行动条。
+                int gained = skill.getSkillType() == ActiveSkillType.NORMAL ? Math.max(0, delta) : 0;
                 for (SkillCharge c : charges) {
-                    int gain = ChargeAccrualUnit.chargeGainedOnAdvance(c, elapsedBefore, delta);
-                    if (gain > 0) {
-                        u.addCharge(skill.getId(), gain);
-                        gained += gain;
+                    // 普攻的 ACTION_VALUE 基础规则由引擎保证，避免数据库重复配置导致双倍充能。
+                    if (skill.getSkillType() == ActiveSkillType.NORMAL
+                            && c != null && c.getConditionType() == ChargeConditionType.ACTION_VALUE) {
+                        continue;
                     }
+                    int gain = ChargeAccrualUnit.chargeGainedOnAdvance(c, elapsedBefore, delta);
+                    gained += Math.max(0, gain);
                 }
-                // 非普攻：按该技能自己的 ACTION_VALUE 规则涨时发 CHARGE，供 UI 对齐
-                if (gained > 0 && skill.getSkillType() != null
-                        && skill.getSkillType() != ActiveSkillType.NORMAL) {
+                if (gained > 0) {
+                    u.addCharge(skill.getId(), gained);
                     int need = resolveNeedCharge(u, skill);
                     int cur = u.getCharge(skill.getId());
                     BattleEventVo chargeEv = emitInternal("CHARGE");
@@ -605,11 +600,11 @@ public class BattleEngine implements SkillV2OutputUnit.Host {
     }
 
     /**
-     * 小技能/大招充能满后立即释放（不等待单位行动条回合）。
+     * 所有主动技能充能满后立即释放。扫描按稳定站位顺序重复进行，直到当前 VA 无满充技能。
      *
      * @return 是否释放过至少一次
      */
-    private boolean flushReadyChargedSkills() {
+    private boolean flushReadySkills() {
         boolean any = false;
         List<BattleRuntimeUnit> ordered = new ArrayList<>();
         for (BattleRuntimeUnit u : units) {
@@ -628,44 +623,32 @@ public class BattleEngine implements SkillV2OutputUnit.Host {
             }
             return Integer.compare(a.getPosCol(), b.getPosCol());
         });
-        for (BattleRuntimeUnit u : ordered) {
-            if (!u.alive()) {
-                continue;
-            }
-            int guard = 0;
-            while (u.alive() && guard++ < 8) {
+        int castsThisAxis = 0;
+        while (true) {
+            boolean progressed = false;
+            for (BattleRuntimeUnit u : ordered) {
+                if (!u.alive()) {
+                    continue;
+                }
                 if (!anyAlive(BattleSide.ENEMY) || !anyAlive(BattleSide.ALLY)) {
                     return any;
                 }
-                ActiveSkill ready = pickReadyChargedSkill(u);
+                ActiveSkill ready = pickReadySkill(u);
                 if (ready == null) {
-                    break;
+                    continue;
+                }
+                if (castsThisAxis >= 256) {
+                    logs.add("行动值 " + board.getElapsedActionValue() + "\n满充技能连锁达到 256 次，已停止本轴后续释放");
+                    return any;
                 }
                 castSkill(u, ready);
+                castsThisAxis++;
                 any = true;
+                progressed = true;
             }
-        }
-        return any;
-    }
-
-    private void act(BattleRuntimeUnit actor) {
-        // 回合内仍优先打已就绪的充能技，否则普攻；释放后再连锁检查
-        ActiveSkill skill = pickSkill(actor);
-        if (skill == null) {
-            logActHead(actor.getName() + " 行动但无可释放技能");
-            return;
-        }
-        castSkill(actor, skill);
-        int guard = 0;
-        while (actor.alive() && guard++ < 8) {
-            if (!anyAlive(BattleSide.ENEMY) || !anyAlive(BattleSide.ALLY)) {
-                break;
+            if (!progressed) {
+                return any;
             }
-            ActiveSkill chained = pickReadyChargedSkill(actor);
-            if (chained == null) {
-                break;
-            }
-            castSkill(actor, chained);
         }
     }
 
@@ -770,9 +753,6 @@ public class BattleEngine implements SkillV2OutputUnit.Host {
             if (skill == null || skill.getId() == null) {
                 continue;
             }
-            if (skill.getSkillType() == ActiveSkillType.NORMAL) {
-                continue;
-            }
             List<SkillCharge> charges = chargesBySkill.getOrDefault(skill.getId(), List.of());
             int gained = 0;
             for (SkillCharge c : charges) {
@@ -799,33 +779,12 @@ public class BattleEngine implements SkillV2OutputUnit.Host {
         }
     }
 
-    private ActiveSkill pickSkill(BattleRuntimeUnit actor) {
-        ActiveSkill normal = null;
-        ActiveSkill charged = null;
-        for (ActiveSkill skill : actor.getSkills()) {
-            if (skill == null || !canCastByLimit(actor, skill)) {
-                continue;
-            }
-            int need = resolveNeedCharge(actor, skill);
-            boolean ready = need <= 0 || actor.getCharge(skill.getId()) >= need;
-            if (!ready) {
-                continue;
-            }
-            if (skill.getSkillType() == ActiveSkillType.NORMAL) {
-                normal = skill;
-            } else if (charged == null) {
-                charged = skill;
-            }
-        }
-        return charged != null ? charged : normal;
-    }
-
-    private ActiveSkill pickReadyChargedSkill(BattleRuntimeUnit actor) {
+    private ActiveSkill pickReadySkill(BattleRuntimeUnit actor) {
         if (actor == null) {
             return null;
         }
         for (ActiveSkill skill : actor.getSkills()) {
-            if (skill == null || skill.getSkillType() == ActiveSkillType.NORMAL) {
+            if (skill == null) {
                 continue;
             }
             if (!canCastByLimit(actor, skill)) {
@@ -851,6 +810,9 @@ public class BattleEngine implements SkillV2OutputUnit.Host {
     }
 
     private int resolveNeedCharge(BattleRuntimeUnit actor, ActiveSkill skill) {
+        if (skill.getSkillType() == ActiveSkillType.NORMAL) {
+            return Math.max(1, actor.getAction());
+        }
         NeedChargeMode mode = skill.getNeedChargeMode() == null ? NeedChargeMode.MANUAL : skill.getNeedChargeMode();
         if (mode == NeedChargeMode.SELF_BASE_ACTION) {
             return Math.max(0, actor.getAction());
@@ -1620,11 +1582,8 @@ public class BattleEngine implements SkillV2OutputUnit.Host {
         } else if (add < 0) {
             downs.add(-add);
         }
-        int oldAction = Math.max(1, unit.getAction());
-        int oldProgress = Math.max(0, unit.getActionProgress());
         int newAction = AtkSpeedCalcUnit.calcFinalAction(base, ups, downs);
         unit.setAction(newAction);
-        unit.setActionProgress((int) Math.round(oldProgress * (newAction / (double) oldAction)));
     }
 
     private void scanSustainedPassives() {
@@ -1961,8 +1920,28 @@ public class BattleEngine implements SkillV2OutputUnit.Host {
             if (!PassiveConditionEvalUnit.matchFormulaConditions(p, owner, board, ctx)) {
                 continue;
             }
+            String triggerKey = owner.getUnitId() + "#" + p.getId();
+            if (combatTriggerDepth >= MAX_COMBAT_TRIGGER_DEPTH || !activeCombatTriggerKeys.add(triggerKey)) {
+                logs.add("  └ [" + owner.getName() + "] 战斗事件「"
+                        + (p.getName() != null ? p.getName() : p.getId()) + "」跳过：触发链循环");
+                continue;
+            }
             bumpTriggerCount(owner, p.getId());
-            fireV2Passive(owner, p, ctx, "战斗事件", false);
+            BattleEventVo triggerEv = emitInternal("PASSIVE_TRIGGER");
+            triggerEv.setUid(owner.getUnitId());
+            triggerEv.setSkillId(p.getId());
+            triggerEv.setSkillName(p.getName());
+            triggerEv.setSkillType("PASSIVE");
+            triggerEv.setTriggerEvent(event.name());
+            triggerEv.setTarget(other != null ? other.getUnitId() : null);
+            triggerEv.setDamage(dealt);
+            combatTriggerDepth++;
+            try {
+                fireV2Passive(owner, p, ctx, "战斗事件", false);
+            } finally {
+                combatTriggerDepth--;
+                activeCombatTriggerKeys.remove(triggerKey);
+            }
         }
     }
 
@@ -2012,7 +1991,17 @@ public class BattleEngine implements SkillV2OutputUnit.Host {
             logs.add("行动值 " + board.getElapsedActionValue() + "\n  └ [" + owner.getName() + "] " + tag + "「"
                     + skillName + "」触发");
         }
-        SkillV2OutputUnit.applyOutputs(this, owner, outs, ctx, "  └ ", revokeableAttr);
+        // 被动是独立结算源，不能继承外层主动技能，也不能把被动目标写进外层 CAST.targets。
+        ActiveSkill previousSkill = castingSkill;
+        LinkedHashSet<BattleRuntimeUnit> previousAffected = currentCastAffectedUnits;
+        castingSkill = null;
+        currentCastAffectedUnits = null;
+        try {
+            SkillV2OutputUnit.applyOutputs(this, owner, outs, ctx, "  └ ", revokeableAttr);
+        } finally {
+            castingSkill = previousSkill;
+            currentCastAffectedUnits = previousAffected;
+        }
     }
 
     private void revokeJudgeOutputs(BattleRuntimeUnit owner, PassiveSkill p) {

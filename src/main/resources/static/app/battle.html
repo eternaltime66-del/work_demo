@@ -1205,10 +1205,7 @@ createApp({
       if (action > 0) return Math.max(1, Math.round(action));
       return 100;
     },
-    /**
-     * 普攻槽展示用：need=0（无门槛）时按行动周期 + 每1AV+1 模拟充能，
-     * 避免详情/场上「普」一直满格不动。
-     */
+    /** 普攻槽：后端固定 need=当前行动阈值、每 1VA +1；保留兼容旧战报的回退。 */
     effectiveNormalSlot(uid) {
       var bag = this.unitSkillSlots[uid];
       if (!bag || !bag.NORMAL) return null;
@@ -1235,7 +1232,7 @@ createApp({
         full: pct >= 100
       };
     },
-    /** 无门槛普攻：行动开始时归零展示充能 */
+    /** 兼容旧战报中的无门槛普攻，释放时归零展示充能。 */
     resetZeroNeedNormalRing(uid, t) {
       var bag = this.unitSkillSlots[uid];
       if (!bag || !bag.NORMAL) return;
