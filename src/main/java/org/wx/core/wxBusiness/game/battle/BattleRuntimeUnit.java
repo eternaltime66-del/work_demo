@@ -34,7 +34,7 @@ public class BattleRuntimeUnit {
     private int hp;
     private int atk;
     private int def;
-    /** 普攻最大充能值；数值越低，普攻充满越快。 */
+    /** 当前行动值属性；技能可通过 SELF_BASE_ACTION 将它读取为充能需求。 */
     private int action;
 
     /** 开战时行动阈值（攻速 buff 重算基准） */

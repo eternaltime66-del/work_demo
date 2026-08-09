@@ -80,7 +80,6 @@ public class ActiveSkillService extends WxServiceImpl<ActiveSkillMapper, ActiveS
      */
     @Transactional(rollbackFor = Exception.class)
     public ActiveSkill ensureDefaultNormalSkill() {
-        syncAllNormalChargeDefaults();
         ActiveSkill exist = this.find().eq(ActiveSkill::getCode, DEFAULT_NORMAL_CODE).one();
         if (exist != null) {
             ensureDefaultNormalOutput(exist.getId());
@@ -147,39 +146,6 @@ public class ActiveSkillService extends WxServiceImpl<ActiveSkillMapper, ActiveS
             effect.setFormulaJson(formula);
             skillEffectService.save(effect);
         }
-    }
-
-    /**
-     * 将全部普攻统一为：所需=自己基础行动值 + 每1行动值+1充能（已有同条件则不重复添加）。
-     */
-    @Transactional(rollbackFor = Exception.class)
-    public void syncAllNormalChargeDefaults() {
-        List<ActiveSkill> normals = this.find().eq(ActiveSkill::getSkillType, ActiveSkillType.NORMAL).list();
-        if (normals == null) {
-            return;
-        }
-        for (ActiveSkill skill : normals) {
-            applyNormalChargeDefaults(skill);
-        }
-    }
-
-    private void applyNormalChargeDefaults(ActiveSkill skill) {
-        if (skill == null || Wx.isEmpty(skill.getId())) {
-            return;
-        }
-        boolean dirty = false;
-        if (skill.getNeedChargeMode() != NeedChargeMode.SELF_BASE_ACTION) {
-            skill.setNeedChargeMode(NeedChargeMode.SELF_BASE_ACTION);
-            dirty = true;
-        }
-        if (skill.getNeedCharge() == null) {
-            skill.setNeedCharge(0);
-            dirty = true;
-        }
-        if (dirty) {
-            this.updateById(skill);
-        }
-        ensureActionValueChargeEveryOne(skill.getId());
     }
 
     /** 保证存在「每经过 1 行动值 +1 充能」条件 */

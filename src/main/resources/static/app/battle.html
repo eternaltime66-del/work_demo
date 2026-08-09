@@ -1205,7 +1205,7 @@ createApp({
       if (action > 0) return Math.max(1, Math.round(action));
       return 100;
     },
-    /** 普攻槽：后端固定 need=当前行动阈值、每 1VA +1；保留兼容旧战报的回退。 */
+    /** 普攻槽：完全读取技能配置；无配置时仅为兼容旧战报提供展示回退。 */
     effectiveNormalSlot(uid) {
       var bag = this.unitSkillSlots[uid];
       if (!bag || !bag.NORMAL) return null;

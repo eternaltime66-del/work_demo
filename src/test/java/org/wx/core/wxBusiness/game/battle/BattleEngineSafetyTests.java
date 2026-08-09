@@ -15,6 +15,7 @@ import org.wx.core.wxBusiness.game.entity.enums.CombatEventType;
 import org.wx.core.wxBusiness.game.entity.enums.ChargeConditionType;
 import org.wx.core.wxBusiness.game.entity.enums.ChargeScope;
 import org.wx.core.wxBusiness.game.entity.enums.SkillChargeEvent;
+import org.wx.core.wxBusiness.game.entity.enums.NeedChargeMode;
 import org.wx.core.wxBusiness.game.entity.enums.SkillEffectTarget;
 import org.wx.core.wxBusiness.game.entity.enums.SkillEffectType;
 import org.wx.core.wxBusiness.game.entity.enums.SkillOutputKind;
@@ -74,6 +75,7 @@ class BattleEngineSafetyTests {
             normal.setId("normal");
             normal.setName("normal");
             normal.setSkillType(ActiveSkillType.NORMAL);
+            normal.setNeedChargeMode(NeedChargeMode.SELF_BASE_ACTION);
             normal.setNeedCharge(0);
             actor.getSkills().add(normal);
 
@@ -90,6 +92,7 @@ class BattleEngineSafetyTests {
             engine.addUnit(actor);
             engine.addUnit(enemyA);
             engine.addUnit(enemyB);
+            putActionCharge(engine, normal, 1, 1);
             engine.putSkillOutputs(normal.getId(), java.util.List.of(output));
 
             BattleResultVo result = engine.run();
@@ -142,11 +145,13 @@ class BattleEngineSafetyTests {
         normal.setId("normal");
         normal.setName("normal");
         normal.setSkillType(ActiveSkillType.NORMAL);
+        normal.setNeedChargeMode(NeedChargeMode.SELF_BASE_ACTION);
         normal.setNeedCharge(0);
         actor.getSkills().add(normal);
 
         SkillOutput activeHit = damageOutput("active-hit", SkillEffectTarget.FIRST);
         activeHit.setSkillId(normal.getId());
+        putActionCharge(engine, normal, 1, 1);
         engine.putSkillOutputs(normal.getId(), java.util.List.of(activeHit));
 
         PassiveSkill passive = new PassiveSkill();
@@ -191,6 +196,8 @@ class BattleEngineSafetyTests {
         normal.setName("normal");
         normal.setSkillType(ActiveSkillType.NORMAL);
         actor.getSkills().add(normal);
+        normal.setNeedChargeMode(NeedChargeMode.SELF_BASE_ACTION);
+        putActionCharge(engine, normal, 1, 1);
         engine.putSkillOutputs(normal.getId(), java.util.List.of(damageOutput("hit", SkillEffectTarget.FIRST)));
         engine.addUnit(actor);
         engine.addUnit(enemy);
@@ -236,7 +243,9 @@ class BattleEngineSafetyTests {
         BattleRuntimeUnit enemy = unit("enemy", BattleSide.ENEMY, 10);
 
         ActiveSkill normal = skill("normal", ActiveSkillType.NORMAL, 0);
+        normal.setNeedChargeMode(NeedChargeMode.SELF_BASE_ACTION);
         actor.getSkills().add(normal);
+        putActionCharge(engine, normal, 1, 1);
         engine.putSkillOutputs(normal.getId(), java.util.List.of(damageOutput("normal-hit", SkillEffectTarget.FIRST)));
         engine.addUnit(actor);
         engine.addUnit(enemy);
@@ -251,6 +260,28 @@ class BattleEngineSafetyTests {
         assertThat(result.getEvents().stream()
                 .filter(event -> "CHARGE".equals(event.getType()) && normal.getId().equals(event.getSkillId())))
                 .hasSize(3);
+    }
+
+    @Test
+    void customNormalUsesEditedNeedAndChargeRuleInsteadOfBuiltInDefaults() {
+        BattleEngine engine = new BattleEngine();
+        BattleRuntimeUnit actor = unit("hero", BattleSide.ALLY, 100);
+        actor.setAction(3);
+        actor.setBaseAction(3);
+        BattleRuntimeUnit enemy = unit("enemy", BattleSide.ENEMY, 10);
+        ActiveSkill customNormal = skill("custom-normal", ActiveSkillType.NORMAL, 2);
+        actor.getSkills().add(customNormal);
+        putActionCharge(engine, customNormal, 3, 1);
+        engine.putSkillOutputs(customNormal.getId(), java.util.List.of(damageOutput("hit", SkillEffectTarget.FIRST)));
+        engine.addUnit(actor);
+        engine.addUnit(enemy);
+
+        BattleEventVo cast = engine.run().getEvents().stream()
+                .filter(event -> "CAST".equals(event.getType()))
+                .findFirst().orElseThrow();
+
+        assertThat(cast.getT()).isEqualTo(6);
+        assertThat(cast.getMax()).isEqualTo(2);
     }
 
     @Test
@@ -291,6 +322,8 @@ class BattleEngineSafetyTests {
         followUp.setMaxCastSkill(1);
         actor.getSkills().add(normal);
         actor.getSkills().add(followUp);
+        normal.setNeedChargeMode(NeedChargeMode.SELF_BASE_ACTION);
+        putActionCharge(engine, normal, 1, 1);
 
         SkillCharge onCast = new SkillCharge();
         onCast.setConditionType(ChargeConditionType.SKILL_CHARGE);
@@ -329,6 +362,15 @@ class BattleEngineSafetyTests {
         skill.setSkillType(type);
         skill.setNeedCharge(need);
         return skill;
+    }
+
+    private static void putActionCharge(BattleEngine engine, ActiveSkill skill, int every, int gain) {
+        SkillCharge charge = new SkillCharge();
+        charge.setConditionType(ChargeConditionType.ACTION_VALUE);
+        charge.setScope(ChargeScope.GLOBAL);
+        charge.setEveryActionValue(every);
+        charge.setChargeGain(gain);
+        engine.putSkillMeta(skill.getId(), java.util.List.of(charge), java.util.List.of());
     }
 
     private static BattleRuntimeUnit unit(String id, BattleSide side, int hp) {

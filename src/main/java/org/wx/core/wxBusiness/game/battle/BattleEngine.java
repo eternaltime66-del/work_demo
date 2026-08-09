@@ -239,9 +239,7 @@ public class BattleEngine implements SkillV2OutputUnit.Host {
             slot.setSkillType(type.name());
             slot.setName(skill.getName());
             slot.setNeed(resolveNeedCharge(u, skill));
-            int[] av = skill.getSkillType() == ActiveSkillType.NORMAL
-                    ? new int[]{1, 1}
-                    : firstActionValueCharge(skill.getId());
+            int[] av = firstActionValueCharge(skill.getId());
             if (av != null) {
                 slot.setAvEvery(av[0]);
                 slot.setAvGain(av[1]);
@@ -571,14 +569,8 @@ public class BattleEngine implements SkillV2OutputUnit.Host {
                     continue;
                 }
                 List<SkillCharge> charges = chargesBySkill.getOrDefault(skill.getId(), List.of());
-                // 普攻基础充能固定随全局 VA 1:1 增长；不再依赖单位行动条。
-                int gained = skill.getSkillType() == ActiveSkillType.NORMAL ? Math.max(0, delta) : 0;
+                int gained = 0;
                 for (SkillCharge c : charges) {
-                    // 普攻的 ACTION_VALUE 基础规则由引擎保证，避免数据库重复配置导致双倍充能。
-                    if (skill.getSkillType() == ActiveSkillType.NORMAL
-                            && c != null && c.getConditionType() == ChargeConditionType.ACTION_VALUE) {
-                        continue;
-                    }
                     int gain = ChargeAccrualUnit.chargeGainedOnAdvance(c, elapsedBefore, delta);
                     gained += Math.max(0, gain);
                 }
@@ -810,9 +802,6 @@ public class BattleEngine implements SkillV2OutputUnit.Host {
     }
 
     private int resolveNeedCharge(BattleRuntimeUnit actor, ActiveSkill skill) {
-        if (skill.getSkillType() == ActiveSkillType.NORMAL) {
-            return Math.max(1, actor.getAction());
-        }
         NeedChargeMode mode = skill.getNeedChargeMode() == null ? NeedChargeMode.MANUAL : skill.getNeedChargeMode();
         if (mode == NeedChargeMode.SELF_BASE_ACTION) {
             return Math.max(0, actor.getAction());
